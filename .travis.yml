@@ -38,7 +38,7 @@ script:
 # Currently skipping storage tests, because they depend on GCS, and there is
 # no emulator.
 # TODO - separate storage tests into integration and lightweight.
-- MODULES="cloud/ds cloud/tq dedup"
+- MODULES="cmd/gardener cloud/tq"
 - for module in $MODULES; do
     COVER_PKGS=${COVER_PKGS}./$module/..., ;
   done
@@ -46,8 +46,10 @@ script:
 - EC=0
 - for module in $MODULES; do
     go test -v -coverpkg=$COVER_PKGS -coverprofile=$module.cov github.com/m-lab/etl-gardener/$module ;
+    echo "status $?"
     EC=$[ $EC || $? ] ;
   done
+- echo "summary status $?"
 - if [[ $EC != 0 ]]; then exit $EC; fi
 
 
@@ -56,10 +58,15 @@ script:
 # the non-integration tests are repeated.  If we change the unit tests to NOT run when integration
 # test tag is set, then we would need to have separate cov files.
 # Note: we do not run integration tests from forked PRs b/c the SA is unavailable.
+- EC=0
 - if [[ -n "$TEST_SERVICE_ACCOUNT_mlab_testing" ]] ; then
-  for module in cloud/tq dedup ; do
+  for module in cloud/tq ; do
     go test -v -coverpkg=$COVER_PKGS -coverprofile=$module.cov github.com/m-lab/etl-gardener/$module -tags=integration ;
+    echo "status $?"
+    EC=$[ $EC || $? ] ;
   done ;
+  echo "summary status $?" ;
+  if [[ $EC != 0 ]]; then exit $EC; fi ;
   fi
 
 # Coveralls
