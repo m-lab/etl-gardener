@@ -1,6 +1,5 @@
-// Package batch provides tools for various batch processing actions,
-// such as reprocessing a month or day or data, and handling deduplication.
-package batch
+// Package tq defines utilities for posting to task queues.
+package tq
 
 import (
 	"bytes"
@@ -23,11 +22,18 @@ import (
 )
 
 // *******************************************************************
-// OK Client, that just returns status ok and empty body
-// For use when -dry_run is specified.
+// DryRunQueuerClient, that just returns status ok and empty body
+// For injection when we want Queuer to do nothing.
 // *******************************************************************
-type okTransport struct {
-	lastReq *http.Request
+
+// CountingTransport counts calls, and returns OK and empty body.
+type CountingTransport struct {
+	count int
+}
+
+// Count returns the client call count.
+func (ct *CountingTransport) Count() int {
+	return ct.count
 }
 
 type nopCloser struct {
@@ -38,17 +44,20 @@ func (nc *nopCloser) Close() error { return nil }
 
 // RoundTrip implements the RoundTripper interface, logging the
 // request, and the response body, (which may be json).
-func (t *okTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+func (ct *CountingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	ct.count++
 	resp := &http.Response{}
 	resp.StatusCode = http.StatusOK
 	resp.Body = &nopCloser{strings.NewReader("")}
 	return resp, nil
 }
 
-func DryRunQueuerClient() *http.Client {
+// DryRunQueuerClient returns a client that just counts calls.
+func DryRunQueuerClient() (*http.Client, *CountingTransport) {
 	client := &http.Client{}
-	client.Transport = &okTransport{}
-	return client
+	tp := &CountingTransport{}
+	client.Transport = tp
+	return client, tp
 }
 
 // This is used to intercept Get requests to the queue_pusher when invoked
@@ -69,12 +78,13 @@ func (dr *dryRunHTTP) Get(url string) (resp *http.Response, err error) {
 
 // A Queuer provides the environment for queuing reprocessing requests.
 type Queuer struct {
-	Project    string                // project containing task queue
-	QueueBase  string                // task queue base name
-	NumQueues  int                   // number of task queues.
-	BucketName string                // name of bucket containing task files
-	Bucket     *storage.BucketHandle // bucket handle
-	HTTPClient *http.Client          // Client to be used for http requests to queue pusher.
+	Project   string // project containing task queue
+	QueueBase string // task queue base name
+	NumQueues int    // number of task queues.
+	// TODO - move bucket related stuff elsewhere.
+	xBucketName string                // name of bucket containing task files
+	xBucket     *storage.BucketHandle // bucket handle
+	HTTPClient  *http.Client          // Client to be used for http requests to queue pusher.
 }
 
 // ErrNilClient is returned when client is not provided.
@@ -89,23 +99,45 @@ func CreateQueuer(httpClient *http.Client, opts []option.ClientOption, queueBase
 		return Queuer{}, ErrNilClient
 	}
 
-	storageClient, err := storage.NewClient(context.Background(), opts...)
+	bucket, err := GetBucket(opts, project, bucketName, dryRun)
 	if err != nil {
-		log.Println(err)
-		panic(err)
-	}
-
-	bucket := storageClient.Bucket(bucketName)
-	// Check that the bucket is valid, by fetching it's attributes.
-	// Bypass check if we are running travis tests.
-	if !dryRun {
-		_, err = bucket.Attrs(context.Background())
-		if err != nil {
-			return Queuer{}, err
-		}
+		return Queuer{}, err
 	}
 
 	return Queuer{project, queueBase, numQueues, bucketName, bucket, httpClient}, nil
+}
+
+// GetTaskqueueStats gets stats for a single task queue.
+func GetTaskqueueStats(project string, name string) (stats taskqueue.QueueStatistics, err error) {
+	// Would prefer to use this, but it does not work from flex![]
+	// stats, err := taskqueue.QueueStats(context.Background(), queueNames)
+	resp, err := http.Get(fmt.Sprintf(`https://queue-pusher-dot-%s.appspot.com/stats?queuename=%s`, project, name))
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		err = errors.New("Bad status on http request")
+		return
+	}
+	data := make([]byte, 10000)
+	var n int
+	n, err = io.ReadFull(resp.Body, data)
+	if err != io.ErrUnexpectedEOF {
+		return
+	}
+	var statsSlice []taskqueue.QueueStatistics
+	err = json.Unmarshal(data[:n], &statsSlice)
+	if err != nil {
+		log.Println(err)
+		log.Printf(`https://queue-pusher-dot-%s.appspot.com/stats?queuename=%s`, project, name)
+		return
+	}
+	if len(statsSlice) != 1 {
+		err = errors.New("wrong length statsSlice")
+	}
+	stats = statsSlice[0]
+	return
 }
 
 // GetTaskqueueStats returns the stats for a list of queues.
@@ -116,44 +148,20 @@ func CreateQueuer(httpClient *http.Client, opts []option.ClientOption, queueBase
 // object to the map, and continue, saving the error for later return.
 // TODO update queue_pusher to process multiple queue names in one request.
 // TODO add unit test.
-func (q *Queuer) GetTaskqueueStats() (map[string][]taskqueue.QueueStatistics, error) {
+func (q *Queuer) GetTaskqueueStats() (map[string]taskqueue.QueueStatistics, error) {
 	queueNames := make([]string, q.NumQueues)
 	for i := range queueNames {
 		queueNames[i] = fmt.Sprintf("%s%d", q.QueueBase, i)
 	}
-	allStats := make(map[string][]taskqueue.QueueStatistics, len(queueNames))
+	allStats := make(map[string]taskqueue.QueueStatistics, len(queueNames))
 	var finalErr error
 	for i := range queueNames {
-		// Would prefer to use this, but it does not work from flex![]
-		// stats, err := taskqueue.QueueStats(context.Background(), queueNames)
-		resp, err := http.Get(fmt.Sprintf(`https://queue-pusher-dot-%s.appspot.com/stats?queuename=%s`, q.Project, queueNames[i]))
+		stats, err := GetTaskqueueStats(q.Project, queueNames[i])
 		if err != nil {
 			finalErr = err
-			log.Println(err)
-			continue
+		} else {
+			allStats[queueNames[i]] = stats
 		}
-		if resp.StatusCode != http.StatusOK {
-			finalErr = errors.New("Bad status on http request")
-			break
-		}
-		data := make([]byte, 10000)
-		var n int
-		n, err = io.ReadFull(resp.Body, data)
-		resp.Body.Close()
-		if err != io.ErrUnexpectedEOF {
-			finalErr = err
-			log.Println(err)
-			continue
-		}
-		var stats []taskqueue.QueueStatistics
-		err = json.Unmarshal(data[:n], &stats)
-		if err != nil {
-			finalErr = err
-			log.Println(err)
-			log.Printf(`https://queue-pusher-dot-%s.appspot.com/stats?queuename=%s`, q.Project, queueNames[i])
-			continue
-		}
-		allStats[queueNames[i]] = stats
 	}
 	return allStats, finalErr
 }
@@ -165,13 +173,13 @@ func (q Queuer) queueForDate(date time.Time) string {
 	return fmt.Sprintf("%s%d", q.QueueBase, int(day)%q.NumQueues)
 }
 
-// postOne sends a single https request to the queue pusher to add a task.
+// PostOneTask sends a single https request to the queue pusher to add a task.
 // Iff dryRun is true, this does nothing.
 // TODO - move retry into this method.
 // TODO - should use AddMulti - should be much faster.
 //   however - be careful not to exceed quotas
-func (q Queuer) postOneTask(queue, fn string) error {
-	reqStr := fmt.Sprintf("https://queue-pusher-dot-%s.appspot.com/receiver?queue=%s&filename=gs://%s/%s", q.Project, queue, q.BucketName, fn)
+func (q Queuer) PostOneTask(queue, bucket, fn string) error {
+	reqStr := fmt.Sprintf("https://queue-pusher-dot-%s.appspot.com/receiver?queue=%s&filename=gs://%s/%s", q.Project, queue, bucket, fn)
 
 	resp, err := q.HTTPClient.Get(reqStr)
 	if err != nil {
@@ -194,9 +202,31 @@ func (q Queuer) postOneTask(queue, fn string) error {
 	return nil
 }
 
-// postOneDay posts all items in an ObjectIterator into the appropriate queue.
-// TODO - should this delete the data from the target partition before posting tasks?
-func (q Queuer) postOneDay(wg *sync.WaitGroup, queue string, it *storage.ObjectIterator) error {
+func (q *Queuer) postWithRetry(queue string, bucket, filepath string) error {
+	backoff := 5 * time.Second
+	var err error
+	for i := 0; i < 3; i++ {
+		err = q.PostOneTask(queue, bucket, filepath)
+		if err == nil {
+			return nil
+		}
+		if strings.Contains(err.Error(), "UNKNOWN_QUEUE") {
+			return err
+		}
+		if strings.Contains(err.Error(), "invalid filename") {
+			// Invalid filename is never going to get better.
+			return err
+		}
+		log.Println(err, filepath, "Retrying")
+		// Backoff and retry.
+		time.Sleep(backoff)
+		backoff = 2 * backoff
+	}
+	return err
+}
+
+// PostAll posts all normal file items in an ObjectIterator into the appropriate queue.
+func (q *Queuer) PostAll(wg *sync.WaitGroup, queue string, bucket string, it *storage.ObjectIterator) error {
 	if wg != nil {
 		defer wg.Done()
 	}
@@ -220,28 +250,12 @@ func (q Queuer) postOneDay(wg *sync.WaitGroup, queue string, it *storage.ObjectI
 			continue
 		}
 
-		err = q.postOneTask(queue, o.Name)
+		err = q.postWithRetry(queue, bucket, o.Name)
 		if err != nil {
-			log.Println(err)
-			if strings.Contains(err.Error(), "UNKNOWN_QUEUE") {
+			qpErrCount++
+			if qpErrCount > 5 {
+				log.Printf("Failed after %d files to %s (on %s).\n", fileCount, queue, o.Name)
 				return err
-			}
-			if strings.Contains(err.Error(), "invalid filename") {
-				// Invalid filename is never going to get better.
-				continue
-			}
-			log.Println(err, o.Name, "Retrying")
-			// Retry once
-			time.Sleep(10 * time.Second)
-			err = q.postOneTask(queue, o.Name)
-
-			if err != nil {
-				log.Println(err, o.Name, "FAILED")
-				qpErrCount++
-				if qpErrCount > 5 {
-					log.Printf("Failed after %d files to %s (on %s).\n", fileCount, queue, o.Name)
-					return err
-				}
 			}
 		} else {
 			fileCount++
@@ -255,7 +269,7 @@ func (q Queuer) postOneDay(wg *sync.WaitGroup, queue string, it *storage.ObjectI
 // Iff wq is not nil, PostDay will call done on wg when finished
 // posting.
 // This typically takes about 10 minutes, whether single or parallel days.
-func (q Queuer) PostDay(wg *sync.WaitGroup, prefix string) error {
+func (q Queuer) PostDay(wg *sync.WaitGroup, bucket *storage.BucketHandle, bucketName, prefix string) error {
 	date, err := time.Parse("ndt/2006/01/02/", prefix)
 	if err != nil {
 		log.Println("Failed parsing date from ", prefix)
@@ -272,58 +286,80 @@ func (q Queuer) PostDay(wg *sync.WaitGroup, prefix string) error {
 		Prefix:    prefix,
 	}
 	// TODO - can this error?  Or do errors only occur on iterator ops?
-	it := q.Bucket.Objects(context.Background(), &qry)
+	it := bucket.Objects(context.Background(), &qry)
 	if wg != nil {
 		// TODO - this ignores errors.
-		go q.postOneDay(wg, queue, it)
+		go q.PostAll(wg, queue, bucketName, it)
 	} else {
-		return q.postOneDay(nil, queue, it)
+		return q.PostAll(nil, queue, bucketName, it)
 	}
 	return nil
 }
 
-// PostMonth adds all of the files from dates within a specified month.
-// It is difficult to test without hitting GCS.  8-(
-// This typically takes about 10 minutes, processing all days concurrently.
-// May return an error, but some PostDay errors may not be detected or propagated.
-func (q Queuer) PostMonth(prefix string) error {
-	qry := storage.Query{
-		Delimiter: "/",
-		// TODO - validate.
-		Prefix: prefix,
+// ###############################################################################
+//  Batch processing task scheduling and support code
+// ###############################################################################
+
+// ReprocState represents the current processing state for a partition reprocessing job.
+type ReprocState int
+
+const (
+	// Pending - job created and stored but not started.
+	Pending ReprocState = iota
+	// Queuing - tasks are being posted to Queue
+	Queuing
+	// Processing - all tasks are queued but not completed
+	Processing
+	// Dedupping - all tasks completed, submitting dedup query
+	Dedupping
+	// CopyPending - dedup query complete, validating/copying
+	CopyPending
+	// Done - copy and delete completed, job can be removed.
+	Done
+)
+
+// PartitionState holds the complete state information for processing a single day partition.
+type PartitionState struct {
+	DSKey      string      // Key used for DataStore
+	State      ReprocState // Current state of the partition processing.
+	Date       string      // YYYYMMDD partition suffix for the date.
+	QueueIndex int         // index of the queue for this task.
+	NextTask   string      // the "gs://" task_filename of the next task to be submitted to the queue.
+	Restart    bool        // Indicates when new owner is recovering.
+}
+
+// QueueHandler contains elements and methods for all processing for a single queue.
+type QueueHandler struct {
+	BucketHandle    *storage.BucketHandle
+	BucketName      string
+	QueueName       string              // Name of the target task queue
+	Queuer          *Queuer             // Queuer used for all queuing
+	QueueAndProcess chan PartitionState // Channel from dispatcher
+	DedupAndCleanup chan PartitionState // Channel between queuer and dedupper
+}
+
+// *******************************************************************
+// Storage Bucket related stuff.
+//  TODO move to another package?
+// *******************************************************************
+
+// GetBucket gets a storage bucket.
+//   opts       - ClientOptions, e.g. credentials, for tests that need to access storage buckets.
+func GetBucket(opts []option.ClientOption, project, bucketName string, dryRun bool) (*storage.BucketHandle, error) {
+	storageClient, err := storage.NewClient(context.Background(), opts...)
+	if err != nil {
+		log.Println(err)
+		return nil, err
 	}
-	it := q.Bucket.Objects(context.Background(), &qry)
 
-	var wg sync.WaitGroup
-	defer wg.Wait()
-
-	errCount := 0
-	const maxErrors = 20
-	for o, err := it.Next(); err != iterator.Done; o, err = it.Next() {
+	bucket := storageClient.Bucket(bucketName)
+	// Check that the bucket is valid, by fetching it's attributes.
+	// Bypass check if we are running travis tests.
+	if !dryRun {
+		_, err = bucket.Attrs(context.Background())
 		if err != nil {
-			log.Println(err)
-			if strings.Contains(err.Error(),
-				"does not have storage.objects.list access") {
-				// Inadequate permissions
-				return err
-			}
-			if errCount++; errCount > maxErrors {
-				log.Println("Too many errors.  Breaking loop.")
-				return err
-			}
-		} else if o.Prefix != "" {
-			wg.Add(1)
-			err := q.PostDay(&wg, o.Prefix)
-			if err != nil {
-				log.Println(err)
-				if errCount++; errCount > maxErrors {
-					log.Println("Too many errors.  Breaking loop.")
-					return err
-				}
-			}
-		} else {
-			log.Println("Skipping: ", o.Name)
+			return nil, err
 		}
 	}
-	return nil
+	return bucket, nil
 }
