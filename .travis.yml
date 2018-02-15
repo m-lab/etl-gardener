@@ -46,7 +46,7 @@ script:
 - EC=0
 - for module in $MODULES; do
     go test -v -coverpkg=$COVER_PKGS -coverprofile=$module.cov github.com/m-lab/etl-gardener/$module ;
-    EC=$[ $EC || $? ]
+    EC=$[ $EC || $? ] ;
   done
 - if [[ $EC != 0 ]]; then exit $EC; fi
 
