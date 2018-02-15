@@ -7,7 +7,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -18,7 +17,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
-	"github.com/m-lab/etl/batch"
+	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -81,7 +80,7 @@ func Save(key string, obj interface{}) error {
 // ###############################################################################
 
 // Persistent Queuer for use in handlers and gardener tasks.
-var batchQueuer batch.Queuer
+var batchQueuer tq.Queuer
 
 // QueueState holds the state information for each batch queue.
 type QueueState struct {
@@ -116,15 +115,15 @@ type BatchState struct {
 // for corresponding days to add to the queue.
 // Alternatively, it may look first for the N oldest days to be reprocessed, and will then
 // check whether any of the task queues for those oldest days is empty, and conditionally add tasks.
-func MaybeScheduleMoreTasks(queuer *batch.Queuer) {
+func MaybeScheduleMoreTasks(queuer *tq.Queuer) {
 	// GetTaskQueueDepth returns the number of pending items in a task queue.
 	stats, err := queuer.GetTaskqueueStats()
 	if err != nil {
 		log.Println(err)
 	} else {
 		for k, v := range stats {
-			if len(v) > 0 && v[0].Tasks == 0 && v[0].InFlight == 0 {
-				log.Printf("Ready: %s: %v\n", k, v[0])
+			if v.Tasks == 0 && v.InFlight == 0 {
+				log.Printf("Ready: %s: %v\n", k, v)
 				// Should add more tasks now.
 			}
 		}
@@ -133,26 +132,26 @@ func MaybeScheduleMoreTasks(queuer *batch.Queuer) {
 
 // queuerFromEnv creates a Queuer struct initialized from environment variables.
 // It uses TASKFILE_BUCKET, PROJECT, QUEUE_BASE, and NUM_QUEUES.
-func queuerFromEnv() (batch.Queuer, error) {
+func queuerFromEnv() (tq.Queuer, error) {
 	bucketName, ok := os.LookupEnv("TASKFILE_BUCKET")
 	if !ok {
-		return batch.Queuer{}, errors.New("TASKFILE_BUCKET not set")
+		return tq.Queuer{}, errors.New("TASKFILE_BUCKET not set")
 	}
 	project, ok := os.LookupEnv("PROJECT")
 	if !ok {
-		return batch.Queuer{}, errors.New("PROJECT not set")
+		return tq.Queuer{}, errors.New("PROJECT not set")
 	}
 	queueBase, ok := os.LookupEnv("QUEUE_BASE")
 	if !ok {
-		return batch.Queuer{}, errors.New("QUEUE_BASE not set")
+		return tq.Queuer{}, errors.New("QUEUE_BASE not set")
 	}
 	numQueues, err := strconv.Atoi(os.Getenv("NUM_QUEUES"))
 	if err != nil {
 		log.Println(err)
-		return batch.Queuer{}, errors.New("Parse error on NUM_QUEUES")
+		return tq.Queuer{}, errors.New("Parse error on NUM_QUEUES")
 	}
 
-	return batch.CreateQueuer(http.DefaultClient, nil, queueBase, numQueues, project, bucketName, false)
+	return tq.CreateQueuer(http.DefaultClient, nil, queueBase, numQueues, project, bucketName, false)
 }
 
 // StartDateRFC3339 is the date at which reprocessing will start when it catches
@@ -231,7 +230,7 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "<p>NOTE: This is just one of potentially many instances.</p>\n")
 	commit := os.Getenv("COMMIT_HASH")
 	if len(commit) >= 8 {
-		fmt.Fprintf(w, "Release: %s <br>  Commit: <a href=\"https://github.com/m-lab/etl/tree/%s\">%s</a><br>\n",
+		fmt.Fprintf(w, "Release: %s <br>  Commit: <a href=\"https://github.com/m-lab/etl-gardener/tree/%s\">%s</a><br>\n",
 			os.Getenv("RELEASE_TAG"), os.Getenv("COMMIT_HASH"), os.Getenv("COMMIT_HASH")[0:7])
 	} else {
 		fmt.Fprintf(w, "Release: %s   Commit: unknown\n", os.Getenv("RELEASE_TAG"))
@@ -292,23 +291,8 @@ func runService() {
 }
 
 // ###############################################################################
-//  Top level command line code.
+//  Main
 // ###############################################################################
-
-// These are used only for command line.  For service, environment variables are used
-// for general parameters, and request parameter for month.
-var (
-	fProject = flag.String("project", "", "Project containing queues.")
-	fQueue   = flag.String("queue", "etl-ndt-batch-", "Base of queue name.")
-	// TODO implement listing queues to determine number of queue, and change this to 0
-	fNumQueues = flag.Int("num_queues", 8, "Number of queues.  Normally determined by listing queues.")
-	// Gardener will only read from this bucket, so its ok to use production bucket as default.
-	fBucket = flag.String("bucket", "archive-mlab-oti", "Source bucket.")
-	fExper  = flag.String("experiment", "ndt", "Experiment prefix, without trailing slash.")
-	fMonth  = flag.String("month", "", "Single month spec, as YYYY/MM")
-	fDay    = flag.String("day", "", "Single day spec, as YYYY/MM/DD")
-	fDryRun = flag.Bool("dry_run", false, "Prevents all output to queue_pusher.")
-)
 
 func init() {
 	// Always prepend the filename and line number.
@@ -324,24 +308,5 @@ func main() {
 	}
 
 	// Otherwise this is a command line invocation...
-	flag.Parse()
-	// Check that either project or dry-run is set.
-	// If dry-run, it is ok for the project to be unset, as the URLs
-	// only are seen by a fake http client.
-	if *fProject == "" && !*fDryRun {
-		log.Println("Must specify project (or --dry_run)")
-		flag.PrintDefaults()
-		return
-	}
-
-	q, err := batch.CreateQueuer(http.DefaultClient, nil, *fQueue, *fNumQueues, *fProject, *fBucket, *fDryRun)
-	if err != nil {
-		// In command line mode, good to just fast fail.
-		log.Fatal(err)
-	}
-	if *fMonth != "" {
-		q.PostMonth(*fExper + "/" + *fMonth + "/")
-	} else if *fDay != "" {
-		q.PostDay(nil, *fExper+"/"+*fDay+"/")
-	}
+	log.Println("Command line not implemented")
 }
