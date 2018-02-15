@@ -38,7 +38,7 @@ script:
 # Currently skipping storage tests, because they depend on GCS, and there is
 # no emulator.
 # TODO - separate storage tests into integration and lightweight.
-- MODULES="batch cmd/gardener"
+- MODULES="cloud/tq cmd/gardener"
 - for module in $MODULES; do
     COVER_PKGS=${COVER_PKGS}./$module/..., ;
   done
@@ -59,7 +59,7 @@ script:
 # Note: we do not run integration tests from forked PRs b/c the SA is unavailable.
 - EC=0
 - if [[ -n "$TEST_SERVICE_ACCOUNT_mlab_testing" ]] ; then
-  for module in batch cmd/gardener ; do
+  for module in cloud/tq cmd/gardener ; do
     go test -v -coverpkg=$COVER_PKGS -coverprofile=$module.cov github.com/m-lab/etl-gardener/$module -tags=integration ;
     EC=$[ $EC || $? ] ;
   done ;
