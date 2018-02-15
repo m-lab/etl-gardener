@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -13,15 +14,66 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"time"
 
+	"cloud.google.com/go/datastore"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// StartDateRFC3339 is the date at which reprocessing will start when it catches
-// up to present.  For now, we are making this the beginning of the ETL timeframe,
-// until we get annotation fixed to use the actual data date instead of NOW.
-const StartDateRFC3339 = "2017-05-01T00:00:00Z00:00"
+// ###############################################################################
+// All DataStore related code and variables
+// ###############################################################################
+const (
+	dsNamespace   = "gardener"
+	dsKind        = "gardener"
+	batchStateKey = "batch-state"
+)
+
+var dsClient *datastore.Client
+
+func getDSClient() (*datastore.Client, error) {
+	var err error
+	var client *datastore.Client
+	if dsClient == nil {
+		project, ok := os.LookupEnv("PROJECT")
+		if !ok {
+			return dsClient, errors.New("PROJECT env var not set")
+		}
+		client, err = datastore.NewClient(context.Background(), project)
+		if err == nil {
+			dsClient = client
+		}
+	}
+	return dsClient, err
+}
+
+// Load retrieves an arbitrary record from datastore.
+func Load(name string, obj interface{}) error {
+	var client *datastore.Client
+	client, err := getDSClient()
+	if err != nil {
+		return err
+	}
+	k := datastore.NameKey(dsKind, name, nil)
+	k.Namespace = dsNamespace
+	return client.Get(context.Background(), k, obj)
+}
+
+// Save stores an arbitrary object to kind/key in the default namespace.
+// If a record already exists, then it is overwritten.
+// TODO(gfr) Make an upsert version of this:
+// https://cloud.google.com/datastore/docs/concepts/entities
+func Save(key string, obj interface{}) error {
+	client, err := getDSClient()
+	if err != nil {
+		return err
+	}
+	k := datastore.NameKey(dsKind, key, nil)
+	k.Namespace = dsNamespace
+	_, err = client.Put(context.Background(), k, obj)
+	return err
+}
 
 // ###############################################################################
 //  Batch processing task scheduling and support code
@@ -40,6 +92,23 @@ type QueueState struct {
 	QueueName        string // Name of the batch queue.
 	NextTask         string // Name of task file currently being enqueued.
 	PendingPartition string // FQ Name of next table partition to be added.
+}
+
+// BatchState holds the entire batch processing state.
+// It holds the state locally, and also is stored in DataStore for
+// recovery when the instance is restarted, e.g. for weekly platform
+// updates.
+// At any given time, we restrict ourselves to a 14 day reprocessing window,
+// and finish the beginning of that window before reprocessing any dates beyond it.
+// When we determine that the first date in the window has been submitted for
+// processing, we advance the window up to the next pending date.
+type BatchState struct {
+	Hostname       string       // Hostname of the gardener that saved this.
+	InstanceID     string       // instance ID of the gardener that saved this.
+	WindowStart    time.Time    // Start of two week window we are working on.
+	QueueBase      string       // base name for queues.
+	QStates        []QueueState // States for each queue.
+	LastUpdateTime time.Time    // Time of last update.  (Is this in DS metadata?)
 }
 
 // MaybeScheduleMoreTasks will look for an empty task queue, and if it finds one, will look
@@ -85,9 +154,54 @@ func queuerFromEnv() (tq.Queuer, error) {
 	return tq.CreateQueuer(http.DefaultClient, nil, queueBase, numQueues, project, bucketName, false)
 }
 
+// StartDateRFC3339 is the date at which reprocessing will start when it catches
+// up to present.  For now, we are making this the beginning of the ETL timeframe,
+// until we get annotation fixed to use the actual data date instead of NOW.
+const StartDateRFC3339 = "2017-05-01T00:00:00Z"
+
+// startupBatch determines whether some other instance has control, and
+// assumes control if not.
+func startupBatch(base string, numQueues int) (BatchState, error) {
+	hostname := os.Getenv("HOSTNAME")
+	instance := os.Getenv("GAE_INSTANCE")
+	queues := make([]QueueState, numQueues)
+	var bs BatchState
+	err := Load(batchStateKey, &bs)
+	if err != nil {
+		startDate, err := time.Parse(time.RFC3339, StartDateRFC3339)
+		if err != nil {
+			log.Println("Could not parse start time.  Not starting batch.")
+			return bs, err
+		}
+		bs = BatchState{hostname, instance, startDate, base, queues, time.Now()}
+
+	} else {
+		// TODO - should check whether we should take over, or leave alone.
+	}
+
+	err = Save(batchStateKey, &bs)
+	return bs, err
+}
+
 // ###############################################################################
 //  Top level service control code.
 // ###############################################################################
+
+// periodic will run approximately every 5 minutes.
+func periodic() {
+	_, err := startupBatch(batchQueuer.QueueBase, batchQueuer.NumQueues)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for {
+		log.Println("Periodic is running")
+
+		MaybeScheduleMoreTasks(&batchQueuer)
+
+		// There is no need for randomness, since this is a singleton handler.
+		time.Sleep(300 * time.Second)
+	}
+}
 
 func setupPrometheus() {
 	// Define a custom serve mux for prometheus to listen on a separate port.
@@ -140,10 +254,6 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "ok")
 }
 
-func periodic() {
-
-}
-
 // runService starts a service handler and runs forever.
 // The configuration info comes from environment variables.
 func runService() {
@@ -181,7 +291,7 @@ func runService() {
 }
 
 // ###############################################################################
-//  Top level command line code.
+//  Main
 // ###############################################################################
 
 func init() {
@@ -196,4 +306,7 @@ func main() {
 		runService()
 		return
 	}
+
+	// Otherwise this is a command line invocation...
+	log.Println("Command line not implemented")
 }

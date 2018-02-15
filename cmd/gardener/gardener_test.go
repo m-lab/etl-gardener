@@ -3,14 +3,15 @@ package main
 import (
 	"os"
 	"testing"
-
-	"github.com/m-lab/etl-gardener/cloud/ds"
 )
 
 func Test_getDSClient(t *testing.T) {
 	os.Setenv("PROJECT", "mlab-testing")
-	_, err := ds.NewSaver("gardener-test", "test")
+	c, err := getDSClient()
 	if err != nil {
 		t.Fatal(err)
+	}
+	if c == nil {
+		t.Error("Should be non-nil client")
 	}
 }
