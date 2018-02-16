@@ -46,7 +46,6 @@ script:
 - EC=0
 - for module in $MODULES; do
     go test -v -coverpkg=$COVER_PKGS -coverprofile=$module.cov github.com/m-lab/etl-gardener/$module ;
-    echo "status $?"
     EC=$[ $EC || $? ] ;
   done
 - echo "summary status $EC" ;
@@ -62,7 +61,6 @@ script:
 - if [[ -n "$TEST_SERVICE_ACCOUNT_mlab_testing" ]] ; then
   for module in batch cmd/gardener ; do
     go test -v -coverpkg=$COVER_PKGS -coverprofile=$module.cov github.com/m-lab/etl-gardener/$module -tags=integration ;
-    echo "status $?"
     EC=$[ $EC || $? ] ;
   done ;
   echo "summary status $EC" ;
