@@ -160,48 +160,13 @@ func queuerFromEnv() (tq.Queuer, error) {
 // until we get annotation fixed to use the actual data date instead of NOW.
 const StartDateRFC3339 = "2017-05-01T00:00:00Z"
 
-// startupBatch determines whether some other instance has control, and
-// assumes control if not.
-func startupBatch(base string, numQueues int) (BatchState, error) {
-	hostname := os.Getenv("HOSTNAME")
-	instance := os.Getenv("GAE_INSTANCE")
-	queues := make([]QueueState, numQueues)
-	var bs BatchState
-	err := Load(batchStateKey, &bs)
-	if err != nil {
-		startDate, err := time.Parse(time.RFC3339, StartDateRFC3339)
-		if err != nil {
-			log.Println("Could not parse start time.  Not starting batch.")
-			return bs, err
-		}
-		bs = BatchState{hostname, instance, startDate, base, queues, time.Now()}
-
-	} else {
-		// TODO - should check whether we should take over, or leave alone.
-	}
-
-	err = Save(batchStateKey, &bs)
-	return bs, err
-}
-
 // ###############################################################################
 //  Top level service control code.
 // ###############################################################################
 
 // periodic will run approximately every 5 minutes.
 func periodic() {
-	_, err := startupBatch(batchQueuer.QueueBase, batchQueuer.NumQueues)
-	if err != nil {
-		log.Fatal(err)
-	}
-	for {
-		log.Println("Periodic is running")
-
-		MaybeScheduleMoreTasks(&batchQueuer)
-
-		// There is no need for randomness, since this is a singleton handler.
-		time.Sleep(300 * time.Second)
-	}
+	// TODO implement
 }
 
 func setupPrometheus() {
