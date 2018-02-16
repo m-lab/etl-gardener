@@ -19,6 +19,7 @@ import (
 	"cloud.google.com/go/datastore"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"google.golang.org/api/option"
 )
 
 // ###############################################################################
@@ -32,7 +33,7 @@ const (
 
 var dsClient *datastore.Client
 
-func getDSClient() (*datastore.Client, error) {
+func getDSClient(opts ...option.ClientOption) (*datastore.Client, error) {
 	var err error
 	var client *datastore.Client
 	if dsClient == nil {
@@ -40,7 +41,7 @@ func getDSClient() (*datastore.Client, error) {
 		if !ok {
 			return dsClient, errors.New("PROJECT env var not set")
 		}
-		client, err = datastore.NewClient(context.Background(), project)
+		client, err = datastore.NewClient(context.Background(), project, opts...)
 		if err == nil {
 			dsClient = client
 		}
