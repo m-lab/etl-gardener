@@ -45,6 +45,7 @@ script:
 - COVER_PKGS=${COVER_PKGS::-1}  # Trim the trailing comma
 - EC=0
 - for module in $MODULES; do
+    # Note that for modules in subdirectories, this replaces separating slashes with _.
     go test -v -coverpkg=$COVER_PKGS -coverprofile=${module.cov//\//_} github.com/m-lab/etl-gardener/$module ;
     EC=$[ $EC || $? ] ;
   done
