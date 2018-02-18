@@ -28,7 +28,7 @@ before_install:
 # New mechanism for setting up testing service account.
 # TODO use version in travis directory.
 - if [[ -n "$SERVICE_ACCOUNT_mlab_testing" ]] ; then
-  $TRAVIS_BUILD_DIR/travis/activate-service-account.sh SERVICE_ACCOUNT_mlab_testing ;
+  $TRAVIS_BUILD_DIR/travis/activate_service_account.sh SERVICE_ACCOUNT_mlab_testing ;
   fi
 
 # These directories will be cached on successful "script" builds, and restored,
