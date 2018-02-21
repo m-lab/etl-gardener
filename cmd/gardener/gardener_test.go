@@ -17,7 +17,7 @@ func Options() []option.ClientOption {
 	return opts
 }
 
-func Test_getDSClient(t *testing.T) {
+func TestGetDSClient(t *testing.T) {
 	os.Setenv("PROJECT", "mlab-testing")
 	c, err := getDSClient(Options()...)
 	if err != nil {
