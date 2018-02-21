@@ -24,7 +24,7 @@ func Options() []option.ClientOption {
 	return opts
 }
 
-func TestFakeEnqueue(t *testing.T) {
+func TestPostOneTask(t *testing.T) {
 	os.Setenv("PROJECT", "mlab-testing")
 	// TODO - use mlab-testing instead of mlab-sandbox??
 	client, counter := tq.DryRunQueuerClient()

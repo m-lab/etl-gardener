@@ -202,6 +202,8 @@ func (q Queuer) PostOneTask(queue, bucket, fn string) error {
 	return nil
 }
 
+// postWithRetry posts a single task to a task queue.  It will make up to 3 attempts
+// if there are recoverable errors.
 func (q *Queuer) postWithRetry(queue string, bucket, filepath string) error {
 	backoff := 5 * time.Second
 	var err error
@@ -210,11 +212,9 @@ func (q *Queuer) postWithRetry(queue string, bucket, filepath string) error {
 		if err == nil {
 			return nil
 		}
-		if strings.Contains(err.Error(), "UNKNOWN_QUEUE") {
-			return err
-		}
-		if strings.Contains(err.Error(), "invalid filename") {
-			// Invalid filename is never going to get better.
+		if strings.Contains(err.Error(), "UNKNOWN_QUEUE") ||
+			strings.Contains(err.Error(), "invalid filename") {
+			// These error types will never recover.
 			return err
 		}
 		log.Println(err, filepath, "Retrying")
@@ -241,7 +241,8 @@ func (q *Queuer) PostAll(wg *sync.WaitGroup, queue string, bucket string, it *st
 	for o, err := it.Next(); err != iterator.Done; o, err = it.Next() {
 		if err != nil {
 			// TODO - should this retry?
-			log.Println(err, "on it.Next")
+			// log the underlying error, with added context
+			log.Println(err, "when attempting it.Next()")
 			gcsErrCount++
 			if gcsErrCount > 5 {
 				log.Printf("Failed after %d files to %s.\n", fileCount, queue)
@@ -252,6 +253,7 @@ func (q *Queuer) PostAll(wg *sync.WaitGroup, queue string, bucket string, it *st
 
 		err = q.postWithRetry(queue, bucket, o.Name)
 		if err != nil {
+			log.Println(err, "attempting to post", o.Name, "to", queue)
 			qpErrCount++
 			if qpErrCount > 5 {
 				log.Printf("Failed after %d files to %s (on %s).\n", fileCount, queue, o.Name)
