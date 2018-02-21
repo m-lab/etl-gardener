@@ -2,6 +2,7 @@
 // and house-keeping tasks associated with the pipelines.
 // Most tasks will be run periodically, but some may be triggered
 // by URL requests from authorized sources.
+// Design doc is here: https://docs.google.com/document/d/1503gojY_bVZy1iHlxdDqszADtCt7vFNbT7ZuympRd8A
 package main
 
 import (
