@@ -2,7 +2,6 @@ package main
 
 import (
 	"os"
-	"testing"
 
 	"google.golang.org/api/option"
 )
@@ -17,13 +16,4 @@ func Options() []option.ClientOption {
 	return opts
 }
 
-func TestGetDSClient(t *testing.T) {
-	os.Setenv("PROJECT", "mlab-testing")
-	c, err := getDSClient(Options()...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c == nil {
-		t.Error("Should be non-nil client")
-	}
-}
+// TODO Add unit tests

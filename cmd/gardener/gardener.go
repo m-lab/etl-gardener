@@ -5,7 +5,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -14,122 +13,14 @@ import (
 	"os"
 	"runtime"
 	"strconv"
-	"time"
 
-	"cloud.google.com/go/datastore"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"google.golang.org/api/option"
 )
-
-// ###############################################################################
-// All DataStore related code and variables
-// ###############################################################################
-const (
-	dsNamespace   = "gardener"
-	dsKind        = "gardener"
-	batchStateKey = "batch-state"
-)
-
-var dsClient *datastore.Client
-
-func getDSClient(opts ...option.ClientOption) (*datastore.Client, error) {
-	var err error
-	var client *datastore.Client
-	if dsClient == nil {
-		project, ok := os.LookupEnv("PROJECT")
-		if !ok {
-			return dsClient, errors.New("PROJECT env var not set")
-		}
-		client, err = datastore.NewClient(context.Background(), project, opts...)
-		if err == nil {
-			dsClient = client
-		}
-	}
-	return dsClient, err
-}
-
-// Load retrieves an arbitrary record from datastore.
-func Load(name string, obj interface{}) error {
-	var client *datastore.Client
-	client, err := getDSClient()
-	if err != nil {
-		return err
-	}
-	k := datastore.NameKey(dsKind, name, nil)
-	k.Namespace = dsNamespace
-	return client.Get(context.Background(), k, obj)
-}
-
-// Save stores an arbitrary object to kind/key in the default namespace.
-// If a record already exists, then it is overwritten.
-// TODO(gfr) Make an upsert version of this:
-// https://cloud.google.com/datastore/docs/concepts/entities
-func Save(key string, obj interface{}) error {
-	client, err := getDSClient()
-	if err != nil {
-		return err
-	}
-	k := datastore.NameKey(dsKind, key, nil)
-	k.Namespace = dsNamespace
-	_, err = client.Put(context.Background(), k, obj)
-	return err
-}
 
 // ###############################################################################
 //  Batch processing task scheduling and support code
 // ###############################################################################
-
-// Persistent Queuer for use in handlers and gardener tasks.
-var batchQueuer tq.Queuer
-
-// QueueState holds the state information for each batch queue.
-type QueueState struct {
-	// Per queue, indicate which day is being processed in
-	// that queue.  No need to process more than one day at a time.
-	// The other queues will take up the slack while we add more
-	// tasks when one queue is emptied.
-
-	QueueName        string // Name of the batch queue.
-	NextTask         string // Name of task file currently being enqueued.
-	PendingPartition string // FQ Name of next table partition to be added.
-}
-
-// BatchState holds the entire batch processing state.
-// It holds the state locally, and also is stored in DataStore for
-// recovery when the instance is restarted, e.g. for weekly platform
-// updates.
-// At any given time, we restrict ourselves to a 14 day reprocessing window,
-// and finish the beginning of that window before reprocessing any dates beyond it.
-// When we determine that the first date in the window has been submitted for
-// processing, we advance the window up to the next pending date.
-type BatchState struct {
-	Hostname       string       // Hostname of the gardener that saved this.
-	InstanceID     string       // instance ID of the gardener that saved this.
-	WindowStart    time.Time    // Start of two week window we are working on.
-	QueueBase      string       // base name for queues.
-	QStates        []QueueState // States for each queue.
-	LastUpdateTime time.Time    // Time of last update.  (Is this in DS metadata?)
-}
-
-// MaybeScheduleMoreTasks will look for an empty task queue, and if it finds one, will look
-// for corresponding days to add to the queue.
-// Alternatively, it may look first for the N oldest days to be reprocessed, and will then
-// check whether any of the task queues for those oldest days is empty, and conditionally add tasks.
-func MaybeScheduleMoreTasks(queuer *tq.Queuer) {
-	// GetTaskQueueDepth returns the number of pending items in a task queue.
-	stats, err := queuer.GetTaskqueueStats()
-	if err != nil {
-		log.Println(err)
-	} else {
-		for k, v := range stats {
-			if v.Tasks == 0 && v.InFlight == 0 {
-				log.Printf("Ready: %s: %v\n", k, v)
-				// Should add more tasks now.
-			}
-		}
-	}
-}
 
 // queuerFromEnv creates a Queuer struct initialized from environment variables.
 // It uses TASKFILE_BUCKET, PROJECT, QUEUE_BASE, and NUM_QUEUES.
@@ -163,11 +54,6 @@ const StartDateRFC3339 = "2017-05-01T00:00:00Z"
 // ###############################################################################
 //  Top level service control code.
 // ###############################################################################
-
-// periodic will run approximately every 5 minutes.
-func periodic() {
-	// TODO implement
-}
 
 func setupPrometheus() {
 	// Define a custom serve mux for prometheus to listen on a separate port.
@@ -237,20 +123,21 @@ func runService() {
 	http.HandleFunc("/alive", healthCheck)
 	http.HandleFunc("/ready", healthCheck)
 
-	var err error
-	batchQueuer, err = queuerFromEnv()
-	if err == nil {
-		healthy = true
-		log.Println("Running as a service.")
+	/*
+		// TODO Initialize, take ownership, check health, start service loop.
+		var err error
 
-		// Run the background "periodic" function.
-		go periodic()
-	} else {
-		// Leaving healthy == false
-		// This will cause app-engine to roll back.
-		log.Println(err)
-		log.Println("Required environment variables are missing or invalid.")
-	}
+		if err == nil {
+			healthy = true
+			log.Println("Running as a service.")
+
+			// TODO - Take over ownership and start the service in a go routine.
+		} else {
+			// Leaving healthy == false
+			// This will cause app-engine to roll back.
+			log.Println(err)
+			log.Println("Required environment variables are missing or invalid.")
+		} */
 
 	// ListenAndServe, and terminate when it returns.
 	log.Fatal(http.ListenAndServe(":8080", nil))
@@ -274,5 +161,6 @@ func main() {
 	}
 
 	// Otherwise this is a command line invocation...
+	// TODO add implementation (see code in etl repo)
 	log.Println("Command line not implemented")
 }
