@@ -23,9 +23,9 @@ func init() {
 func TestGetTaskqueueStats(t *testing.T) {
 	os.Setenv("PROJECT", "mlab-testing")
 	// TODO - use mlab-testing instead of mlab-sandbox??
-	//bucket, err := tq.GetBucket(Options(), "mlab-sandbox", "archive-mlab-test", true)
+	//bucket, err := tq.GetBucket(MLabTestAuth(), "mlab-sandbox", "archive-mlab-test", true)
 
-	q, err := tq.CreateQueuer(http.DefaultClient, Options(), "test-", 8, "mlab-sandbox", "archive-mlab-test", true)
+	q, err := tq.CreateQueuer(http.DefaultClient, MLabTestAuth(), "test-", 8, "mlab-sandbox", "archive-mlab-test", true)
 	stats, err := q.GetTaskqueueStats()
 	if err != nil {
 		t.Fatal(err)
@@ -40,7 +40,7 @@ func TestGetTaskqueueStats(t *testing.T) {
 // check that the bucket content has not been changed.
 func TestGetBucket(t *testing.T) {
 	bucketName := "archive-mlab-test"
-	bucket, err := tq.GetBucket(Options(), "mlab-testing", bucketName, false)
+	bucket, err := tq.GetBucket(MLabTestAuth(), "mlab-testing", bucketName, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,12 +72,12 @@ func TestGetBucket(t *testing.T) {
 // check that the bucket content has not been changed.
 func TestPostDay(t *testing.T) {
 	client, counter := tq.DryRunQueuerClient()
-	q, err := tq.CreateQueuer(client, Options(), "test-", 8, "fake-project", "archive-mlab-test", true)
+	q, err := tq.CreateQueuer(client, MLabTestAuth(), "test-", 8, "fake-project", "archive-mlab-test", true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	bucketName := "archive-mlab-test"
-	bucket, err := tq.GetBucket(Options(), "mlab-testing", bucketName, false)
+	bucket, err := tq.GetBucket(MLabTestAuth(), "mlab-testing", bucketName, false)
 	q.PostDay(nil, bucket, bucketName, "ndt/2017/09/24/")
 	if counter.Count() != 76 {
 		t.Errorf("Should have made 76 http requests: %d\n", counter.Count())
