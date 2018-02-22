@@ -24,7 +24,11 @@ before_install:
 # and discover these credentials in the travis logs.
 - if [[ -n "$TEST_SERVICE_ACCOUNT_mlab_testing" ]] ; then
   echo "$TEST_SERVICE_ACCOUNT_mlab_testing" | base64 -d > travis-testing.key ;
-  gcloud auth activate-service-account --key-file=travis-testing.key ;
+  fi
+# New mechanism for setting up testing service account.
+# TODO use version in travis directory.
+- if [[ -n "$SERVICE_ACCOUNT_mlab_testing" ]] ; then
+  $TRAVIS_BUILD_DIR/travis/activate_service_account.sh SERVICE_ACCOUNT_mlab_testing ;
   fi
 
 # These directories will be cached on successful "script" builds, and restored,
@@ -38,14 +42,14 @@ script:
 # Currently skipping storage tests, because they depend on GCS, and there is
 # no emulator.
 # TODO - separate storage tests into integration and lightweight.
-- MODULES="batch cmd/gardener"
+- MODULES="cloud/tq cmd/gardener"
 - for module in $MODULES; do
     COVER_PKGS=${COVER_PKGS}./$module/..., ;
   done
 - COVER_PKGS=${COVER_PKGS::-1}  # Trim the trailing comma
 - EC=0
 - for module in $MODULES; do
-    go test -v -coverpkg=$COVER_PKGS -coverprofile=$module.cov github.com/m-lab/etl-gardener/$module ;
+    go test -v -coverpkg=$COVER_PKGS -coverprofile=${module//\//_}.cov github.com/m-lab/etl-gardener/$module ;
     EC=$[ $EC || $? ] ;
   done
 - echo "summary status $EC" ;
@@ -59,8 +63,8 @@ script:
 # Note: we do not run integration tests from forked PRs b/c the SA is unavailable.
 - EC=0
 - if [[ -n "$TEST_SERVICE_ACCOUNT_mlab_testing" ]] ; then
-  for module in batch cmd/gardener ; do
-    go test -v -coverpkg=$COVER_PKGS -coverprofile=$module.cov github.com/m-lab/etl-gardener/$module -tags=integration ;
+  for module in cloud/tq cmd/gardener ; do
+    go test -v -coverpkg=$COVER_PKGS -coverprofile=${module//\//_}.cov github.com/m-lab/etl-gardener/$module -tags=integration ;
     EC=$[ $EC || $? ] ;
   done ;
   echo "summary status $EC" ;
