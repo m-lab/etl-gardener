@@ -140,6 +140,8 @@ func runService() {
 			log.Println("Required environment variables are missing or invalid.")
 		} */
 
+	healthy = true
+
 	// ListenAndServe, and terminate when it returns.
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
