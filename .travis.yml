@@ -15,17 +15,12 @@ before_install:
 - source "${HOME}/google-cloud-sdk/path.bash.inc"
 
 # Install test credentials.
-# These are uploaded to travis by doing this from within the repository
-# $ gcloud --project mlab-testing iam service-accounts keys create --iam-account go-travis-testing@mlab-testing.iam.gserviceaccount.com go_travis_testing.json
-# $ KEY="$(base64 go_travis_testing.json)"
-# $ travis env set TEST_SERVICE_ACCOUNT_mlab_testing "${KEY}"
+# These are uploaded to travis by invoking setup_service_accounts_for_travis.sh (from
+# the m-lab/travis repo), from a directory within *this* repo.
 #
+# New mechanism for setting up testing service account.
 # Note that anyone with github ACLs to push to a branch can hack .travis.yml
 # and discover these credentials in the travis logs.
-- if [[ -n "$TEST_SERVICE_ACCOUNT_mlab_testing" ]] ; then
-  echo "$TEST_SERVICE_ACCOUNT_mlab_testing" | base64 -d > travis-testing.key ;
-  fi
-# New mechanism for setting up testing service account.
 # TODO use version in travis directory.
 - if [[ -n "$SERVICE_ACCOUNT_mlab_testing" ]] ; then
   $TRAVIS_BUILD_DIR/travis/activate_service_account.sh SERVICE_ACCOUNT_mlab_testing ;
@@ -48,6 +43,7 @@ script:
   done
 - COVER_PKGS=${COVER_PKGS::-1}  # Trim the trailing comma
 - EC=0
+# Note that for modules in subdirectories, this replaces separating slashes with _.
 - for module in $MODULES; do
     go test -v -coverpkg=$COVER_PKGS -coverprofile=${module//\//_}.cov github.com/m-lab/etl-gardener/$module ;
     EC=$[ $EC || $? ] ;
@@ -61,7 +57,7 @@ script:
 # the non-integration tests are repeated.  If we change the unit tests to NOT run when integration
 # test tag is set, then we would need to have separate cov files.
 # Note: we do not run integration tests from forked PRs b/c the SA is unavailable.
-- EC=0
+# Note that for modules in subdirectories, this replaces separating slashes with _.
 - if [[ -n "$TEST_SERVICE_ACCOUNT_mlab_testing" ]] ; then
   for module in cloud/tq cmd/gardener ; do
     go test -v -coverpkg=$COVER_PKGS -coverprofile=${module//\//_}.cov github.com/m-lab/etl-gardener/$module -tags=integration ;
