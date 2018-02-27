@@ -1,8 +1,13 @@
 # Travis configuration for gardener.
-#
 language: go
+services:
+  - docker
+
+go:
+   - 1.9.x
 
 
+###########################################################################
 before_install:
 # Coverage tools
 - go get github.com/mattn/goveralls
@@ -15,20 +20,13 @@ before_install:
 - source "${HOME}/google-cloud-sdk/path.bash.inc"
 
 # Install test credentials.
-# These are uploaded to travis by doing this from within the repository
-# $ gcloud --project mlab-testing iam service-accounts keys create --iam-account go-travis-testing@mlab-testing.iam.gserviceaccount.com go_travis_testing.json
-# $ KEY="$(base64 go_travis_testing.json)"
-# $ travis env set TEST_SERVICE_ACCOUNT_mlab_testing "${KEY}"
+# These are uploaded to travis by doing this from within the repository ... TODO
 #
-# Note that anyone with github ACLs to push to a branch can hack .travis.yml
-# and discover these credentials in the travis logs.
-- if [[ -n "$TEST_SERVICE_ACCOUNT_mlab_testing" ]] ; then
-  echo "$TEST_SERVICE_ACCOUNT_mlab_testing" | base64 -d > travis-testing.key ;
-  fi
 # New mechanism for setting up testing service account.
 # TODO use version in travis directory.
 - if [[ -n "$SERVICE_ACCOUNT_mlab_testing" ]] ; then
-  $TRAVIS_BUILD_DIR/travis/activate_service_account.sh SERVICE_ACCOUNT_mlab_testing ;
+  echo "$SERVICE_ACCOUNT_mlab_testing" > $TRAVIS_BUILD_DIR/creds.json ;
+  export GOOGLE_APPLICATION_CREDENTIALS=$TRAVIS_BUILD_DIR/creds.json ;
   fi
 
 # These directories will be cached on successful "script" builds, and restored,
@@ -37,17 +35,20 @@ cache:
   directories:
     - "$HOME/google-cloud-sdk/"
 
+install:
+# Install dependencies
+- GO_IMPORTS=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}' ./... | sort | uniq | grep -v etl-gardener)
+- go get -u -v -d $GO_IMPORTS
+
 script:
 # To start, run all the non-integration tests.
-# Currently skipping storage tests, because they depend on GCS, and there is
-# no emulator.
-# TODO - separate storage tests into integration and lightweight.
 - MODULES="cloud/tq cmd/gardener"
 - for module in $MODULES; do
     COVER_PKGS=${COVER_PKGS}./$module/..., ;
   done
 - COVER_PKGS=${COVER_PKGS::-1}  # Trim the trailing comma
 - EC=0
+# Note that for modules in subdirectories, this replaces separating slashes with _.
 - for module in $MODULES; do
     go test -v -coverpkg=$COVER_PKGS -coverprofile=${module//\//_}.cov github.com/m-lab/etl-gardener/$module ;
     EC=$[ $EC || $? ] ;
@@ -61,8 +62,8 @@ script:
 # the non-integration tests are repeated.  If we change the unit tests to NOT run when integration
 # test tag is set, then we would need to have separate cov files.
 # Note: we do not run integration tests from forked PRs b/c the SA is unavailable.
-- EC=0
-- if [[ -n "$TEST_SERVICE_ACCOUNT_mlab_testing" ]] ; then
+# Note that for modules in subdirectories, this replaces separating slashes with _.
+- if [[ -n "$SERVICE_ACCOUNT_mlab_testing" ]] ; then
   for module in cloud/tq cmd/gardener ; do
     go test -v -coverpkg=$COVER_PKGS -coverprofile=${module//\//_}.cov github.com/m-lab/etl-gardener/$module -tags=integration ;
     EC=$[ $EC || $? ] ;
@@ -73,13 +74,8 @@ script:
 
 # Coveralls
 # Run "unit tests" with coverage.
-
-# Coveralls
 - $HOME/gopath/bin/gocovmerge *.cov > merge.cov
 - $HOME/gopath/bin/goveralls -coverprofile=merge.cov -service=travis-ci
-
-# Clean build and prepare for deployment
-- cd $TRAVIS_BUILD_DIR/cmd/gardener && go build
 
 #################################################################################
 # Deployment Section
@@ -108,59 +104,4 @@ script:
 # an explicit tag that matches "on:" conditions.
 #################################################################################
 
-deploy:
-######################################################################
-#  Sandbox deployments
-#  - before code review for development code in a specific branch.
-######################################################################
 
-
-## Service: gardener -- Service that runs various batch jobs, such as
-#                           reprocessing and dedupping.
-- provider: script
-  script:
-    # These injected params specify the project and bucket used by the service.
-    INJECTED_PROJECT=mlab-sandbox INJECTED_BUCKET=archive-mlab-sandbox
-    $TRAVIS_BUILD_DIR/travis/deploy_app.sh mlab-sandbox
-    SERVICE_ACCOUNT_mlab_sandbox $TRAVIS_BUILD_DIR/cmd/gardener app.yaml
-  skip_cleanup: true
-  on:
-    repo: m-lab/etl-gardener
-    all_branches: true
-    condition: $TRAVIS_BRANCH == gardener-sandbox-* || $TRAVIS_BRANCH == sandbox-*
-
-######################################################################
-#  Staging deployments
-#  Auto deployed on merge with master branch
-#  There are no mini-deployments here.  ALL elements are redeployed
-#  when merges to integration occur, and they have no other trigger.
-######################################################################
-
-###################### ALL GARDENER SERVICES ###############################
-- provider: script
-  script:
-    INJECTED_PROJECT=mlab-staging INJECTED_BUCKET=archive-mlab-staging
-    $TRAVIS_BUILD_DIR/travis/deploy_app.sh mlab-staging
-    SERVICE_ACCOUNT_mlab_staging $TRAVIS_BUILD_DIR/cmd/gardener app.yaml
-  skip_cleanup: true
-  on:
-    repo: m-lab/etl-gardener
-    branch: master
-
-######################################################################
-#  Prod deployments
-#  Deployed on manual tagging with prod-*, or (group)-prod-*
-#  Should be used AFTER code review, commit to integration, and staging soak.
-#  Triggers when *ANY* branch is tagged with prod-*'
-######################################################################
-
-###################### GARDENER SERVICES ###############################
-# Triggers when *ANY* branch is tagged with qp-prod-* OR prod-*
-- provider: script
-    echo "Not implemented yet"
-  script:
-  skip_cleanup: true
-  on:
-    repo: m-lab/etl-gardener
-    all_branches: true
-    condition: $TRAVIS_TAG == prod-*
