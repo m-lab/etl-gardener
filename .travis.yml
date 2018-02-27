@@ -36,6 +36,10 @@ cache:
     - "$HOME/google-cloud-sdk/"
 
 install:
+  # Install kexpand templating tool. Only works from HEAD.
+- go get github.com/kopeio/kexpand
+- $TRAVIS_BUILD_DIR/travis/install_gcloud.sh kubectl
+
 # Install dependencies
 - GO_IMPORTS=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}' ./... | sort | uniq | grep -v etl-gardener)
 - go get -u -v -d $GO_IMPORTS
@@ -109,3 +113,32 @@ script:
 #################################################################################
 
 
+deploy:
+#########################################
+## Sandbox
+- provider: script
+  script: $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-sandbox data-processing-cluster ./apply-cluster.sh
+  skip_cleanup: true
+  on:
+    repo: m-lab/etl-gardener
+    all_branches: true
+    condition: $TRAVIS_BRANCH == sandbox-* && $TRAVIS_EVENT_TYPE == push
+
+#########################################
+## Staging
+- provider: script
+  script: $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-staging data-processing-cluster ./apply-cluster.sh
+  skip_cleanup: true
+  on:
+    repo: m-lab/etl-gardener
+    all_branches: true
+    condition: $TRAVIS_BRANCH == master && $TRAVIS_EVENT_TYPE == push
+
+#########################################
+## Production
+- provider: script
+  script: $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-oti data-processing-cluster ./apply-cluster.sh
+  skip_cleanup: true
+  on:
+    repo: m-lab/etl-gardener
+    tags: true
