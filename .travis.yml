@@ -77,6 +77,10 @@ script:
 - $HOME/gopath/bin/gocovmerge *.cov > merge.cov
 - $HOME/gopath/bin/goveralls -coverprofile=merge.cov -service=travis-ci
 
+# Clean build and prepare for deployment
+- cd $TRAVIS_BUILD_DIR
+- docker build .
+
 #################################################################################
 # Deployment Section
 #
