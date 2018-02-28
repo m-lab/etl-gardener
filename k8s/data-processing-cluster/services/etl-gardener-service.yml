@@ -11,7 +11,4 @@ spec:
   selector:
     run: etl-gardener-server
   sessionAffinity: None
-  # Allocate a static IP manually in GCP console: Networking -> Load Balancing.
-  externalIPs:
-  - {{EXTERNAL_IP}}
   type: LoadBalancer
