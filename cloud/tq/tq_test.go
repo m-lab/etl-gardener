@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/m-lab/etl-gardener/cloud/tq"
-	"google.golang.org/api/option"
 )
 
 func init() {
@@ -14,21 +13,13 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
-func Options() []option.ClientOption {
-	opts := []option.ClientOption{}
-	if os.Getenv("TRAVIS") != "" {
-		authOpt := option.WithCredentialsFile("../../travis-testing.key")
-		opts = append(opts, authOpt)
-	}
-
-	return opts
-}
-
 func TestPostOneTask(t *testing.T) {
 	os.Setenv("PROJECT", "mlab-testing")
-	// TODO - use mlab-testing instead of mlab-sandbox??
 	client, counter := tq.DryRunQueuerClient()
-	q, err := tq.CreateQueuer(client, Options(), "test-", 8, "mlab-sandbox", "archive-mlab-test", true)
+	q, err := tq.CreateQueuer(client, nil, "test-", 8, "mlab-testing", "archive-mlab-test", true)
+	if err != nil {
+		t.Fatal(err)
+	}
 	q.PostOneTask("test-queue", "archive-mlab-test", "test-file")
 	if err != nil {
 		t.Fatal(err)

@@ -143,6 +143,7 @@ func runService() {
 	healthy = true
 
 	// ListenAndServe, and terminate when it returns.
+	log.Println("Running as service")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: etl-gardener-service
+  namespace: default
+spec:
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    run: etl-gardener-server
+  sessionAffinity: None
+  # Allocate a static IP manually in GCP console: Networking -> Load Balancing.
+  externalIPs:
+  - {{EXTERNAL_IP}}
+  type: LoadBalancer
