@@ -122,7 +122,7 @@ deploy:
 ## Sandbox
 - provider: script
   script:
-    export EXTERNAL_IP=104.198.134.27 && $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-sandbox data-processing-cluster ./apply-cluster.sh
+    $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-sandbox data-processing-cluster ./apply-cluster.sh
   skip_cleanup: true
   on:
     repo: m-lab/etl-gardener
