@@ -41,8 +41,28 @@ spec:
           value: "true"
         - name:  GIT_COMMIT
           value: "{{GIT_COMMIT}}"
+        - name: TASKFILE_BUCKET
+          value: "archive-{{GCLOUD_PROJECT}}"
+        - name: PROJECT
+          value: {{GCLOUD_PROJECT}}
+        - name: QUEUE_BASE
+          value: etl-ndt-batch-
+        - name: NUM_QUEUES
+          value: "8"
         ports:
-          - containerPort: 9090
+        - name: prometheus-port
+          containerPort: 9090
+          hostPort: 9090
+        - name: service-port
+          containerPort: 8080
+          hostPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /alive
+            port: service-port
+          initialDelaySeconds: 30
+          periodSeconds: 60
+
           # Do we need to mention 8080?
         resources:
           requests:

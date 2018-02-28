@@ -117,7 +117,9 @@ func GetTaskqueueStats(project string, name string) (stats taskqueue.QueueStatis
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		err = errors.New("Bad status on http request")
+		err = errors.New("HTTP request: " + http.StatusText(resp.StatusCode))
+		log.Println(err)
+		log.Printf(`https://queue-pusher-dot-%s.appspot.com/stats?queuename=%s\n`, project, name)
 		return
 	}
 	data := make([]byte, 10000)

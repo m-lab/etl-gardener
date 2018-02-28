@@ -15,6 +15,8 @@ import (
 	"runtime"
 	"strconv"
 
+	"github.com/m-lab/etl-gardener/dispatch"
+
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -80,13 +82,13 @@ func setupPrometheus() {
 // variables, so we can hide sensitive vars. https://github.com/m-lab/etl/issues/384
 func Status(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "<html><body>\n")
-	fmt.Fprintf(w, "<p>NOTE: This is just one of potentially many instances.</p>\n")
-	commit := os.Getenv("COMMIT_HASH")
+	commit := os.Getenv("GIT_COMMIT")
+	release := os.Getenv("RELEASE_TAG")
 	if len(commit) >= 8 {
 		fmt.Fprintf(w, "Release: %s <br>  Commit: <a href=\"https://github.com/m-lab/etl-gardener/tree/%s\">%s</a><br>\n",
-			os.Getenv("RELEASE_TAG"), os.Getenv("COMMIT_HASH"), os.Getenv("COMMIT_HASH")[0:7])
+			release, commit, commit[0:7])
 	} else {
-		fmt.Fprintf(w, "Release: %s   Commit: unknown\n", os.Getenv("RELEASE_TAG"))
+		fmt.Fprintf(w, "Release: %s <br>  Commit: unknown\n", release)
 	}
 
 	env := os.Environ()
@@ -124,23 +126,16 @@ func runService() {
 	http.HandleFunc("/alive", healthCheck)
 	http.HandleFunc("/ready", healthCheck)
 
-	/*
-		// TODO Initialize, take ownership, check health, start service loop.
-		var err error
+	q, err := queuerFromEnv()
+	if err != nil {
+		log.Println(err)
+		// leaving healthy = false should eventually lead to rollback.
+	} else {
+		// TODO - add termination channel.
+		go dispatch.DoDispatchLoop(&q)
 
-		if err == nil {
-			healthy = true
-			log.Println("Running as a service.")
-
-			// TODO - Take over ownership and start the service in a go routine.
-		} else {
-			// Leaving healthy == false
-			// This will cause app-engine to roll back.
-			log.Println(err)
-			log.Println("Required environment variables are missing or invalid.")
-		} */
-
-	healthy = true
+		healthy = true
+	}
 
 	// ListenAndServe, and terminate when it returns.
 	log.Println("Running as service")
