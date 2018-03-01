@@ -21,7 +21,6 @@ CFG=/tmp/${CLUSTER}-${PROJECT}.yml
 kexpand expand --ignore-missing-keys k8s/${CLUSTER}/*/*.yml \
     --value GCLOUD_PROJECT=${PROJECT} \
     --value GIT_COMMIT=${TRAVIS_COMMIT} \
-    --value EXTERNAL_IP=${EXTERNAL_IP} \
     > ${CFG}
 cat ${CFG}
 
