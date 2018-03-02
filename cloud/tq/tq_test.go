@@ -16,11 +16,11 @@ func init() {
 func TestPostOneTask(t *testing.T) {
 	os.Setenv("PROJECT", "mlab-testing")
 	client, counter := tq.DryRunQueuerClient()
-	q, err := tq.CreateQueuer(client, nil, "test-", 8, "mlab-testing", "archive-mlab-test", true)
+	q, err := tq.NewQueueHandler(client, "mlab-testing", "test-queue")
 	if err != nil {
 		t.Fatal(err)
 	}
-	q.PostOneTask("test-queue", "archive-mlab-test", "test-file")
+	q.PostOneTask("archive-mlab-test", "test-file")
 	if err != nil {
 		t.Fatal(err)
 	}

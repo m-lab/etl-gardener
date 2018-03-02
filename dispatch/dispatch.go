@@ -11,12 +11,13 @@ import (
 )
 
 // DoDispatchLoop looks for next work to do.
-func DoDispatchLoop(queuer *tq.Queuer) {
+// TODO - Just for proof of concept. Replace with more useful code.
+func DoDispatchLoop(queuer *tq.QueueHandler) {
 	for {
 		log.Println("Dispatch Loop")
 		// TODO - add content.
 
-		stats, err := queuer.GetTaskqueueStats()
+		stats, err := tq.GetTaskqueueStats(queuer.Project, queuer.Queue)
 		if err != nil {
 			log.Println(err)
 		}

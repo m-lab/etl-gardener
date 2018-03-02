@@ -6,7 +6,6 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"testing"
 
@@ -21,15 +20,9 @@ func init() {
 }
 
 func TestGetTaskqueueStats(t *testing.T) {
-	os.Setenv("PROJECT", "mlab-testing")
-	// TODO - use mlab-testing instead of mlab-sandbox??
-	q, err := tq.CreateQueuer(http.DefaultClient, nil, "test-", 8, "mlab-sandbox", "archive-mlab-test", true)
-	stats, err := q.GetTaskqueueStats()
+	stats, err := tq.GetTaskqueueStats("mlab-sandbox", "test-queue")
 	if err != nil {
 		t.Fatal(err)
-	}
-	if len(stats) != 8 {
-		t.Fatal("Too few stats")
 	}
 	log.Println(stats)
 }
@@ -66,12 +59,23 @@ func TestGetBucket(t *testing.T) {
 	}
 }
 
+func TestIsEmpty(t *testing.T) {
+	q, err := tq.NewQueueHandler(http.DefaultClient, "mlab-sandbox", "test-queue")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = q.IsEmpty()
+	if err != nil && err != tq.ErrMoreTasks {
+		t.Fatal(err)
+	}
+}
+
 // NOTE: this test depends on actual bucket content.  If it starts failing,
 // check that the bucket content has not been changed.
 func TestPostDay(t *testing.T) {
 	// Use a fake queue client.
 	client, counter := tq.DryRunQueuerClient()
-	q, err := tq.CreateQueuer(client, nil, "test-", 8, "fake-project", "archive-mlab-test", true)
+	q, err := tq.NewQueueHandler(client, "fake-project", "test-queue")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +85,7 @@ func TestPostDay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	q.PostDay(nil, bucket, bucketName, "ndt/2017/09/24/")
+	q.PostDay(bucket, bucketName, "ndt/2017/09/24/")
 	if counter.Count() != 76 {
 		t.Errorf("Should have made 76 http requests: %d\n", counter.Count())
 	}

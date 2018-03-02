@@ -15,9 +15,9 @@ import (
 	"runtime"
 	"strconv"
 
+	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/dispatch"
 
-	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -27,26 +27,18 @@ import (
 
 // queuerFromEnv creates a Queuer struct initialized from environment variables.
 // It uses TASKFILE_BUCKET, PROJECT, QUEUE_BASE, and NUM_QUEUES.
-func queuerFromEnv() (tq.Queuer, error) {
-	bucketName, ok := os.LookupEnv("TASKFILE_BUCKET")
-	if !ok {
-		return tq.Queuer{}, errors.New("TASKFILE_BUCKET not set")
-	}
+func queuerFromEnv() (*tq.QueueHandler, error) {
 	project, ok := os.LookupEnv("PROJECT")
 	if !ok {
-		return tq.Queuer{}, errors.New("PROJECT not set")
+		return nil, errors.New("PROJECT not set")
 	}
 	queueBase, ok := os.LookupEnv("QUEUE_BASE")
 	if !ok {
-		return tq.Queuer{}, errors.New("QUEUE_BASE not set")
-	}
-	numQueues, err := strconv.Atoi(os.Getenv("NUM_QUEUES"))
-	if err != nil {
-		log.Println(err)
-		return tq.Queuer{}, errors.New("Parse error on NUM_QUEUES")
+		return nil, errors.New("QUEUE_BASE not set")
 	}
 
-	return tq.CreateQueuer(http.DefaultClient, nil, queueBase, numQueues, project, bucketName, false)
+	// TODO - fix this hack.
+	return tq.NewQueueHandler(http.DefaultClient, project, queueBase)
 }
 
 // StartDateRFC3339 is the date at which reprocessing will start when it catches
@@ -132,7 +124,7 @@ func runService() {
 		// leaving healthy = false should eventually lead to rollback.
 	} else {
 		// TODO - add termination channel.
-		go dispatch.DoDispatchLoop(&q)
+		go dispatch.DoDispatchLoop(q)
 
 		healthy = true
 	}

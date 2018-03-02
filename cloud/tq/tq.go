@@ -12,7 +12,6 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -76,35 +75,49 @@ func (dr *dryRunHTTP) Get(url string) (resp *http.Response, err error) {
 // Queuer handles queueing of reprocessing requests
 // *******************************************************************
 
-// A Queuer provides the environment for queuing reprocessing requests.
-type Queuer struct {
-	Project   string // project containing task queue
-	QueueBase string // task queue base name
-	NumQueues int    // number of task queues.
-	// TODO - move bucket related stuff elsewhere.
-	xBucketName string                // name of bucket containing task files
-	xBucket     *storage.BucketHandle // bucket handle
-	HTTPClient  *http.Client          // Client to be used for http requests to queue pusher.
+// Errors associated with Queuing
+var (
+	ErrNilClient = errors.New("nil http client not allowed")
+	ErrMoreTasks = errors.New("queue has tasks pending")
+)
+
+// QueueHandler is much like tq.Queuer, but for a single queue.  We want
+// independent single queue handlers to avoid thread safety issues, among
+// other things.
+// It needs:
+//   bucket
+//   strategies for enqueuing.
+type QueueHandler struct {
+	Project string // project containing task queue
+	Queue   string // task queue name
+	// Bucket    *storage.BucketHandle
+	HTTPClient *http.Client // Client to be used for http requests to queue pusher.
 }
 
-// ErrNilClient is returned when client is not provided.
-var ErrNilClient = errors.New("nil http client not allowed")
-
-// CreateQueuer creates a Queuer struct from provided parameters.  This does network ops.
+// NewQueueHandler creates a QueueHandler struct from provided parameters.  This does network ops.
 //   httpClient - client to be used for queue_pusher calls.  Allows injection of fake for testing.
 //                must be non-null.
-//   opts       - ClientOptions, e.g. credentials, for tests that need to access storage buckets.
-func CreateQueuer(httpClient *http.Client, opts []option.ClientOption, queueBase string, numQueues int, project, bucketName string, dryRun bool) (Queuer, error) {
+//   project
+//   queue
+func NewQueueHandler(httpClient *http.Client, project, queue string) (*QueueHandler, error) {
 	if httpClient == nil {
-		return Queuer{}, ErrNilClient
+		return nil, ErrNilClient
 	}
 
-	bucket, err := GetBucket(opts, project, bucketName, dryRun)
+	return &QueueHandler{project, queue, httpClient}, nil
+}
+
+// IsEmpty checks whether the queue is empty, i.e., all tasks have been successfully
+// processed.
+func (qh *QueueHandler) IsEmpty() error {
+	stats, err := GetTaskqueueStats(qh.Project, qh.Queue)
 	if err != nil {
-		return Queuer{}, err
+		return err
 	}
-
-	return Queuer{project, queueBase, numQueues, bucketName, bucket, httpClient}, nil
+	if stats.InFlight+stats.Tasks != 0 {
+		return ErrMoreTasks
+	}
+	return nil
 }
 
 // GetTaskqueueStats gets stats for a single task queue.
@@ -142,48 +155,13 @@ func GetTaskqueueStats(project string, name string) (stats taskqueue.QueueStatis
 	return
 }
 
-// GetTaskqueueStats returns the stats for a list of queues.
-// It should return a taskqueue.QueueStatistics for each queue.
-// If any errors occur, the last error will be returned.
-//  On request error, it will return a partial map (usually empty) and the error.
-// If there are missing queues or parse errors, it will add an empty QueueStatistics
-// object to the map, and continue, saving the error for later return.
-// TODO update queue_pusher to process multiple queue names in one request.
-// TODO add unit test.
-func (q *Queuer) GetTaskqueueStats() (map[string]taskqueue.QueueStatistics, error) {
-	queueNames := make([]string, q.NumQueues)
-	for i := range queueNames {
-		queueNames[i] = fmt.Sprintf("%s%d", q.QueueBase, i)
-	}
-	allStats := make(map[string]taskqueue.QueueStatistics, len(queueNames))
-	var finalErr error
-	for i := range queueNames {
-		stats, err := GetTaskqueueStats(q.Project, queueNames[i])
-		if err != nil {
-			finalErr = err
-		} else {
-			allStats[queueNames[i]] = stats
-		}
-	}
-	return allStats, finalErr
-}
-
-// Initially this used a hash, but using day ordinal is better
-// as it distributes across the queues more evenly.
-func (q Queuer) queueForDate(date time.Time) string {
-	day := date.Unix() / (24 * 60 * 60)
-	return fmt.Sprintf("%s%d", q.QueueBase, int(day)%q.NumQueues)
-}
-
 // PostOneTask sends a single https request to the queue pusher to add a task.
-// Iff dryRun is true, this does nothing.
-// TODO - move retry into this method.
 // TODO - should use AddMulti - should be much faster.
 //   however - be careful not to exceed quotas
-func (q Queuer) PostOneTask(queue, bucket, fn string) error {
-	reqStr := fmt.Sprintf("https://queue-pusher-dot-%s.appspot.com/receiver?queue=%s&filename=gs://%s/%s", q.Project, queue, bucket, fn)
+func (qh QueueHandler) PostOneTask(bucket, fn string) error {
+	reqStr := fmt.Sprintf("https://queue-pusher-dot-%s.appspot.com/receiver?queue=%s&filename=gs://%s/%s", qh.Project, qh.Queue, bucket, fn)
 
-	resp, err := q.HTTPClient.Get(reqStr)
+	resp, err := qh.HTTPClient.Get(reqStr)
 	if err != nil {
 		log.Println(err)
 		// TODO - we don't see errors here or below when the queue doesn't exist.
@@ -195,7 +173,7 @@ func (q Queuer) PostOneTask(queue, bucket, fn string) error {
 		buf, _ := ioutil.ReadAll(resp.Body)
 		message := string(buf)
 		if strings.Contains(message, "UNKNOWN_QUEUE") {
-			return errors.New(message + " " + queue)
+			return errors.New(message + " " + qh.Queue)
 		}
 		log.Println(string(buf))
 		return errors.New(resp.Status + " :: " + message)
@@ -206,11 +184,11 @@ func (q Queuer) PostOneTask(queue, bucket, fn string) error {
 
 // postWithRetry posts a single task to a task queue.  It will make up to 3 attempts
 // if there are recoverable errors.
-func (q *Queuer) postWithRetry(queue string, bucket, filepath string) error {
+func (qh *QueueHandler) postWithRetry(bucket, filepath string) error {
 	backoff := 5 * time.Second
 	var err error
 	for i := 0; i < 3; i++ {
-		err = q.PostOneTask(queue, bucket, filepath)
+		err = qh.PostOneTask(bucket, filepath)
 		if err == nil {
 			return nil
 		}
@@ -228,14 +206,10 @@ func (q *Queuer) postWithRetry(queue string, bucket, filepath string) error {
 }
 
 // PostAll posts all normal file items in an ObjectIterator into the appropriate queue.
-func (q *Queuer) PostAll(wg *sync.WaitGroup, queue string, bucket string, it *storage.ObjectIterator) error {
-	if wg != nil {
-		defer wg.Done()
-	}
-
+func (qh *QueueHandler) PostAll(bucket string, it *storage.ObjectIterator) error {
 	fileCount := 0
 	defer func() {
-		log.Println("Added ", fileCount, " tasks to ", queue)
+		log.Println("Added ", fileCount, " tasks to ", qh.Queue)
 	}()
 
 	qpErrCount := 0
@@ -247,18 +221,18 @@ func (q *Queuer) PostAll(wg *sync.WaitGroup, queue string, bucket string, it *st
 			log.Println(err, "when attempting it.Next()")
 			gcsErrCount++
 			if gcsErrCount > 5 {
-				log.Printf("Failed after %d files to %s.\n", fileCount, queue)
+				log.Printf("Failed after %d files to %s.\n", fileCount, qh.Queue)
 				return err
 			}
 			continue
 		}
 
-		err = q.postWithRetry(queue, bucket, o.Name)
+		err = qh.postWithRetry(bucket, o.Name)
 		if err != nil {
-			log.Println(err, "attempting to post", o.Name, "to", queue)
+			log.Println(err, "attempting to post", o.Name, "to", qh.Queue)
 			qpErrCount++
 			if qpErrCount > 5 {
-				log.Printf("Failed after %d files to %s (on %s).\n", fileCount, queue, o.Name)
+				log.Printf("Failed after %d files to %s (on %s).\n", fileCount, qh.Queue, o.Name)
 				return err
 			}
 		} else {
@@ -270,76 +244,16 @@ func (q *Queuer) PostAll(wg *sync.WaitGroup, queue string, bucket string, it *st
 
 // PostDay fetches an iterator over the objects with ndt/YYYY/MM/DD prefix,
 // and passes the iterator to postDay with appropriate queue.
-// Iff wq is not nil, PostDay will call done on wg when finished
-// posting.
-// This typically takes about 10 minutes, whether single or parallel days.
-func (q Queuer) PostDay(wg *sync.WaitGroup, bucket *storage.BucketHandle, bucketName, prefix string) error {
-	date, err := time.Parse("ndt/2006/01/02/", prefix)
-	if err != nil {
-		log.Println("Failed parsing date from ", prefix)
-		log.Println(err)
-		if wg != nil {
-			wg.Done()
-		}
-		return err
-	}
-	queue := q.queueForDate(date)
-	log.Println("Adding ", prefix, " to ", queue)
+// This typically takes about 10 minutes for a 20K task NDT day.
+func (qh *QueueHandler) PostDay(bucket *storage.BucketHandle, bucketName, prefix string) error {
+	log.Println("Adding ", prefix, " to ", qh.Queue)
 	qry := storage.Query{
 		Delimiter: "/",
 		Prefix:    prefix,
 	}
 	// TODO - can this error?  Or do errors only occur on iterator ops?
 	it := bucket.Objects(context.Background(), &qry)
-	if wg != nil {
-		// TODO - this ignores errors.
-		go q.PostAll(wg, queue, bucketName, it)
-	} else {
-		return q.PostAll(nil, queue, bucketName, it)
-	}
-	return nil
-}
-
-// ###############################################################################
-//  Batch processing task scheduling and support code
-// ###############################################################################
-
-// ReprocState represents the current processing state for a partition reprocessing job.
-type ReprocState int
-
-const (
-	// Pending - job created and stored but not started.
-	Pending ReprocState = iota
-	// Queuing - tasks are being posted to Queue
-	Queuing
-	// Processing - all tasks are queued but not completed
-	Processing
-	// Dedupping - all tasks completed, submitting dedup query
-	Dedupping
-	// CopyPending - dedup query complete, validating/copying
-	CopyPending
-	// Done - copy and delete completed, job can be removed.
-	Done
-)
-
-// PartitionState holds the complete state information for processing a single day partition.
-type PartitionState struct {
-	DSKey      string      // Key used for DataStore
-	State      ReprocState // Current state of the partition processing.
-	Date       string      // YYYYMMDD partition suffix for the date.
-	QueueIndex int         // index of the queue for this task.
-	NextTask   string      // the "gs://" task_filename of the next task to be submitted to the queue.
-	Restart    bool        // Indicates when new owner is recovering.
-}
-
-// QueueHandler contains elements and methods for all processing for a single queue.
-type QueueHandler struct {
-	BucketHandle    *storage.BucketHandle
-	BucketName      string
-	QueueName       string              // Name of the target task queue
-	Queuer          *Queuer             // Queuer used for all queuing
-	QueueAndProcess chan PartitionState // Channel from dispatcher
-	DedupAndCleanup chan PartitionState // Channel between queuer and dedupper
+	return qh.PostAll(bucketName, it)
 }
 
 // *******************************************************************
