@@ -14,6 +14,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"time"
 
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/dispatch"
@@ -27,7 +28,7 @@ import (
 
 // queuerFromEnv creates a Queuer struct initialized from environment variables.
 // It uses TASKFILE_BUCKET, PROJECT, QUEUE_BASE, and NUM_QUEUES.
-func queuerFromEnv() (*tq.QueueHandler, error) {
+func dispatcherFromEnv(client *http.Client, startTime time.Time) (*dispatch.Dispatcher, error) {
 	project, ok := os.LookupEnv("PROJECT")
 	if !ok {
 		return nil, errors.New("PROJECT not set")
@@ -36,9 +37,13 @@ func queuerFromEnv() (*tq.QueueHandler, error) {
 	if !ok {
 		return nil, errors.New("QUEUE_BASE not set")
 	}
+	numQueues, err := strconv.Atoi(os.Getenv("NUM_QUEUES"))
+	if err != nil {
+		log.Println(err)
+		return nil, errors.New("Parse error on NUM_QUEUES")
+	}
 
-	// TODO - fix this hack.
-	return tq.NewQueueHandler(http.DefaultClient, project, queueBase)
+	return dispatch.NewDispatcher(client, project, queueBase, numQueues, startTime)
 }
 
 // StartDateRFC3339 is the date at which reprocessing will start when it catches
@@ -118,7 +123,9 @@ func runService() {
 	http.HandleFunc("/alive", healthCheck)
 	http.HandleFunc("/ready", healthCheck)
 
-	disp, err := dispatch.NewDispatcher()
+	// For now, let's use a fake client
+	client, _ := tq.DryRunQueuerClient()
+	disp, err := dispatcherFromEnv(client, time.Now())
 	if err != nil {
 		log.Println(err)
 		// leaving healthy = false should eventually lead to rollback.
