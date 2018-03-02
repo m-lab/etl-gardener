@@ -110,7 +110,7 @@ func NewQueueHandler(httpClient *http.Client, project, queue string) (*QueueHand
 // IsEmpty checks whether the queue is empty, i.e., all tasks have been successfully
 // processed.
 func (qh *QueueHandler) IsEmpty() error {
-	stats, err := GetTaskqueueStats(qh.Project, qh.Queue)
+	stats, err := GetTaskqueueStats(qh.HTTPClient, qh.Project, qh.Queue)
 	if err != nil {
 		return err
 	}
@@ -121,10 +121,10 @@ func (qh *QueueHandler) IsEmpty() error {
 }
 
 // GetTaskqueueStats gets stats for a single task queue.
-func GetTaskqueueStats(project string, name string) (stats taskqueue.QueueStatistics, err error) {
+func GetTaskqueueStats(client *http.Client, project string, name string) (stats taskqueue.QueueStatistics, err error) {
 	// Would prefer to use this, but it does not work from flex![]
 	// stats, err := taskqueue.QueueStats(context.Background(), queueNames)
-	resp, err := http.Get(fmt.Sprintf(`https://queue-pusher-dot-%s.appspot.com/stats?queuename=%s`, project, name))
+	resp, err := client.Get(fmt.Sprintf(`https://queue-pusher-dot-%s.appspot.com/stats?queuename=%s`, project, name))
 	if err != nil {
 		return
 	}
@@ -139,6 +139,11 @@ func GetTaskqueueStats(project string, name string) (stats taskqueue.QueueStatis
 	var n int
 	n, err = io.ReadFull(resp.Body, data)
 	if err != io.ErrUnexpectedEOF {
+		if err == io.EOF {
+			// No bytes at all - probably a fake testing client.
+			log.Println(err, "Testing?")
+			err = nil
+		}
 		return
 	}
 	var statsSlice []taskqueue.QueueStatistics

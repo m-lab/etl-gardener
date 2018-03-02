@@ -20,7 +20,7 @@ func init() {
 }
 
 func TestGetTaskqueueStats(t *testing.T) {
-	stats, err := tq.GetTaskqueueStats("mlab-sandbox", "test-queue")
+	stats, err := tq.GetTaskqueueStats(http.DefaultClient, "mlab-sandbox", "test-queue")
 	if err != nil {
 		t.Fatal(err)
 	}

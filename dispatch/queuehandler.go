@@ -63,20 +63,22 @@ func (chq *ChannelQueueHandler) StartHandleLoop() <-chan bool {
 						// Wait 5 seconds before checking again.
 						time.Sleep(time.Duration(5+rand.Intn(10)) * time.Second)
 					} else if err != nil {
+						// We don't expect errors here, so try logging, and a large backoff
+						// in case there is some bad network condition, service failure,
+						// or perhaps the queue_pusher is down.
 						log.Println(err)
 						time.Sleep(time.Duration(60+rand.Intn(120)) * time.Second)
 					}
 				}
 
 				log.Println(parts)
-				time.Sleep(time.Duration(10) * time.Minute)
-				// bucketName := parts[1]
-				// bucket, err := tq.GetBucket(nil, chq.Project, bucketName, false)
-				// if err != nil {
-				//	 log.Println(err)
-				//	 continue
-				// }
-				// chq.PostDay(bucket, bucketName, parts[2]+"/"+parts[3]+"/")
+				bucketName := parts[1]
+				bucket, err := tq.GetBucket(nil, chq.Project, bucketName, false)
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+				chq.PostDay(bucket, bucketName, parts[2]+"/"+parts[3]+"/")
 			} else {
 				done <- true
 				break

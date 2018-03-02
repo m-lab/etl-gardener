@@ -25,7 +25,9 @@ func TestChannelQueueHandler(t *testing.T) {
 	}
 	close(c)
 	<-d
-	if counter.Count() != 76 {
+	// There will be one http request for each IsEmpty() call, and one for each task file.
+	if counter.Count() != 86 {
+		log.Println(counter.Count())
 		t.Error("Count != 76")
 	}
 }
