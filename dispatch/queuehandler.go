@@ -3,8 +3,10 @@ package dispatch
 import (
 	"errors"
 	"log"
+	"math/rand"
 	"net/http"
 	"regexp"
+	"time"
 
 	"github.com/m-lab/etl-gardener/cloud/tq"
 )
@@ -51,18 +53,30 @@ func (chq *ChannelQueueHandler) StartHandleLoop() <-chan bool {
 				// Use proper storage bucket.
 				parts, err := parsePrefix(prefix)
 				if err != nil {
+					// If there is a parse error, log and skip request.
 					log.Println(err)
 					continue
 				}
-				bucketName := parts[1]
-				bucket, err := tq.GetBucket(nil, chq.Project, bucketName, false)
-				//bucket, err := chq.getBucket(bucketName)
-				if err != nil {
-					log.Println(err)
-					continue
+				// Wait here until the queue is empty.
+				for err := chq.IsEmpty(); err != nil; err = chq.IsEmpty() {
+					if err == tq.ErrMoreTasks {
+						// Wait 5 seconds before checking again.
+						time.Sleep(time.Duration(5+rand.Intn(10)) * time.Second)
+					} else if err != nil {
+						log.Println(err)
+						time.Sleep(time.Duration(60+rand.Intn(120)) * time.Second)
+					}
 				}
+
 				log.Println(parts)
-				chq.PostDay(bucket, bucketName, parts[2]+"/"+parts[3]+"/")
+				time.Sleep(time.Duration(10) * time.Minute)
+				// bucketName := parts[1]
+				// bucket, err := tq.GetBucket(nil, chq.Project, bucketName, false)
+				// if err != nil {
+				//	 log.Println(err)
+				//	 continue
+				// }
+				// chq.PostDay(bucket, bucketName, parts[2]+"/"+parts[3]+"/")
 			} else {
 				done <- true
 				break

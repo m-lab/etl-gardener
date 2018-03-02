@@ -118,13 +118,13 @@ func runService() {
 	http.HandleFunc("/alive", healthCheck)
 	http.HandleFunc("/ready", healthCheck)
 
-	q, err := queuerFromEnv()
+	disp, err := dispatch.NewDispatcher()
 	if err != nil {
 		log.Println(err)
 		// leaving healthy = false should eventually lead to rollback.
 	} else {
 		// TODO - add termination channel.
-		go dispatch.DoDispatchLoop(q)
+		go disp.DoDispatchLoop()
 
 		healthy = true
 	}
