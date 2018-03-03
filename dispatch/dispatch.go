@@ -85,13 +85,13 @@ func (disp *Dispatcher) DoDispatchLoop() {
 	next := disp.StartDate
 
 	for {
-		prefix := next.Format(fmt.Sprintf("gs://%s/ndt/2015/01/02/", os.Getenv("TASKFILE_BUCKET")))
+		prefix := next.Format(fmt.Sprintf("gs://%s/ndt/2006/01/02/", os.Getenv("TASKFILE_BUCKET")))
 		disp.Add(prefix)
 
 		next = next.AddDate(0, 0, 1)
 		if next.Add(48 * time.Hour).After(time.Now()) {
 			next = disp.StartDate
 		}
-		time.Sleep(time.Duration(30+rand.Intn(60)) * time.Second)
+		time.Sleep(time.Duration(5+rand.Intn(10)) * time.Second)
 	}
 }
