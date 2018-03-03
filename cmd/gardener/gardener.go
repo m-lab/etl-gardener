@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/dispatch"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -123,9 +122,7 @@ func runService() {
 	http.HandleFunc("/alive", healthCheck)
 	http.HandleFunc("/ready", healthCheck)
 
-	// For now, let's use a fake client
-	client, _ := tq.DryRunQueuerClient()
-	disp, err := dispatcherFromEnv(client, time.Now())
+	disp, err := dispatcherFromEnv(http.DefaultClient, time.Date(2017, time.June, 1, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		log.Println(err)
 		// leaving healthy = false should eventually lead to rollback.

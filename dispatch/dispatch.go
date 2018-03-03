@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"os"
 	"reflect"
 	"time"
 )
@@ -80,12 +81,17 @@ func (disp *Dispatcher) Add(prefix string) {
 
 // DoDispatchLoop looks for next work to do.
 // It should generally be blocked on the queues.
-// TODO - Just for proof of concept. Replace with more useful code.
 func (disp *Dispatcher) DoDispatchLoop() {
-	for {
-		// TODO - make this something real!
-		disp.Add("gs://archive-mlab-sandbox/ndt/2017/09/24/")
+	next := disp.StartDate
 
+	for {
+		prefix := next.Format(fmt.Sprintf("gs://%s/ndt/2015/01/02/", os.Getenv("TASKFILE_BUCKET")))
+		disp.Add(prefix)
+
+		next = next.AddDate(0, 0, 1)
+		if next.Add(48 * time.Hour).After(time.Now()) {
+			next = disp.StartDate
+		}
 		time.Sleep(time.Duration(30+rand.Intn(60)) * time.Second)
 	}
 }
