@@ -5,13 +5,11 @@ package dedup_test
 import (
 	"context"
 	"log"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/m-lab/etl/dedup"
 	"github.com/m-lab/go/bqext"
-	"google.golang.org/api/option"
 )
 
 func init() {
@@ -19,18 +17,8 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
-func testingAuth() []option.ClientOption {
-	opts := []option.ClientOption{}
-	if os.Getenv("TRAVIS") != "" {
-		// See m-lab/go#11
-		authOpt := option.WithCredentialsFile("../travis-testing.key")
-		opts = append(opts, authOpt)
-	}
-	return opts
-}
-
 func TestGetTableDetail(t *testing.T) {
-	destDS, err := bqext.NewDataset("mlab-testing", "etl", testingAuth()...)
+	destDS, err := bqext.NewDataset("mlab-testing", "etl")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +42,7 @@ func TestGetTableDetail(t *testing.T) {
 		t.Error("Wrong number of tasks or tests")
 	}
 
-	srcDS, err := bqext.NewDataset("mlab-testing", "src", testingAuth()...)
+	srcDS, err := bqext.NewDataset("mlab-testing", "src")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +60,7 @@ func TestGetTableDetail(t *testing.T) {
 
 func TestAnnotationTableMeta(t *testing.T) {
 	// TODO - Make NewDataSet return a pointer, for consistency with bigquery.
-	dsExt, err := bqext.NewDataset("mlab-testing", "src", testingAuth()...)
+	dsExt, err := bqext.NewDataset("mlab-testing", "src")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +91,7 @@ func TestAnnotationTableMeta(t *testing.T) {
 }
 
 func TestAnnotationDetail(t *testing.T) {
-	dsExt, err := bqext.NewDataset("mlab-testing", "src", testingAuth()...)
+	dsExt, err := bqext.NewDataset("mlab-testing", "src")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +105,7 @@ func TestAnnotationDetail(t *testing.T) {
 }
 
 func TestGetTablesMatching(t *testing.T) {
-	dsExt, err := bqext.NewDataset("mlab-testing", "src", testingAuth()...)
+	dsExt, err := bqext.NewDataset("mlab-testing", "src")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +120,7 @@ func TestGetTablesMatching(t *testing.T) {
 }
 
 func TestAnnotatedTableGetPartitionInfo(t *testing.T) {
-	dsExt, err := bqext.NewDataset("mlab-testing", "src", testingAuth()...)
+	dsExt, err := bqext.NewDataset("mlab-testing", "src")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +149,7 @@ func TestAnnotatedTableGetPartitionInfo(t *testing.T) {
 
 // TODO - should check some failure cases.
 func TestCheckAndDedup(t *testing.T) {
-	dsExt, err := bqext.NewDataset("mlab-testing", "src", testingAuth()...)
+	dsExt, err := bqext.NewDataset("mlab-testing", "src")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +176,7 @@ func TestCheckAndDedup(t *testing.T) {
 }
 
 func TestProcess(t *testing.T) {
-	dsExt, err := bqext.NewDataset("mlab-testing", "src", testingAuth()...)
+	dsExt, err := bqext.NewDataset("mlab-testing", "src")
 	if err != nil {
 		t.Fatal(err)
 	}
