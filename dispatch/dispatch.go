@@ -9,6 +9,8 @@ import (
 	"os"
 	"reflect"
 	"time"
+
+	"google.golang.org/api/option"
 )
 
 // DESIGN:
@@ -26,26 +28,15 @@ type Dispatcher struct {
 	StartDate time.Time
 }
 
-<<<<<<< HEAD
-// NewDispatcher creates a proof of concept dispatcher
-// hard coded to mlab-testing.  For testing / proof of concept only.
-// TODO - replace with functional code.
-func NewDispatcher() (*Dispatcher, error) {
-	queues := make([]chan<- string, 0, 4)
-	done := make([]<-chan bool, 0, 4)
-	for i := 0; i < 4; i++ {
-		q, d, err := NewChannelQueueHandler(http.DefaultClient, "mlab-testing",
-			fmt.Sprintf("test-queue-%d", i))
-=======
 // NewDispatcher creates a dispatcher that will spread requests across multiple
 // QueueHandlers.
-func NewDispatcher(httpClient *http.Client, project, queueBase string, numQueues int, startDate time.Time) (*Dispatcher, error) {
+// bucketOpts may be used to provide a fake client for bucket operations.
+func NewDispatcher(httpClient *http.Client, project, queueBase string, numQueues int, startDate time.Time, bucketOpts ...option.ClientOption) (*Dispatcher, error) {
 	queues := make([]chan<- string, 0, numQueues)
 	done := make([]<-chan bool, 0, numQueues)
 	for i := 0; i < numQueues; i++ {
 		q, d, err := NewChannelQueueHandler(httpClient, project,
-			fmt.Sprintf("%s%d", queueBase, i))
->>>>>>> b63e48d... More realistic dispatcher
+			fmt.Sprintf("%s%d", queueBase, i), bucketOpts...)
 		if err != nil {
 			return nil, err
 		}
@@ -76,6 +67,8 @@ func (disp *Dispatcher) Add(prefix string) {
 			Chan: reflect.ValueOf(disp.Queues[i]), Send: reflect.ValueOf(prefix)}
 		cases = append(cases, c)
 	}
+	// TODO - check for panic if channels are closed?
+	// or just check if Kill has been called?
 	reflect.Select(cases)
 }
 

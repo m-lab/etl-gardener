@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"time"
 
+	"google.golang.org/api/option"
+
 	"github.com/m-lab/etl-gardener/cloud/tq"
 )
 
@@ -15,6 +17,7 @@ import (
 // routine, fed by a channel.
 type ChannelQueueHandler struct {
 	*tq.QueueHandler
+	// Handler listens on this channel for prefixes.
 	Channel chan string
 }
 
@@ -43,7 +46,7 @@ func parsePrefix(prefix string) ([]string, error) {
 
 // StartHandleLoop starts a go routine that waits for work on channel, and
 // processes it.  Returns a channel that will send true when input channel is closed.
-func (chq *ChannelQueueHandler) StartHandleLoop() <-chan bool {
+func (chq *ChannelQueueHandler) StartHandleLoop(bucketOpts ...option.ClientOption) <-chan bool {
 	done := make(chan bool)
 	go func() {
 		for {
@@ -73,7 +76,7 @@ func (chq *ChannelQueueHandler) StartHandleLoop() <-chan bool {
 
 				log.Println(parts)
 				bucketName := parts[1]
-				bucket, err := tq.GetBucket(nil, chq.Project, bucketName, false)
+				bucket, err := tq.GetBucket(bucketOpts, chq.Project, bucketName, false)
 				if err != nil {
 					log.Println(err)
 					continue
@@ -92,7 +95,7 @@ func (chq *ChannelQueueHandler) StartHandleLoop() <-chan bool {
 // from a channel.
 // Returns feeding channel, and done channel, which will return true when
 // feeding channel is closed, and processing is complete.
-func NewChannelQueueHandler(httpClient *http.Client, project, queue string) (chan<- string, <-chan bool, error) {
+func NewChannelQueueHandler(httpClient *http.Client, project, queue string, bucketOpts ...option.ClientOption) (chan<- string, <-chan bool, error) {
 	qh, err := tq.NewQueueHandler(httpClient, project, queue)
 	if err != nil {
 		return nil, nil, err
@@ -100,6 +103,6 @@ func NewChannelQueueHandler(httpClient *http.Client, project, queue string) (cha
 	ch := make(chan string)
 	cqh := ChannelQueueHandler{qh, ch}
 
-	done := cqh.StartHandleLoop()
+	done := cqh.StartHandleLoop(bucketOpts...)
 	return ch, done, nil
 }
