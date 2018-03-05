@@ -80,8 +80,8 @@ func (chq *ChannelQueueHandler) StartHandleLoop() <-chan bool {
 				}
 				chq.PostDay(bucket, bucketName, parts[2]+"/"+parts[3]+"/")
 			} else {
-				done <- true
-				break
+				close(done)
+				break // This terminates the go routine.
 			}
 		}
 	}()

@@ -26,7 +26,9 @@ type Dispatcher struct {
 	StartDate time.Time
 }
 
-// HACK
+// NewDispatcher creates a proof of concept dispatcher
+// hard coded to mlab-testing.  For testing / proof of concept only.
+// TODO - replace with functional code.
 func NewDispatcher() (*Dispatcher, error) {
 	queues := make([]chan<- string, 0, 4)
 	done := make([]<-chan bool, 0, 4)

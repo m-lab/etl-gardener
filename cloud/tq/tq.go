@@ -140,8 +140,7 @@ func GetTaskqueueStats(client *http.Client, project string, name string) (stats 
 	n, err = io.ReadFull(resp.Body, data)
 	if err != io.ErrUnexpectedEOF {
 		if err == io.EOF {
-			// No bytes at all - probably a fake testing client.
-			log.Println(err, "Testing?")
+			log.Println(err, "No content from task queue request - test client?")
 			err = nil
 		}
 		return
