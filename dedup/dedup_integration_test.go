@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/m-lab/etl/dedup"
+	"github.com/m-lab/etl-gardener/dedup"
 	"github.com/m-lab/go/bqext"
 )
 

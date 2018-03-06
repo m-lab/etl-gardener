@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
-	"github.com/m-lab/etl/etl"
 	"github.com/m-lab/go/bqext"
 	"golang.org/x/net/context"
 	"google.golang.org/api/iterator"
@@ -210,7 +209,10 @@ func GetTablesMatching(ctx context.Context, dsExt *bqext.Dataset, filter string)
 	return alt, nil
 }
 
-var denseDateSuffix = regexp.MustCompile(`(.*)([_$])(` + etl.YYYYMMDD + `)$`)
+// YYYYMMDD matches valid dense year/month/date strings
+const YYYYMMDD = `\d{4}[01]\d[0123]\d`
+
+var denseDateSuffix = regexp.MustCompile(`(.*)([_$])(` + YYYYMMDD + `)$`)
 
 // tableNameParts is used to describe a templated table or table partition.
 type tableNameParts struct {
