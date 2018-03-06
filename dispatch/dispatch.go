@@ -77,8 +77,6 @@ func (disp *Dispatcher) Add(prefix string) error {
 			Chan: reflect.ValueOf(disp.Queues[i]), Send: reflect.ValueOf(prefix)}
 		cases = append(cases, c)
 	}
-	// TODO - check for panic if channels are closed?
-	// or just check if Kill has been called?
 	reflect.Select(cases)
 	return nil
 }
