@@ -128,9 +128,13 @@ func runService() {
 		// leaving healthy = false should eventually lead to rollback.
 	} else {
 		// TODO - add termination channel.
-		go disp.DoDispatchLoop()
-
-		healthy = true
+		bucket := os.Getenv("TASKFILE_BUCKET")
+		if bucket == "" {
+			log.Println("Error: TASKFILE_BUCKET environment variable not set.")
+		} else {
+			go disp.DoDispatchLoop(bucket)
+			healthy = true
+		}
 	}
 
 	// ListenAndServe, and terminate when it returns.

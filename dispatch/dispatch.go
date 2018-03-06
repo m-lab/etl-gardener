@@ -3,10 +3,9 @@
 package dispatch
 
 import (
+	"errors"
 	"fmt"
-	"math/rand"
 	"net/http"
-	"os"
 	"reflect"
 	"time"
 
@@ -22,11 +21,14 @@ import (
 
 // Dispatcher globals
 type Dispatcher struct {
-	Queues []chan<- string
-	Done   []<-chan bool
-
-	StartDate time.Time
+	Queues      []chan<- string
+	Done        []<-chan bool
+	StartDate   time.Time
+	Terminating bool // Indicates when Terminate has been called.
 }
+
+// Dispatcher related errors.
+var ErrTerminating = errors.New("dispatcher is terminating")
 
 // NewDispatcher creates a dispatcher that will spread requests across multiple
 // QueueHandlers.
@@ -44,11 +46,15 @@ func NewDispatcher(httpClient *http.Client, project, queueBase string, numQueues
 		done = append(done, d)
 	}
 
-	return &Dispatcher{Queues: queues, Done: done, StartDate: startDate}, nil
+	return &Dispatcher{Queues: queues, Done: done, StartDate: startDate, Terminating: false}, nil
 }
 
-// Kill closes all the channels, and waits for all the dones.
-func (disp *Dispatcher) Kill() {
+// Terminate closes all the channels, and waits for all the dones.
+func (disp *Dispatcher) Terminate() {
+	if disp.Terminating {
+		return
+	}
+	disp.Terminating = true
 	for i := range disp.Queues {
 		close(disp.Queues[i])
 	}
@@ -59,7 +65,11 @@ func (disp *Dispatcher) Kill() {
 }
 
 // Add will post the request to next available queue.
-func (disp *Dispatcher) Add(prefix string) {
+// May return ErrTerminating if Terminate has been called.
+func (disp *Dispatcher) Add(prefix string) error {
+	if disp.Terminating {
+		return ErrTerminating
+	}
 	// Easiest to do this on the fly, since it requires the prefix in the cases.
 	cases := make([]reflect.SelectCase, 0, len(disp.Queues))
 	for i := range disp.Queues {
@@ -70,21 +80,21 @@ func (disp *Dispatcher) Add(prefix string) {
 	// TODO - check for panic if channels are closed?
 	// or just check if Kill has been called?
 	reflect.Select(cases)
+	return nil
 }
 
 // DoDispatchLoop looks for next work to do.
 // It should generally be blocked on the queues.
-func (disp *Dispatcher) DoDispatchLoop() {
+func (disp *Dispatcher) DoDispatchLoop(bucket string) {
 	next := disp.StartDate
 
 	for {
-		prefix := next.Format(fmt.Sprintf("gs://%s/ndt/2006/01/02/", os.Getenv("TASKFILE_BUCKET")))
+		prefix := next.Format(fmt.Sprintf("gs://%s/ndt/2006/01/02/", bucket))
 		disp.Add(prefix)
 
 		next = next.AddDate(0, 0, 1)
 		if next.Add(48 * time.Hour).After(time.Now()) {
 			next = disp.StartDate
 		}
-		time.Sleep(time.Duration(5+rand.Intn(10)) * time.Second)
 	}
 }

@@ -30,18 +30,15 @@ func TestDispatcherLifeCycle(t *testing.T) {
 	d.Add("gs://foobar/ndt/2001/01/01/")
 
 	// This waits for all work to complete, then closes all channels.
-	d.Kill()
+	d.Terminate()
 
 	// Test prefix should have triggered a single task queue check, so count should be 2.
 	if counter.Count() != 2 {
 		t.Errorf("Count was %d instead of 2", counter.Count())
 	}
 
-	// Now channels should be closed, and new Add should panic.
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Should panic")
-		}
-	}()
-	d.Add("gs://foobar/ndt/2001/01/01/")
+	err = d.Add("gs://foobar/ndt/2001/01/01/")
+	if err != dispatch.ErrTerminating {
+		t.Error("Should get", dispatch.ErrTerminating)
+	}
 }
