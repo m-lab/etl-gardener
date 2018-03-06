@@ -3,12 +3,13 @@
 package dispatch
 
 import (
+	"errors"
 	"fmt"
-	"log"
-	"math/rand"
 	"net/http"
 	"reflect"
 	"time"
+
+	"google.golang.org/api/option"
 )
 
 // DESIGN:
@@ -20,21 +21,24 @@ import (
 
 // Dispatcher globals
 type Dispatcher struct {
-	Queues []chan<- string
-	Done   []<-chan bool
-
-	StartDate time.Time
+	Queues      []chan<- string
+	Done        []<-chan bool
+	StartDate   time.Time
+	Terminating bool // Indicates when Terminate has been called.
 }
 
-// NewDispatcher creates a proof of concept dispatcher
-// hard coded to mlab-testing.  For testing / proof of concept only.
-// TODO - replace with functional code.
-func NewDispatcher() (*Dispatcher, error) {
-	queues := make([]chan<- string, 0, 4)
-	done := make([]<-chan bool, 0, 4)
-	for i := 0; i < 4; i++ {
-		q, d, err := NewChannelQueueHandler(http.DefaultClient, "mlab-testing",
-			fmt.Sprintf("test-queue-%d", i))
+// Dispatcher related errors.
+var ErrTerminating = errors.New("dispatcher is terminating")
+
+// NewDispatcher creates a dispatcher that will spread requests across multiple
+// QueueHandlers.
+// bucketOpts may be used to provide a fake client for bucket operations.
+func NewDispatcher(httpClient *http.Client, project, queueBase string, numQueues int, startDate time.Time, bucketOpts ...option.ClientOption) (*Dispatcher, error) {
+	queues := make([]chan<- string, 0, numQueues)
+	done := make([]<-chan bool, 0, numQueues)
+	for i := 0; i < numQueues; i++ {
+		q, d, err := NewChannelQueueHandler(httpClient, project,
+			fmt.Sprintf("%s%d", queueBase, i), bucketOpts...)
 		if err != nil {
 			return nil, err
 		}
@@ -42,12 +46,15 @@ func NewDispatcher() (*Dispatcher, error) {
 		done = append(done, d)
 	}
 
-	return &Dispatcher{queues, done,
-		time.Now().AddDate(0, 0, -10)}, nil
+	return &Dispatcher{Queues: queues, Done: done, StartDate: startDate, Terminating: false}, nil
 }
 
-// Kill closes all the channels, and waits for all the dones.
-func (disp *Dispatcher) Kill() {
+// Terminate closes all the channels, and waits for all the dones.
+func (disp *Dispatcher) Terminate() {
+	if disp.Terminating {
+		return
+	}
+	disp.Terminating = true
 	for i := range disp.Queues {
 		close(disp.Queues[i])
 	}
@@ -58,26 +65,34 @@ func (disp *Dispatcher) Kill() {
 }
 
 // Add will post the request to next available queue.
-func (disp *Dispatcher) Add(prefix string) {
+// May return ErrTerminating if Terminate has been called.
+func (disp *Dispatcher) Add(prefix string) error {
+	if disp.Terminating {
+		return ErrTerminating
+	}
 	// Easiest to do this on the fly, since it requires the prefix in the cases.
 	cases := make([]reflect.SelectCase, 0, len(disp.Queues))
 	for i := range disp.Queues {
-		cases = append(cases, reflect.SelectCase{reflect.SelectSend,
-			reflect.ValueOf(disp.Queues[i]), reflect.ValueOf(prefix)})
+		c := reflect.SelectCase{Dir: reflect.SelectSend,
+			Chan: reflect.ValueOf(disp.Queues[i]), Send: reflect.ValueOf(prefix)}
+		cases = append(cases, c)
 	}
 	reflect.Select(cases)
+	return nil
 }
 
 // DoDispatchLoop looks for next work to do.
 // It should generally be blocked on the queues.
-// TODO - Just for proof of concept. Replace with more useful code.
-func (disp *Dispatcher) DoDispatchLoop() {
+func (disp *Dispatcher) DoDispatchLoop(bucket string) {
+	next := disp.StartDate
+
 	for {
-		log.Println("Dispatch Loop")
-		// TODO - add content.
+		prefix := next.Format(fmt.Sprintf("gs://%s/ndt/2006/01/02/", bucket))
+		disp.Add(prefix)
 
-		disp.Add("gs://bucket/foobar/2017/01/02/")
-
-		time.Sleep(time.Duration(10+rand.Intn(20)) * time.Second)
+		next = next.AddDate(0, 0, 1)
+		if next.Add(48 * time.Hour).After(time.Now()) {
+			next = disp.StartDate
+		}
 	}
 }
