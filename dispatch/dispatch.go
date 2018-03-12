@@ -85,13 +85,14 @@ func (disp *Dispatcher) Add(prefix string) error {
 
 // DoDispatchLoop looks for next work to do.
 // It should generally be blocked on the queues.
-func (disp *Dispatcher) DoDispatchLoop(bucket string) {
+func (disp *Dispatcher) DoDispatchLoop(bucket string, experiments []string) {
 	next := disp.StartDate
 
 	for {
-		// TODO update this to use get project(s) from environment.
-		prefix := next.Format(fmt.Sprintf("gs://%s/ndt/2006/01/02/", bucket))
-		disp.Add(prefix)
+		for _, e := range experiments {
+			prefix := next.Format(fmt.Sprintf("gs://%s/%s/2006/01/02/", bucket, e))
+			disp.Add(prefix)
+		}
 
 		next = next.AddDate(0, 0, 1)
 		// When we catch up to two days ago, start over.

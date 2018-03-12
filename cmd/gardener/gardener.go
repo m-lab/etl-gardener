@@ -14,6 +14,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/m-lab/etl-gardener/dispatch"
@@ -133,10 +134,17 @@ func runService() {
 	} else {
 		// TODO - add termination channel.
 		bucket := os.Getenv("TASKFILE_BUCKET")
+		expString := os.Getenv("EXPERIMENTS")
 		if bucket == "" {
 			log.Println("Error: TASKFILE_BUCKET environment variable not set.")
+		} else if expString == "" {
+			log.Println("Error: EXPERIMENTS environment variable not set.")
 		} else {
-			go disp.DoDispatchLoop(bucket)
+			experiments := strings.Split(expString, ",")
+			for i := range experiments {
+				experiments[i] = strings.TrimSpace(experiments[i])
+			}
+			go disp.DoDispatchLoop(bucket, experiments)
 			healthy = true
 		}
 	}

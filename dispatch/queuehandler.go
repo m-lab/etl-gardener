@@ -61,7 +61,7 @@ func (chq *ChannelQueueHandler) StartHandleLoop(bucketOpts ...option.ClientOptio
 						log.Println("Waiting for empty queue", chq.Queue)
 						nextLog = time.Now().Add(5 * time.Minute)
 					}
-					// Wait 5 seconds before checking again.
+					// Wait 5-15 seconds before checking again.
 					time.Sleep(time.Duration(5+rand.Intn(10)) * time.Second)
 				} else if err != nil {
 					// We don't expect errors here, so try logging, and a large backoff
