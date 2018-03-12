@@ -33,8 +33,8 @@ func TestDispatcherLifeCycle(t *testing.T) {
 	d.Terminate()
 
 	// Test prefix should have triggered a single task queue check, so count should be 2.
-	if counter.Count() != 2 {
-		t.Errorf("Count was %d instead of 2", counter.Count())
+	if counter.Count() != 6 {
+		t.Errorf("Count was %d instead of 6", counter.Count())
 	}
 
 	err = d.Add("gs://foobar/ndt/2001/01/01/")

@@ -5,6 +5,7 @@ package dispatch
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"reflect"
 	"time"
@@ -77,6 +78,7 @@ func (disp *Dispatcher) Add(prefix string) error {
 			Chan: reflect.ValueOf(disp.Queues[i]), Send: reflect.ValueOf(prefix)}
 		cases = append(cases, c)
 	}
+	log.Println("Waiting for empty queue for", prefix)
 	reflect.Select(cases)
 	return nil
 }
@@ -87,11 +89,14 @@ func (disp *Dispatcher) DoDispatchLoop(bucket string) {
 	next := disp.StartDate
 
 	for {
+		// TODO update this to use get project(s) from environment.
 		prefix := next.Format(fmt.Sprintf("gs://%s/ndt/2006/01/02/", bucket))
 		disp.Add(prefix)
 
 		next = next.AddDate(0, 0, 1)
+		// When we catch up to two days ago, start over.
 		if next.Add(48 * time.Hour).After(time.Now()) {
+			// TODO - load this from DataStore
 			next = disp.StartDate
 		}
 	}

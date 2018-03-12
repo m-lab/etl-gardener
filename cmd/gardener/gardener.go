@@ -19,14 +19,17 @@ import (
 	"github.com/m-lab/etl-gardener/dispatch"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	// Enable exported debug vars.  See https://golang.org/pkg/expvar/
+	_ "expvar"
 )
 
 // ###############################################################################
 //  Batch processing task scheduling and support code
 // ###############################################################################
 
-// queuerFromEnv creates a Queuer struct initialized from environment variables.
-// It uses TASKFILE_BUCKET, PROJECT, QUEUE_BASE, and NUM_QUEUES.
+// dispatcherFromEnv creates a Dispatcher struct initialized from environment variables.
+// It uses PROJECT, QUEUE_BASE, and NUM_QUEUES.
 func dispatcherFromEnv(client *http.Client, startTime time.Time) (*dispatch.Dispatcher, error) {
 	project, ok := os.LookupEnv("PROJECT")
 	if !ok {
@@ -122,7 +125,8 @@ func runService() {
 	http.HandleFunc("/alive", healthCheck)
 	http.HandleFunc("/ready", healthCheck)
 
-	disp, err := dispatcherFromEnv(http.DefaultClient, time.Date(2017, time.June, 1, 0, 0, 0, 0, time.UTC))
+	disp, err := dispatcherFromEnv(http.DefaultClient,
+		time.Date(2017, time.June, 1, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		log.Println(err)
 		// leaving healthy = false should eventually lead to rollback.
