@@ -44,60 +44,78 @@ func parsePrefix(prefix string) ([]string, error) {
 	return fields, nil
 }
 
+// ErrChannelClosed is returned when the source channel closes.
+var ErrChannelClosed = errors.New("source channel closed")
+
+// waitForEmptyQueue loops checking queue until empty.
+func (chq *ChannelQueueHandler) waitForEmptyQueue() {
+	// Don't want to accept a date until we can actually queue it.
+	log.Println("Wait for empty queue ", chq.Queue)
+	for err := chq.IsEmpty(); err != nil; err = chq.IsEmpty() {
+		if err == tq.ErrMoreTasks {
+			// Wait 5-15 seconds before checking again.
+			time.Sleep(time.Duration(5+rand.Intn(10)) * time.Second)
+		} else if err != nil {
+			// We don't expect errors here, so try logging, and a large backoff
+			// in case there is some bad network condition, service failure,
+			// or perhaps the queue_pusher is down.
+			log.Println(err)
+			ErrorCount.WithLabelValues("IsEmptyError")
+			// TODO update metric
+			time.Sleep(time.Duration(60+rand.Intn(120)) * time.Second)
+		}
+	}
+}
+
+// processOneRequest waits on the channel for a new request, and handles it.
+func (chq *ChannelQueueHandler) processOneRequest(prefix string, bucketOpts ...option.ClientOption) error {
+	// Use proper storage bucket.
+	parts, err := parsePrefix(prefix)
+	if err != nil {
+		// If there is a parse error, log and skip request.
+		log.Println(err)
+		// TODO update metric
+		FailCount.WithLabelValues("BadPrefix")
+		return err
+	}
+	bucketName := parts[1]
+	bucket, err := tq.GetBucket(bucketOpts, chq.Project, bucketName, false)
+	if err != nil {
+		log.Println(err)
+		FailCount.WithLabelValues("BucketError")
+		return err
+	}
+	chq.PostDay(bucket, bucketName, parts[2]+"/"+parts[3]+"/")
+	return nil
+}
+
+// handleLoop processes requests on input channel
+func (chq *ChannelQueueHandler) handleLoop(done chan<- bool, bucketOpts ...option.ClientOption) {
+	log.Println("Starting handler for", chq.Queue)
+	for {
+		chq.waitForEmptyQueue()
+
+		prefix, more := <-chq.Channel
+		if more {
+			err := chq.processOneRequest(prefix, bucketOpts...)
+			if err == nil {
+				log.Println("Dedup not implemented")
+				FailCount.WithLabelValues("DedupNotImplemented")
+			}
+		} else {
+			close(done)
+			break
+		}
+	}
+	log.Println("Exiting handler for", chq.Queue)
+}
+
 // StartHandleLoop starts a go routine that waits for work on channel, and
-// processes it.  Returns a channel that will send true when input channel is closed.
+// processes it.
+// Returns a channel that closes when input channel is closed and final processing is complete.
 func (chq *ChannelQueueHandler) StartHandleLoop(bucketOpts ...option.ClientOption) <-chan bool {
 	done := make(chan bool)
-	log.Println("Starting handler for", chq.Queue)
-	go func() {
-		nextLog := time.Now()
-		for {
-			// Block here until the taskqueue is empty.
-			// Don't want to accept a date until we can actually queue it.
-			for err := chq.IsEmpty(); err != nil; err = chq.IsEmpty() {
-				if err == tq.ErrMoreTasks {
-					// Every five minutes, print waiting status.
-					if time.Now().After(nextLog) {
-						log.Println("Waiting for empty queue", chq.Queue)
-						nextLog = time.Now().Add(5 * time.Minute)
-					}
-					// Wait 5-15 seconds before checking again.
-					time.Sleep(time.Duration(5+rand.Intn(10)) * time.Second)
-				} else if err != nil {
-					// We don't expect errors here, so try logging, and a large backoff
-					// in case there is some bad network condition, service failure,
-					// or perhaps the queue_pusher is down.
-					log.Println(err)
-					time.Sleep(time.Duration(60+rand.Intn(120)) * time.Second)
-				}
-			}
-
-			prefix, more := <-chq.Channel
-			if more {
-				// Use proper storage bucket.
-				parts, err := parsePrefix(prefix)
-				if err != nil {
-					// If there is a parse error, log and skip request.
-					log.Println(err)
-					continue
-				}
-				log.Println(parts)
-				bucketName := parts[1]
-				bucket, err := tq.GetBucket(bucketOpts, chq.Project, bucketName, false)
-				if err != nil {
-					log.Println(err)
-					continue
-				}
-				chq.PostDay(bucket, bucketName, parts[2]+"/"+parts[3]+"/")
-				// Restart the 5 minute timer.
-				nextLog = time.Now().Add(5 * time.Minute)
-			} else {
-				close(done)
-				break // This terminates the go routine.
-			}
-		}
-	}()
-	log.Println("Exiting handler for", chq.Queue)
+	go chq.handleLoop(done, bucketOpts...)
 	return done
 }
 
