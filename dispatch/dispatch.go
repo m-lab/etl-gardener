@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/m-lab/etl-gardener/cloud/tq"
+	"github.com/m-lab/etl-gardener/dispatch"
 	"google.golang.org/api/option"
 )
 
@@ -41,8 +42,14 @@ func NewDispatcher(httpClient *http.Client, project, queueBase string, numQueues
 	queues := make([]chan<- string, 0, numQueues)
 	done := make([]<-chan bool, 0, numQueues)
 	for i := 0; i < numQueues; i++ {
+		// First build the dedup handler.
+		ddCh, ddDone, err := dispatch.NewDedupHandler(queue)
+		if err != nil {
+			return nil, nil, err
+		}
+
 		q, d, err := tq.NewChannelQueueHandler(httpClient, project,
-			fmt.Sprintf("%s%d", queueBase, i), bucketOpts...)
+			fmt.Sprintf("%s%d", queueBase, i), next, bucketOpts...)
 		if err != nil {
 			return nil, err
 		}

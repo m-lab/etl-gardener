@@ -110,7 +110,7 @@ func (qh *ChannelQueueHandler) processOneRequest(prefix string, bucketOpts ...op
 }
 
 // handleLoop processes requests on input channel
-func (qh *ChannelQueueHandler) handleLoop(done chan<- bool, bucketOpts ...option.ClientOption) {
+func (qh *ChannelQueueHandler) handleLoop(done chan<- bool, ddCh chan<- string, ddDone <-chan bool, bucketOpts ...option.ClientOption) {
 	log.Println("Starting handler for", qh.Queue)
 	for {
 		qh.waitForEmptyQueue()
@@ -122,9 +122,8 @@ func (qh *ChannelQueueHandler) handleLoop(done chan<- bool, bucketOpts ...option
 		}
 		err := qh.processOneRequest(prefix, bucketOpts...)
 		if err == nil {
-			// TODO - replace with call to dedup handling code.
-			log.Println("Dedup not implemented")
-			metrics.FailCount.WithLabelValues("DedupNotImplemented").Inc()
+			// This may block if previous hasn't finished.  Should be rare.
+			ddCh <- prefix
 		}
 	}
 	log.Println("Exiting handler for", qh.Queue)
@@ -133,9 +132,9 @@ func (qh *ChannelQueueHandler) handleLoop(done chan<- bool, bucketOpts ...option
 // StartHandleLoop starts a go routine that waits for work on channel, and
 // processes it.
 // Returns a channel that closes when input channel is closed and final processing is complete.
-func (qh *ChannelQueueHandler) StartHandleLoop(bucketOpts ...option.ClientOption) <-chan bool {
+func (qh *ChannelQueueHandler) StartHandleLoop(ddCh chan<- string, ddDone <-chan bool, bucketOpts ...option.ClientOption) <-chan bool {
 	done := make(chan bool)
-	go qh.handleLoop(done, bucketOpts...)
+	go qh.handleLoop(done, ddCh, ddDone, bucketOpts...)
 	return done
 }
 
@@ -143,7 +142,7 @@ func (qh *ChannelQueueHandler) StartHandleLoop(bucketOpts ...option.ClientOption
 // from a channel.
 // Returns feeding channel, and done channel, which will return true when
 // feeding channel is closed, and processing is complete.
-func NewChannelQueueHandler(httpClient *http.Client, project, queue string, bucketOpts ...option.ClientOption) (chan<- string, <-chan bool, error) {
+func NewChannelQueueHandler(httpClient *http.Client, project, queue string, next Downstream, bucketOpts ...option.ClientOption) (chan<- string, <-chan bool, error) {
 	qh, err := NewQueueHandler(httpClient, project, queue)
 	if err != nil {
 		return nil, nil, err
@@ -151,6 +150,13 @@ func NewChannelQueueHandler(httpClient *http.Client, project, queue string, buck
 	ch := make(chan string)
 	cqh := ChannelQueueHandler{qh, ch}
 
-	done := cqh.StartHandleLoop(bucketOpts...)
+	done := cqh.StartHandleLoop(next.Sink(), next.Done(), bucketOpts...)
 	return ch, done, nil
+}
+
+// Downstream specifies an interface for sending jobs to a downstream handler.
+type Downstream interface {
+	Sink() chan<- string
+	Responses() <-chan error
+	Done() <-chan bool
 }

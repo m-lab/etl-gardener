@@ -1,0 +1,192 @@
+package dispatch
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"math/rand"
+	"os"
+	"strings"
+	"time"
+
+	"cloud.google.com/go/bigquery"
+	"github.com/m-lab/go/bqext"
+	"google.golang.org/api/option"
+)
+
+// DedupHandler handles requests to dedup a table.
+type DedupHandler struct {
+	Channel <-chan string // Channel with incoming requests
+	Project string
+	Dataset string
+}
+
+// waitForEmptyQueue loops checking queue until empty.
+func waitForStableTable(tt *bigquery.Table) error {
+	// Don't want to accept a date until we can actually queue it.
+	log.Println("Wait for table ready", tt.TableID)
+	for {
+		ctx, cf := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cf()
+		meta, err := tt.Metadata(ctx)
+		if err != nil {
+			FailCount.WithLabelValues("TableMetaErr")
+			log.Println(err)
+			return err
+		}
+		if ctx.Err() != nil {
+			if ctx.Err() != context.DeadlineExceeded {
+				log.Println(ctx.Err())
+				return err
+			}
+		} else if meta.StreamingBuffer == nil {
+			break
+		}
+		// Retry roughly every 10 seconds.
+		time.Sleep(time.Duration(5+rand.Intn(10)) * time.Second)
+	}
+	return nil
+}
+
+// processOneRequest waits on the channel for a new request, and handles it.
+func (dh *DedupHandler) processOneRequest(ds *bqext.Dataset, prefix string, clientOpts ...option.ClientOption) error {
+	parts, err := parsePrefix(prefix)
+	if err != nil {
+		// If there is a parse error, log and skip request.
+		log.Println(err)
+		// TODO update metric
+		FailCount.WithLabelValues("BadDedupPrefix")
+		return err
+	}
+
+	tt := ds.Table(parts[2] + "_" + strings.Join(strings.Split(parts[3], "/"), ""))
+	err = waitForStableTable(tt)
+	if err != nil {
+		return err
+	}
+
+	log.Println("Dedupping", tt.FullyQualifiedName())
+	//at := dedup.NewAnnotatedTable(tt, ds)
+
+	// TODO - for now just sleep for a while.
+	time.Sleep(time.Second)
+	FailCount.WithLabelValues("DedupNotImplemented")
+	return nil
+}
+
+// handleLoop processes requests on input channel
+func (dh *DedupHandler) handleLoop(done chan<- bool, opts ...option.ClientOption) {
+	log.Println("Starting handler for ...")
+
+	for {
+		req, more := <-dh.Channel
+		if more {
+			ds, err := bqext.NewDataset(dh.Project, dh.Dataset, opts...)
+			if err != nil {
+				FailCount.WithLabelValues("NewDataset")
+				log.Println(err)
+				continue
+			}
+
+			dh.processOneRequest(&ds, req, opts...)
+		} else {
+			log.Println("Exiting handler for ...")
+			close(done)
+			break
+		}
+	}
+}
+
+// StartHandleLoop starts a go routine that waits for work on channel, and
+// processes it.
+// Returns a channel that closes when input channel is closed and final processing is complete.
+func (dh *DedupHandler) StartHandleLoop(opts ...option.ClientOption) <-chan bool {
+	done := make(chan bool)
+	go dh.handleLoop(done, opts...)
+	return done
+}
+
+// NewDedupHandler creates a new QueueHandler, sets up a go routine to feed it
+// from a channel.
+// Returns feeding channel, and done channel, which will return true when
+// feeding channel is closed, and processing is complete.
+func NewDedupHandler(queue string, opts ...option.ClientOption) (chan<- string, <-chan bool, error) {
+	project := os.Getenv("PROJECT")
+	dataset := os.Getenv("DATASET")
+	ch := make(chan string)
+	dh := DedupHandler{ch, project, dataset}
+
+	done := dh.StartHandleLoop(opts...)
+	return ch, done, nil
+}
+
+// This template expects to be executed on a table containing a single day's data, such
+// as measurement-lab:batch.ndt_20170601.
+//
+// Some tests are collected as both uncompressed and compressed files. In some historical
+// archives (June 2017), files for a single test appear in different tar files, which
+// results in duplicate rows.
+// This query strips the gz, finds duplicates, and chooses the best row -  prefering gzipped
+// files, and prefering later parse_time.
+var dedupTemplateNDT = `
+	#standardSQL
+	# Delete all duplicate rows based on test_id, preferring gz over non-gz, later parse_time
+	SELECT * except (row_number, gz, stripped_id)
+    from (
+		select *, ROW_NUMBER() OVER (PARTITION BY stripped_id order by gz DESC, parse_time DESC) row_number
+        FROM (
+	        SELECT *, regexp_replace(test_id, ".gz$", "") as stripped_id, regexp_extract(test_id, ".*(.gz)$") as gz
+	        FROM ` + "`%s`" + `
+        )
+    )
+	WHERE row_number = 1`
+
+// TODO - add selection by latest parse_time.
+var dedupTemplateSidestream = `
+	#standardSQL
+	# Select single row based on test_id, 5-tuple, start-time
+	SELECT * EXCEPT (row_number)
+    FROM ( SELECT *, ROW_NUMBER() OVER (
+        PARTITION BY CONCAT(test_id, cast(web100_log_entry.snap.StartTimeStamp as string),
+            web100_log_entry.connection_spec.local_ip, cast(web100_log_entry.connection_spec.local_port as string),
+            web100_log_entry.connection_spec.remote_ip, cast(web100_log_entry.connection_spec.remote_port as string))
+		) row_number
+	    FROM ` + "`%s`" + `)
+	WHERE row_number = 1`
+
+// Dedup executes a query that dedups and writes to destination partition.
+// This function is alpha status.  The interface may change without notice
+// or major version number change.
+//
+// `src` is relative to the project:dataset of dsExt.
+// `destTable` specifies the table to write to, typically created with
+//   dsExt.BqClient.DatasetInProject(...).Table(...)
+//
+// NOTE: If destination table is partitioned, destTable MUST include the partition
+// suffix to avoid accidentally overwriting the entire table.
+func Dedup(dsExt *bqext.Dataset, src string, destTable *bigquery.Table) (*bigquery.JobStatus, error) {
+	if !strings.Contains(destTable.TableID, "$") {
+		meta, err := destTable.Metadata(context.Background())
+		if err == nil && meta.TimePartitioning != nil {
+			log.Println(err)
+			FailCount.WithLabelValues("BadDestTable")
+			return nil, errors.New("Destination table must specify partition")
+		}
+	}
+
+	log.Printf("Removing dups and writing to %s.%s\n", destTable.DatasetID, destTable.TableID)
+	switch {
+	case strings.HasPrefix(destTable.TableID, "sidestream"):
+		queryString := fmt.Sprintf(dedupTemplateSidestream, src)
+		query := dsExt.DestQuery(queryString, destTable, bigquery.WriteTruncate)
+		return dsExt.ExecDestQuery(query)
+	case strings.HasPrefix(destTable.TableID, "ndt"):
+		queryString := fmt.Sprintf(dedupTemplateNDT, src)
+		query := dsExt.DestQuery(queryString, destTable, bigquery.WriteTruncate)
+		return dsExt.ExecDestQuery(query)
+	default:
+		FailCount.WithLabelValues("UnknownTableType")
+		return nil, errors.New("Only handles sidestream, ndt, not " + destTable.TableID)
+	}
+}
