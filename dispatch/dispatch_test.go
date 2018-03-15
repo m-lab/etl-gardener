@@ -37,6 +37,7 @@ func TestDispatcherLifeCycle(t *testing.T) {
 	d.Terminate()
 
 	// Count should be 6 (HTTP gets)
+	// TODO - this is failing about 1 in 500 times.  Race condition?
 	if counter.Count() != 6 {
 		t.Errorf("Count was %d instead of 6", counter.Count())
 	}
