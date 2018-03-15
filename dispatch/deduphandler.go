@@ -69,7 +69,7 @@ func waitForStableTable(tt *bigquery.Table) error {
 }
 
 // processOneRequest waits on the channel for a new request, and handles it.
-func (dh *DedupHandler) processOneRequest(ds *bqext.Dataset, prefix string, clientOpts ...option.ClientOption) error {
+func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, prefix string, clientOpts ...option.ClientOption) error {
 	parts, err := tq.ParsePrefix(prefix)
 	if err != nil {
 		// If there is a parse error, log and skip request.
@@ -82,15 +82,23 @@ func (dh *DedupHandler) processOneRequest(ds *bqext.Dataset, prefix string, clie
 	tt := ds.Table(parts[2] + "_" + strings.Join(strings.Split(parts[3], "/"), ""))
 	err = waitForStableTable(tt)
 	if err != nil {
+		metrics.FailCount.WithLabelValues("StreamingBufferWaitFailed")
 		return err
 	}
 
+	dest := ds.Table(parts[2] + "$" + strings.Join(strings.Split(parts[3], "/"), ""))
 	log.Println("Dedupping", tt.FullyQualifiedName())
-	//at := dedup.NewAnnotatedTable(tt, ds)
-
-	// TODO - for now just sleep for a while.
-	time.Sleep(time.Second)
-	metrics.FailCount.WithLabelValues("DedupNotImplemented")
+	status, err := Dedup(ds, tt.TableID, dest)
+	if err != nil {
+		log.Println(err)
+		metrics.FailCount.WithLabelValues("DedupFailed")
+		return err
+	}
+	if status.Err() != nil {
+		log.Println(status.Err())
+		metrics.FailCount.WithLabelValues("DedupError")
+		return err
+	}
 	return nil
 }
 
@@ -108,7 +116,7 @@ func (dh *DedupHandler) handleLoop(opts ...option.ClientOption) {
 				continue
 			}
 
-			dh.processOneRequest(&ds, req, opts...)
+			dh.waitAndDedup(&ds, req, opts...)
 		} else {
 			log.Println("Exiting handler for ...")
 			close(dh.ResponseChan)
