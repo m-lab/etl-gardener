@@ -1,4 +1,4 @@
-package dispatch
+package tq
 
 import (
 	"errors"
@@ -8,15 +8,14 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/m-lab/etl-gardener/metrics"
 	"google.golang.org/api/option"
-
-	"github.com/m-lab/etl-gardener/cloud/tq"
 )
 
 // ChannelQueueHandler is an autonomous queue handler running in a go
 // routine, fed by a channel.
 type ChannelQueueHandler struct {
-	*tq.QueueHandler
+	*QueueHandler
 	// Handler listens on this channel for prefixes.
 	Channel chan string
 }
@@ -52,7 +51,7 @@ func (chq *ChannelQueueHandler) waitForEmptyQueue() {
 	// Don't want to accept a date until we can actually queue it.
 	log.Println("Wait for empty queue ", chq.Queue)
 	for err := chq.IsEmpty(); err != nil; err = chq.IsEmpty() {
-		if err == tq.ErrMoreTasks {
+		if err == ErrMoreTasks {
 			// Wait 5-15 seconds before checking again.
 			time.Sleep(time.Duration(5+rand.Intn(10)) * time.Second)
 		} else if err != nil {
@@ -60,7 +59,7 @@ func (chq *ChannelQueueHandler) waitForEmptyQueue() {
 			// in case there is some bad network condition, service failure,
 			// or perhaps the queue_pusher is down.
 			log.Println(err)
-			ErrorCount.WithLabelValues("IsEmptyError")
+			metrics.ErrorCount.WithLabelValues("IsEmptyError")
 			// TODO update metric
 			time.Sleep(time.Duration(60+rand.Intn(120)) * time.Second)
 		}
@@ -75,14 +74,14 @@ func (chq *ChannelQueueHandler) processOneRequest(prefix string, bucketOpts ...o
 		// If there is a parse error, log and skip request.
 		log.Println(err)
 		// TODO update metric
-		FailCount.WithLabelValues("BadPrefix")
+		metrics.FailCount.WithLabelValues("BadPrefix")
 		return err
 	}
 	bucketName := parts[1]
-	bucket, err := tq.GetBucket(bucketOpts, chq.Project, bucketName, false)
+	bucket, err := GetBucket(bucketOpts, chq.Project, bucketName, false)
 	if err != nil {
 		log.Println(err)
-		FailCount.WithLabelValues("BucketError")
+		metrics.FailCount.WithLabelValues("BucketError")
 		return err
 	}
 	chq.PostDay(bucket, bucketName, parts[2]+"/"+parts[3]+"/")
@@ -100,7 +99,7 @@ func (chq *ChannelQueueHandler) handleLoop(done chan<- bool, bucketOpts ...optio
 			err := chq.processOneRequest(prefix, bucketOpts...)
 			if err == nil {
 				log.Println("Dedup not implemented")
-				FailCount.WithLabelValues("DedupNotImplemented")
+				metrics.FailCount.WithLabelValues("DedupNotImplemented")
 			}
 		} else {
 			close(done)
@@ -124,7 +123,7 @@ func (chq *ChannelQueueHandler) StartHandleLoop(bucketOpts ...option.ClientOptio
 // Returns feeding channel, and done channel, which will return true when
 // feeding channel is closed, and processing is complete.
 func NewChannelQueueHandler(httpClient *http.Client, project, queue string, bucketOpts ...option.ClientOption) (chan<- string, <-chan bool, error) {
-	qh, err := tq.NewQueueHandler(httpClient, project, queue)
+	qh, err := NewQueueHandler(httpClient, project, queue)
 	if err != nil {
 		return nil, nil, err
 	}

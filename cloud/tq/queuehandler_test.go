@@ -1,4 +1,4 @@
-package dispatch_test
+package tq_test
 
 import (
 	"fmt"
@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/m-lab/etl-gardener/cloud/tq"
-	"github.com/m-lab/etl-gardener/dispatch"
 )
 
 func init() {
@@ -16,7 +15,7 @@ func init() {
 
 func TestChannelQueueHandler(t *testing.T) {
 	client, counter := tq.DryRunQueuerClient()
-	c, d, err := dispatch.NewChannelQueueHandler(client, "mlab-testing", "test-queue")
+	c, d, err := tq.NewChannelQueueHandler(client, "mlab-testing", "test-queue")
 	if err != nil {
 		t.Fatal(err)
 	}
