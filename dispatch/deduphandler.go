@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
+	"github.com/m-lab/etl-gardener/api"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/go/bqext"
@@ -19,9 +20,25 @@ import (
 
 // DedupHandler handles requests to dedup a table.
 type DedupHandler struct {
-	Channel <-chan string // Channel with incoming requests
-	Project string
-	Dataset string
+	Project      string
+	Dataset      string
+	MsgChan      chan string
+	ResponseChan chan error
+}
+
+// Sink returns the sink channel, for use by the sender.
+func (dh *DedupHandler) Sink() chan<- string {
+	return dh.MsgChan
+}
+
+// Response returns the response channel, that closes when all processing is complete.
+func (dh *DedupHandler) Response() <-chan error {
+	return dh.ResponseChan
+}
+
+func assertDownstream(ds api.Downstream) {
+	return
+	assertDownstream(&DedupHandler{})
 }
 
 // waitForEmptyQueue loops checking queue until empty.
@@ -78,11 +95,11 @@ func (dh *DedupHandler) processOneRequest(ds *bqext.Dataset, prefix string, clie
 }
 
 // handleLoop processes requests on input channel
-func (dh *DedupHandler) handleLoop(done chan<- bool, opts ...option.ClientOption) {
+func (dh *DedupHandler) handleLoop(opts ...option.ClientOption) {
 	log.Println("Starting handler for ...")
 
 	for {
-		req, more := <-dh.Channel
+		req, more := <-dh.MsgChan
 		if more {
 			ds, err := bqext.NewDataset(dh.Project, dh.Dataset, opts...)
 			if err != nil {
@@ -94,7 +111,7 @@ func (dh *DedupHandler) handleLoop(done chan<- bool, opts ...option.ClientOption
 			dh.processOneRequest(&ds, req, opts...)
 		} else {
 			log.Println("Exiting handler for ...")
-			close(done)
+			close(dh.ResponseChan)
 			break
 		}
 	}
@@ -103,24 +120,24 @@ func (dh *DedupHandler) handleLoop(done chan<- bool, opts ...option.ClientOption
 // StartHandleLoop starts a go routine that waits for work on channel, and
 // processes it.
 // Returns a channel that closes when input channel is closed and final processing is complete.
-func (dh *DedupHandler) StartHandleLoop(opts ...option.ClientOption) <-chan bool {
-	done := make(chan bool)
-	go dh.handleLoop(done, opts...)
-	return done
+func (dh *DedupHandler) StartHandleLoop(opts ...option.ClientOption) {
+	go dh.handleLoop(opts...)
+	return
 }
 
 // NewDedupHandler creates a new QueueHandler, sets up a go routine to feed it
 // from a channel.
 // Returns feeding channel, and done channel, which will return true when
 // feeding channel is closed, and processing is complete.
-func NewDedupHandler(queue string, opts ...option.ClientOption) (chan<- string, <-chan bool, error) {
+func NewDedupHandler(queue string, opts ...option.ClientOption) (api.Downstream, error) {
 	project := os.Getenv("PROJECT")
 	dataset := os.Getenv("DATASET")
-	ch := make(chan string)
-	dh := DedupHandler{ch, project, dataset}
+	msg := make(chan string)
+	rsp := make(chan error)
+	dh := DedupHandler{project, dataset, msg, rsp}
 
-	done := dh.StartHandleLoop(opts...)
-	return ch, done, nil
+	dh.StartHandleLoop(opts...)
+	return &dh, nil
 }
 
 // This template expects to be executed on a table containing a single day's data, such

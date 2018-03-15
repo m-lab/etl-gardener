@@ -39,15 +39,15 @@ var (
 func NewDispatcher(httpClient *http.Client, project, queueBase string, numQueues int, startDate time.Time, bucketOpts ...option.ClientOption) (*Dispatcher, error) {
 	handlers := make([]api.Downstream, 0, numQueues)
 	for i := 0; i < numQueues; i++ {
+		queue := fmt.Sprintf("%s%d", queueBase, i)
 		// First build the dedup handler.
-		//	ddCh, ddDone, err := NewDedupHandler(queue)
+		dedup, err := NewDedupHandler(queue)
 		//	if err != nil {
 		//		return nil, nil, err
 		//	}
 
-		next := api.NilDownstream{}
 		cqh, err := tq.NewChannelQueueHandler(httpClient, project,
-			fmt.Sprintf("%s%d", queueBase, i), &next, bucketOpts...)
+			queue, dedup, bucketOpts...)
 		if err != nil {
 			return nil, err
 		}

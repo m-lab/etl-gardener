@@ -33,6 +33,7 @@ func (qh *ChannelQueueHandler) Response() <-chan error {
 }
 
 func assertDownstream(ds api.Downstream) {
+	return
 	assertDownstream(&ChannelQueueHandler{})
 }
 
