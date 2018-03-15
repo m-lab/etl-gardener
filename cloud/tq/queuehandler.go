@@ -47,10 +47,10 @@ func parsePrefix(prefix string) ([]string, error) {
 var ErrChannelClosed = errors.New("source channel closed")
 
 // waitForEmptyQueue loops checking queue until empty.
-func (chq *ChannelQueueHandler) waitForEmptyQueue() {
+func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 	// Don't want to accept a date until we can actually queue it.
-	log.Println("Wait for empty queue ", chq.Queue)
-	for err := chq.IsEmpty(); err != nil; err = chq.IsEmpty() {
+	log.Println("Wait for empty queue ", qh.Queue)
+	for err := qh.IsEmpty(); err != nil; err = qh.IsEmpty() {
 		if err == ErrMoreTasks {
 			// Wait 5-15 seconds before checking again.
 			time.Sleep(time.Duration(5+rand.Intn(10)) * time.Second)
@@ -59,7 +59,7 @@ func (chq *ChannelQueueHandler) waitForEmptyQueue() {
 			// in case there is some bad network condition, service failure,
 			// or perhaps the queue_pusher is down.
 			log.Println(err)
-			metrics.ErrorCount.WithLabelValues("IsEmptyError")
+			metrics.WarningCount.WithLabelValues("IsEmptyError").Inc()
 			// TODO update metric
 			time.Sleep(time.Duration(60+rand.Intn(120)) * time.Second)
 		}
@@ -67,54 +67,54 @@ func (chq *ChannelQueueHandler) waitForEmptyQueue() {
 }
 
 // processOneRequest waits on the channel for a new request, and handles it.
-func (chq *ChannelQueueHandler) processOneRequest(prefix string, bucketOpts ...option.ClientOption) error {
+func (qh *ChannelQueueHandler) processOneRequest(prefix string, bucketOpts ...option.ClientOption) error {
 	// Use proper storage bucket.
 	parts, err := parsePrefix(prefix)
 	if err != nil {
 		// If there is a parse error, log and skip request.
 		log.Println(err)
 		// TODO update metric
-		metrics.FailCount.WithLabelValues("BadPrefix")
+		metrics.FailCount.WithLabelValues("BadPrefix").Inc()
 		return err
 	}
 	bucketName := parts[1]
-	bucket, err := GetBucket(bucketOpts, chq.Project, bucketName, false)
+	bucket, err := GetBucket(bucketOpts, qh.Project, bucketName, false)
 	if err != nil {
 		log.Println(err)
-		metrics.FailCount.WithLabelValues("BucketError")
+		metrics.FailCount.WithLabelValues("BucketError").Inc()
 		return err
 	}
-	chq.PostDay(bucket, bucketName, parts[2]+"/"+parts[3]+"/")
+	qh.PostDay(bucket, bucketName, parts[2]+"/"+parts[3]+"/")
 	return nil
 }
 
 // handleLoop processes requests on input channel
-func (chq *ChannelQueueHandler) handleLoop(done chan<- bool, bucketOpts ...option.ClientOption) {
-	log.Println("Starting handler for", chq.Queue)
+func (qh *ChannelQueueHandler) handleLoop(done chan<- bool, bucketOpts ...option.ClientOption) {
+	log.Println("Starting handler for", qh.Queue)
 	for {
-		chq.waitForEmptyQueue()
+		qh.waitForEmptyQueue()
 
-		prefix, more := <-chq.Channel
-		if more {
-			err := chq.processOneRequest(prefix, bucketOpts...)
-			if err == nil {
-				log.Println("Dedup not implemented")
-				metrics.FailCount.WithLabelValues("DedupNotImplemented")
-			}
-		} else {
+		prefix, more := <-qh.Channel
+		if !more {
 			close(done)
 			break
 		}
+		err := qh.processOneRequest(prefix, bucketOpts...)
+		if err == nil {
+			// TODO - replace with call to dedup handling code.
+			log.Println("Dedup not implemented")
+			metrics.FailCount.WithLabelValues("DedupNotImplemented").Inc()
+		}
 	}
-	log.Println("Exiting handler for", chq.Queue)
+	log.Println("Exiting handler for", qh.Queue)
 }
 
 // StartHandleLoop starts a go routine that waits for work on channel, and
 // processes it.
 // Returns a channel that closes when input channel is closed and final processing is complete.
-func (chq *ChannelQueueHandler) StartHandleLoop(bucketOpts ...option.ClientOption) <-chan bool {
+func (qh *ChannelQueueHandler) StartHandleLoop(bucketOpts ...option.ClientOption) <-chan bool {
 	done := make(chan bool)
-	go chq.handleLoop(done, bucketOpts...)
+	go qh.handleLoop(done, bucketOpts...)
 	return done
 }
 

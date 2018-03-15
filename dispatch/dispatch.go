@@ -98,7 +98,9 @@ func (disp *Dispatcher) DoDispatchLoop(bucket string, experiments []string) {
 		}
 
 		next = next.AddDate(0, 0, 1)
-		// When we catch up to two days ago, start over.
+
+		// If gardener has processed all dates up to two days ago,
+		// start over.
 		if next.Add(48 * time.Hour).After(time.Now()) {
 			// TODO - load this from DataStore
 			next = disp.StartDate
