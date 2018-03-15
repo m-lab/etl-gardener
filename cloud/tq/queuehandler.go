@@ -18,23 +18,18 @@ import (
 type ChannelQueueHandler struct {
 	*QueueHandler
 	// Handler listens on this channel for prefixes.
-	MsgChan  chan string
-	DoneChan <-chan bool
+	MsgChan      chan string
+	ResponseChan chan error
 }
 
 // Sink returns the sink channel, for use by the sender.
-func (chq *ChannelQueueHandler) Sink() chan<- string {
-	return chq.MsgChan
+func (qh *ChannelQueueHandler) Sink() chan<- string {
+	return qh.MsgChan
 }
 
-// Done returns the done channel, that closes when all processing is complete.
-func (chq *ChannelQueueHandler) Done() <-chan bool {
-	return chq.DoneChan
-}
-
-// Responses returns the response channel, that closes when all processing is complete.
-func (chq *ChannelQueueHandler) Responses() <-chan error {
-	return nil
+// Response returns the response channel, that closes when all processing is complete.
+func (qh *ChannelQueueHandler) Response() <-chan error {
+	return qh.ResponseChan
 }
 
 func assertDownstream(ds api.Downstream) {
@@ -51,8 +46,8 @@ var (
 		datePath) // #3 - YYYY/MM/DD
 )
 
-// Parses prefix, returning {bucket, experiment, date string}, error
-func parsePrefix(prefix string) ([]string, error) {
+// ParsePrefix Parses prefix, returning {bucket, experiment, date string}, error
+func ParsePrefix(prefix string) ([]string, error) {
 	fields := prefixPattern.FindStringSubmatch(prefix)
 
 	if fields == nil {
@@ -90,7 +85,7 @@ func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 // processOneRequest waits on the channel for a new request, and handles it.
 func (qh *ChannelQueueHandler) processOneRequest(prefix string, bucketOpts ...option.ClientOption) error {
 	// Use proper storage bucket.
-	parts, err := parsePrefix(prefix)
+	parts, err := ParsePrefix(prefix)
 	if err != nil {
 		// If there is a parse error, log and skip request.
 		log.Println(err)
@@ -110,20 +105,24 @@ func (qh *ChannelQueueHandler) processOneRequest(prefix string, bucketOpts ...op
 }
 
 // handleLoop processes requests on input channel
-func (qh *ChannelQueueHandler) handleLoop(done chan<- bool, ddCh chan<- string, ddDone <-chan bool, bucketOpts ...option.ClientOption) {
+func (qh *ChannelQueueHandler) handleLoop(next api.Downstream, bucketOpts ...option.ClientOption) {
 	log.Println("Starting handler for", qh.Queue)
 	for {
 		qh.waitForEmptyQueue()
 
-		prefix, more := <-qh.Channel
+		prefix, more := <-qh.MsgChan
 		if !more {
-			close(done)
+			close(qh.ResponseChan)
 			break
 		}
 		err := qh.processOneRequest(prefix, bucketOpts...)
 		if err == nil {
 			// This may block if previous hasn't finished.  Should be rare.
-			ddCh <- prefix
+			if next != nil {
+				next.Sink() <- prefix
+			}
+		} else {
+			// TODO return error through Response()
 		}
 	}
 	log.Println("Exiting handler for", qh.Queue)
@@ -132,31 +131,23 @@ func (qh *ChannelQueueHandler) handleLoop(done chan<- bool, ddCh chan<- string, 
 // StartHandleLoop starts a go routine that waits for work on channel, and
 // processes it.
 // Returns a channel that closes when input channel is closed and final processing is complete.
-func (qh *ChannelQueueHandler) StartHandleLoop(ddCh chan<- string, ddDone <-chan bool, bucketOpts ...option.ClientOption) <-chan bool {
-	done := make(chan bool)
-	go qh.handleLoop(done, ddCh, ddDone, bucketOpts...)
-	return done
+func (qh *ChannelQueueHandler) StartHandleLoop(next api.Downstream, bucketOpts ...option.ClientOption) {
+	go qh.handleLoop(next, bucketOpts...)
 }
 
 // NewChannelQueueHandler creates a new QueueHandler, sets up a go routine to feed it
 // from a channel.
 // Returns feeding channel, and done channel, which will return true when
 // feeding channel is closed, and processing is complete.
-func NewChannelQueueHandler(httpClient *http.Client, project, queue string, next Downstream, bucketOpts ...option.ClientOption) (chan<- string, <-chan bool, error) {
+func NewChannelQueueHandler(httpClient *http.Client, project, queue string, next api.Downstream, bucketOpts ...option.ClientOption) (*ChannelQueueHandler, error) {
 	qh, err := NewQueueHandler(httpClient, project, queue)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	ch := make(chan string)
-	cqh := ChannelQueueHandler{qh, ch}
+	msg := make(chan string)
+	rsp := make(chan error)
+	cqh := ChannelQueueHandler{qh, msg, rsp}
 
-	done := cqh.StartHandleLoop(next.Sink(), next.Done(), bucketOpts...)
-	return ch, done, nil
-}
-
-// Downstream specifies an interface for sending jobs to a downstream handler.
-type Downstream interface {
-	Sink() chan<- string
-	Responses() <-chan error
-	Done() <-chan bool
+	cqh.StartHandleLoop(next, bucketOpts...)
+	return &cqh, nil
 }

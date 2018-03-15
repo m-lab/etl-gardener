@@ -15,15 +15,15 @@ func init() {
 
 func TestChannelQueueHandler(t *testing.T) {
 	client, counter := tq.DryRunQueuerClient()
-	c, d, err := tq.NewChannelQueueHandler(client, "mlab-testing", "test-queue")
+	cqh, err := tq.NewChannelQueueHandler(client, "mlab-testing", "test-queue", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i := 19; i < 29; i++ {
-		c <- fmt.Sprintf("gs://archive-mlab-test/ndt/2017/09/%2d/", i)
+		cqh.Sink() <- fmt.Sprintf("gs://archive-mlab-test/ndt/2017/09/%2d/", i)
 	}
-	close(c)
-	<-d
+	close(cqh.Sink())
+	<-cqh.Response()
 	// There will be one http request for each IsEmpty() call (10), and one for each task file (76).
 	if counter.Count() != 87 {
 		log.Println(counter.Count())

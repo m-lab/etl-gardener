@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
+	"github.com/m-lab/etl-gardener/cloud/tq"
+	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/go/bqext"
 	"google.golang.org/api/option"
 )
@@ -31,7 +33,7 @@ func waitForStableTable(tt *bigquery.Table) error {
 		defer cf()
 		meta, err := tt.Metadata(ctx)
 		if err != nil {
-			FailCount.WithLabelValues("TableMetaErr")
+			metrics.FailCount.WithLabelValues("TableMetaErr")
 			log.Println(err)
 			return err
 		}
@@ -51,12 +53,12 @@ func waitForStableTable(tt *bigquery.Table) error {
 
 // processOneRequest waits on the channel for a new request, and handles it.
 func (dh *DedupHandler) processOneRequest(ds *bqext.Dataset, prefix string, clientOpts ...option.ClientOption) error {
-	parts, err := parsePrefix(prefix)
+	parts, err := tq.ParsePrefix(prefix)
 	if err != nil {
 		// If there is a parse error, log and skip request.
 		log.Println(err)
 		// TODO update metric
-		FailCount.WithLabelValues("BadDedupPrefix")
+		metrics.FailCount.WithLabelValues("BadDedupPrefix")
 		return err
 	}
 
@@ -71,7 +73,7 @@ func (dh *DedupHandler) processOneRequest(ds *bqext.Dataset, prefix string, clie
 
 	// TODO - for now just sleep for a while.
 	time.Sleep(time.Second)
-	FailCount.WithLabelValues("DedupNotImplemented")
+	metrics.FailCount.WithLabelValues("DedupNotImplemented")
 	return nil
 }
 
@@ -84,7 +86,7 @@ func (dh *DedupHandler) handleLoop(done chan<- bool, opts ...option.ClientOption
 		if more {
 			ds, err := bqext.NewDataset(dh.Project, dh.Dataset, opts...)
 			if err != nil {
-				FailCount.WithLabelValues("NewDataset")
+				metrics.FailCount.WithLabelValues("NewDataset")
 				log.Println(err)
 				continue
 			}
@@ -170,7 +172,7 @@ func Dedup(dsExt *bqext.Dataset, src string, destTable *bigquery.Table) (*bigque
 		meta, err := destTable.Metadata(context.Background())
 		if err == nil && meta.TimePartitioning != nil {
 			log.Println(err)
-			FailCount.WithLabelValues("BadDestTable")
+			metrics.FailCount.WithLabelValues("BadDestTable")
 			return nil, errors.New("Destination table must specify partition")
 		}
 	}
@@ -186,7 +188,7 @@ func Dedup(dsExt *bqext.Dataset, src string, destTable *bigquery.Table) (*bigque
 		query := dsExt.DestQuery(queryString, destTable, bigquery.WriteTruncate)
 		return dsExt.ExecDestQuery(query)
 	default:
-		FailCount.WithLabelValues("UnknownTableType")
+		metrics.FailCount.WithLabelValues("UnknownTableType")
 		return nil, errors.New("Only handles sidestream, ndt, not " + destTable.TableID)
 	}
 }
