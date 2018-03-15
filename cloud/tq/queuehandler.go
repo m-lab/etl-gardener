@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/m-lab/etl-gardener/api"
 	"github.com/m-lab/etl-gardener/metrics"
 	"google.golang.org/api/option"
 )
@@ -17,7 +18,27 @@ import (
 type ChannelQueueHandler struct {
 	*QueueHandler
 	// Handler listens on this channel for prefixes.
-	Channel chan string
+	MsgChan  chan string
+	DoneChan <-chan bool
+}
+
+// Sink returns the sink channel, for use by the sender.
+func (chq *ChannelQueueHandler) Sink() chan<- string {
+	return chq.MsgChan
+}
+
+// Done returns the done channel, that closes when all processing is complete.
+func (chq *ChannelQueueHandler) Done() <-chan bool {
+	return chq.DoneChan
+}
+
+// Responses returns the response channel, that closes when all processing is complete.
+func (chq *ChannelQueueHandler) Responses() <-chan error {
+	return nil
+}
+
+func assertDownstream(ds api.Downstream) {
+	assertDownstream(&ChannelQueueHandler{})
 }
 
 const start = `^gs://(?P<bucket>.*)/(?P<exp>[^/]*)/`
