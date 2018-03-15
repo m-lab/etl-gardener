@@ -5,10 +5,12 @@ package dispatch
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"reflect"
 	"time"
 
+	"github.com/m-lab/etl-gardener/cloud/tq"
 	"google.golang.org/api/option"
 )
 
@@ -28,7 +30,9 @@ type Dispatcher struct {
 }
 
 // Dispatcher related errors.
-var ErrTerminating = errors.New("dispatcher is terminating")
+var (
+	ErrTerminating = errors.New("dispatcher is terminating")
+)
 
 // NewDispatcher creates a dispatcher that will spread requests across multiple
 // QueueHandlers.
@@ -37,7 +41,7 @@ func NewDispatcher(httpClient *http.Client, project, queueBase string, numQueues
 	queues := make([]chan<- string, 0, numQueues)
 	done := make([]<-chan bool, 0, numQueues)
 	for i := 0; i < numQueues; i++ {
-		q, d, err := NewChannelQueueHandler(httpClient, project,
+		q, d, err := tq.NewChannelQueueHandler(httpClient, project,
 			fmt.Sprintf("%s%d", queueBase, i), bucketOpts...)
 		if err != nil {
 			return nil, err
@@ -77,21 +81,28 @@ func (disp *Dispatcher) Add(prefix string) error {
 			Chan: reflect.ValueOf(disp.Queues[i]), Send: reflect.ValueOf(prefix)}
 		cases = append(cases, c)
 	}
+	log.Println("Waiting for empty queue for", prefix)
 	reflect.Select(cases)
 	return nil
 }
 
 // DoDispatchLoop looks for next work to do.
 // It should generally be blocked on the queues.
-func (disp *Dispatcher) DoDispatchLoop(bucket string) {
+func (disp *Dispatcher) DoDispatchLoop(bucket string, experiments []string) {
 	next := disp.StartDate
 
 	for {
-		prefix := next.Format(fmt.Sprintf("gs://%s/ndt/2006/01/02/", bucket))
-		disp.Add(prefix)
+		for _, e := range experiments {
+			prefix := next.Format(fmt.Sprintf("gs://%s/%s/2006/01/02/", bucket, e))
+			disp.Add(prefix)
+		}
 
 		next = next.AddDate(0, 0, 1)
+
+		// If gardener has processed all dates up to two days ago,
+		// start over.
 		if next.Add(48 * time.Hour).After(time.Now()) {
+			// TODO - load this from DataStore
 			next = disp.StartDate
 		}
 	}

@@ -1,4 +1,4 @@
-package dispatch_test
+package tq_test
 
 import (
 	"fmt"
@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/m-lab/etl-gardener/cloud/tq"
-	"github.com/m-lab/etl-gardener/dispatch"
 )
 
 func init() {
@@ -16,7 +15,7 @@ func init() {
 
 func TestChannelQueueHandler(t *testing.T) {
 	client, counter := tq.DryRunQueuerClient()
-	c, d, err := dispatch.NewChannelQueueHandler(client, "mlab-testing", "test-queue")
+	c, d, err := tq.NewChannelQueueHandler(client, "mlab-testing", "test-queue")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,8 +25,8 @@ func TestChannelQueueHandler(t *testing.T) {
 	close(c)
 	<-d
 	// There will be one http request for each IsEmpty() call (10), and one for each task file (76).
-	if counter.Count() != 86 {
+	if counter.Count() != 87 {
 		log.Println(counter.Count())
-		t.Error("Count != 86")
+		t.Error("Count != 87")
 	}
 }
