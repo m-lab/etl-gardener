@@ -42,9 +42,9 @@ spec:
         - name:  GIT_COMMIT
           value: "{{GIT_COMMIT}}"
         - name: TASKFILE_BUCKET
-          value: "archive-{{GCLOUD_PROJECT}}"
+          value: "gfr"  # "archive-{{GCLOUD_PROJECT}}"
         - name: EXPERIMENTS
-          value: "ndt"  # For example "ndt,sidestream,switch"
+          value: "sidestream"  # For example "ndt,sidestream,disco"
         - name: PROJECT
           value: {{GCLOUD_PROJECT}}
         - name: DATASET
