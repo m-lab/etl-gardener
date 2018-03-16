@@ -47,6 +47,8 @@ spec:
           value: "ndt"  # For example "ndt,sidestream,switch"
         - name: PROJECT
           value: {{GCLOUD_PROJECT}}
+        - name: DATASET
+          value: batch
         - name: QUEUE_BASE
           value: etl-ndt-batch-
         - name: NUM_QUEUES
