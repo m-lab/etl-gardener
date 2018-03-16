@@ -85,7 +85,13 @@ func TestPostDay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	q.PostDay(bucket, bucketName, "ndt/2017/09/24/")
+	n, err := q.PostDay(bucket, bucketName, "ndt/2017/09/24/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 76 {
+		t.Errorf("Should have posted 76 items")
+	}
 	if counter.Count() != 76 {
 		t.Errorf("Should have made 76 http requests: %d\n", counter.Count())
 	}
