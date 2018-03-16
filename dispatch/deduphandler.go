@@ -45,6 +45,7 @@ func assertDownstream(ds api.Downstream) {
 func waitForStableTable(tt *bigquery.Table) error {
 	// Don't want to accept a date until we can actually queue it.
 	log.Println("Wait for table ready", tt.TableID)
+	time.Sleep(time.Minute)
 	for {
 		ctx, cf := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cf()
