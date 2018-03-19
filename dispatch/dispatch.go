@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/m-lab/etl-gardener/api"
@@ -26,6 +27,7 @@ type Dispatcher struct {
 	Handlers    []api.BasicPipe
 	StartDate   time.Time
 	Terminating bool // Indicates when Terminate has been called.
+	lock        sync.Mutex
 }
 
 // Dispatcher related errors.
@@ -53,6 +55,8 @@ func NewDispatcher(httpClient *http.Client, project, queueBase string, numQueues
 
 // Terminate closes all the channels, and waits for all the dones.
 func (disp *Dispatcher) Terminate() {
+	disp.lock.Lock()
+	defer disp.lock.Unlock()
 	if disp.Terminating {
 		return
 	}
@@ -70,6 +74,8 @@ func (disp *Dispatcher) Terminate() {
 // Add will post the request to next available queue.
 // May return ErrTerminating if Terminate has been called.
 func (disp *Dispatcher) Add(prefix string) error {
+	disp.lock.Lock()
+	defer disp.lock.Unlock()
 	if disp.Terminating {
 		return ErrTerminating
 	}
