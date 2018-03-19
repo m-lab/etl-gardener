@@ -33,10 +33,13 @@ func TestDispatcherLifeCycle(t *testing.T) {
 
 	// This waits for all work to complete, then closes all channels.
 	// We won't terminate until all handlers have finished, and one of them
-	// will trigger 1 HTTP call to do another queue isEmpty check.
+	// should trigger 1 HTTP call as part of next isEmpty check.
 	d.Terminate()
 
 	// Count should be 6 (HTTP gets)
+	// TODO - this is failing about 1 in 500 times.  Probably a race condition?
+	// Not too concerned about it, because it is most likely a race only on shutdown
+	// and we don't care much if there is something lost during shutdown.
 	if counter.Count() != 6 {
 		t.Errorf("Count was %d instead of 6", counter.Count())
 	}
