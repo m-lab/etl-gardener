@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"os"
@@ -11,7 +12,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
-	"github.com/m-lab/etl-gardener/api"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/go/bqext"
@@ -36,36 +36,38 @@ func (dh *DedupHandler) Response() <-chan error {
 	return dh.ResponseChan
 }
 
-func assertBasicPipe() {
-	func(ds api.BasicPipe) {}(&DedupHandler{})
-}
-
 // waitForEmptyQueue loops checking queue until empty.
 func waitForStableTable(tt *bigquery.Table) error {
-	// Don't want to accept a date until we can actually queue it.
 	log.Println("Wait for table ready", tt.TableID)
-	time.Sleep(time.Minute)
 	for {
 		ctx, cf := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cf()
 		meta, err := tt.Metadata(ctx)
-		if err != nil {
-			metrics.FailCount.WithLabelValues("TableMetaErr")
-			log.Println(err)
-			return err
-		}
 		if ctx.Err() != nil {
 			if ctx.Err() != context.DeadlineExceeded {
 				log.Println(ctx.Err())
 				return err
 			}
-		} else if meta.StreamingBuffer == nil {
-			break
 		}
-		// Retry roughly every 10 seconds.
-		time.Sleep(time.Duration(5+rand.Intn(10)) * time.Second)
+		switch {
+		case err == nil:
+			if meta.StreamingBuffer == nil {
+				// All good, we can move on.
+				return nil
+			}
+		case strings.Contains(err.Error(), "Not found: Table"):
+			// The table doesn't exist yet, so just try again.
+			// Retry roughly every 10 seconds.
+			time.Sleep(time.Duration(5+rand.Intn(10)) * time.Second)
+		case err == io.EOF:
+			log.Println("EOF error - is this a test client?")
+			return nil
+		default:
+			metrics.FailCount.WithLabelValues("TableMetaErr")
+			log.Println(err)
+			return err
+		}
 	}
-	return nil
 }
 
 // processOneRequest waits on the channel for a new request, and handles it.
@@ -94,11 +96,14 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, prefix string, clientOpt
 	log.Println("Dedupping", tt.FullyQualifiedName())
 	status, err := Dedup(ds, tt.TableID, dest)
 	if err != nil {
-		log.Println(err)
-		metrics.FailCount.WithLabelValues("DedupFailed")
-		return err
-	}
-	if status.Err() != nil {
+		if err == io.EOF {
+			log.Println("EOF error - is this a test client?")
+		} else {
+			log.Println(err)
+			metrics.FailCount.WithLabelValues("DedupFailed")
+			return err
+		}
+	} else if status.Err() != nil {
 		log.Println(status.Err())
 		metrics.FailCount.WithLabelValues("DedupError")
 		return err
@@ -114,7 +119,7 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, prefix string, clientOpt
 	}
 	if ctx.Err() != nil {
 		if ctx.Err() != context.DeadlineExceeded {
-			metrics.FailCount.WithLabelValues("TableDeleteErr2")
+			metrics.FailCount.WithLabelValues("TableDeleteTimeout")
 			log.Println(ctx.Err())
 			return err
 		}
@@ -150,7 +155,7 @@ func (dh *DedupHandler) handleLoop(opts ...option.ClientOption) {
 // from a channel.
 // Returns feeding channel, and done channel, which will return true when
 // feeding channel is closed, and processing is complete.
-func NewDedupHandler(queue string, opts ...option.ClientOption) *DedupHandler {
+func NewDedupHandler(opts ...option.ClientOption) *DedupHandler {
 	project := os.Getenv("PROJECT")
 	dataset := os.Getenv("DATASET")
 	msg := make(chan string)
