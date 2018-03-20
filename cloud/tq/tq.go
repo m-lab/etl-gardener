@@ -28,12 +28,12 @@ import (
 
 // CountingTransport counts calls, and returns OK and empty body.
 type CountingTransport struct {
-	count uint32
+	count int32
 }
 
 // Count returns the client call count.
-func (ct *CountingTransport) Count() uint32 {
-	return atomic.LoadUint32(&ct.count)
+func (ct *CountingTransport) Count() int32 {
+	return atomic.LoadInt32(&ct.count)
 }
 
 type nopCloser struct {
@@ -45,7 +45,7 @@ func (nc *nopCloser) Close() error { return nil }
 // RoundTrip implements the RoundTripper interface, logging the
 // request, and the response body, (which may be json).
 func (ct *CountingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	atomic.AddUint32(&ct.count, 1)
+	atomic.AddInt32(&ct.count, 1)
 	resp := &http.Response{}
 	resp.StatusCode = http.StatusOK
 	resp.Body = &nopCloser{strings.NewReader("")}
