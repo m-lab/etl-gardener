@@ -44,7 +44,7 @@ spec:
         - name: TASKFILE_BUCKET
           value: "gfr"  # "archive-{{GCLOUD_PROJECT}}"
         - name: EXPERIMENTS
-          value: "sidestream"  # For example "ndt,sidestream,disco"
+          value: "ndt,sidestream"  # For example "ndt,sidestream,disco"
         - name: PROJECT
           value: {{GCLOUD_PROJECT}}
         - name: DATASET
