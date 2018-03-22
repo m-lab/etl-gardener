@@ -41,12 +41,14 @@ spec:
           value: "true"
         - name:  GIT_COMMIT
           value: "{{GIT_COMMIT}}"
-        - name: TASKFILE_BUCKET
-          value: "archive-{{GCLOUD_PROJECT}}"
-        - name: EXPERIMENTS
-          value: "ndt,sidestream"  # For example "ndt,sidestream,switch"
         - name: PROJECT
           value: {{GCLOUD_PROJECT}}
+        - name: TASKFILE_BUCKET
+          value: "archive-{{GCLOUD_PROJECT}}"
+        - name: START_DATE
+          value: "20170501"
+        - name: EXPERIMENTS
+          value: "ndt,sidestream"  # For example "ndt,sidestream,switch"
         - name: DATASET
           value: batch
         - name: QUEUE_BASE

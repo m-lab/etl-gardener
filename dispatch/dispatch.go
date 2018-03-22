@@ -95,8 +95,8 @@ func (disp *Dispatcher) Add(prefix string) error {
 	return nil
 }
 
-// DoDispatchLoop looks for next work to do.
-// It should generally be blocked on the queues.
+// DoDispatchLoop just sequences through archives in date order.
+// It will generally be blocked on the queues.
 func (disp *Dispatcher) DoDispatchLoop(bucket string, experiments []string) {
 	next := disp.StartDate
 
