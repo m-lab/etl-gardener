@@ -42,13 +42,13 @@ spec:
         - name:  GIT_COMMIT
           value: "{{GIT_COMMIT}}"
         - name: TASKFILE_BUCKET
-          value: "gfr"  # "archive-{{GCLOUD_PROJECT}}"
+          value: "archive-{{GCLOUD_PROJECT}}"
         - name: EXPERIMENTS
-          value: "ndt,sidestream"  # For example "ndt,sidestream,disco"
+          value: "ndt,sidestream"  # For example "ndt,sidestream,switch"
         - name: PROJECT
           value: {{GCLOUD_PROJECT}}
         - name: DATASET
-          value: gfr
+          value: batch
         - name: QUEUE_BASE
           value: etl-ndt-batch-
         - name: NUM_QUEUES

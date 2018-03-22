@@ -42,8 +42,12 @@ func NewDispatcher(httpClient *http.Client, project, queueBase string, numQueues
 	handlers := make([]api.BasicPipe, 0, numQueues)
 	for i := 0; i < numQueues; i++ {
 		queue := fmt.Sprintf("%s%d", queueBase, i)
+		// First build the dedup handler.
+		dedup := NewDedupHandler()
+		// Build QueueHandler that chains to dedup handler.
+
 		cqh, err := tq.NewChannelQueueHandler(httpClient, project,
-			queue, nil, bucketOpts...)
+			queue, dedup, bucketOpts...)
 		if err != nil {
 			return nil, err
 		}
