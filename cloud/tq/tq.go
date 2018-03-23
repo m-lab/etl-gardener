@@ -262,7 +262,6 @@ func (qh *QueueHandler) PostAll(bucket string, it *storage.ObjectIterator) (int,
 // PostDay fetches an iterator over the objects with ndt/YYYY/MM/DD prefix,
 // and passes the iterator to postDay with appropriate queue.
 // This typically takes about 10 minutes for a 20K task NDT day.
-// TODO return the count of items posted.
 func (qh *QueueHandler) PostDay(bucket *storage.BucketHandle, bucketName, prefix string) (int, error) {
 	log.Println("Adding ", prefix, " to ", qh.Queue)
 	qry := storage.Query{

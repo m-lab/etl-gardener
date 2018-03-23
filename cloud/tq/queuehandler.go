@@ -90,7 +90,6 @@ func (qh *ChannelQueueHandler) processOneRequest(prefix string, bucketOpts ...op
 	if err != nil {
 		// If there is a parse error, log and skip request.
 		log.Println(err)
-		// TODO update metric
 		metrics.FailCount.WithLabelValues("BadPrefix").Inc()
 		return 0, err
 	}
