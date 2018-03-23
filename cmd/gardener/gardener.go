@@ -31,7 +31,7 @@ import (
 
 // dispatcherFromEnv creates a Dispatcher struct initialized from environment variables.
 // It uses PROJECT, QUEUE_BASE, and NUM_QUEUES.
-func dispatcherFromEnv(client *http.Client, startTime time.Time) (*dispatch.Dispatcher, error) {
+func dispatcherFromEnv(client *http.Client) (*dispatch.Dispatcher, error) {
 	project, ok := os.LookupEnv("PROJECT")
 	if !ok {
 		return nil, errors.New("PROJECT not set")
@@ -45,8 +45,17 @@ func dispatcherFromEnv(client *http.Client, startTime time.Time) (*dispatch.Disp
 		log.Println(err)
 		return nil, errors.New("Parse error on NUM_QUEUES")
 	}
+	startString, ok := os.LookupEnv("START_DATE")
+	if !ok {
+		return nil, errors.New("START_DATE not set")
+	}
+	startDate, err := time.Parse("20060102", startString)
+	if err != nil {
+		log.Println("Invalid start date:", startString)
+		return nil, errors.New("START_DATE not set")
+	}
 
-	return dispatch.NewDispatcher(client, project, queueBase, numQueues, startTime)
+	return dispatch.NewDispatcher(client, project, queueBase, numQueues, startDate)
 }
 
 // StartDateRFC3339 is the date at which reprocessing will start when it catches
@@ -126,8 +135,7 @@ func runService() {
 	http.HandleFunc("/alive", healthCheck)
 	http.HandleFunc("/ready", healthCheck)
 
-	disp, err := dispatcherFromEnv(http.DefaultClient,
-		time.Date(2017, time.June, 1, 0, 0, 0, 0, time.UTC))
+	disp, err := dispatcherFromEnv(http.DefaultClient)
 	if err != nil {
 		log.Println(err)
 		// leaving healthy = false should eventually lead to rollback.

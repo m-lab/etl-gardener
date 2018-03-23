@@ -83,46 +83,53 @@ func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 }
 
 // processOneRequest waits on the channel for a new request, and handles it.
-func (qh *ChannelQueueHandler) processOneRequest(prefix string, bucketOpts ...option.ClientOption) error {
+// Returns number of items posted, or error
+func (qh *ChannelQueueHandler) processOneRequest(prefix string, bucketOpts ...option.ClientOption) (int, error) {
 	// Use proper storage bucket.
 	parts, err := ParsePrefix(prefix)
 	if err != nil {
 		// If there is a parse error, log and skip request.
 		log.Println(err)
-		// TODO update metric
 		metrics.FailCount.WithLabelValues("BadPrefix").Inc()
-		return err
+		return 0, err
 	}
 	bucketName := parts[1]
 	bucket, err := GetBucket(bucketOpts, qh.Project, bucketName, false)
 	if err != nil {
 		log.Println(err)
 		metrics.FailCount.WithLabelValues("BucketError").Inc()
-		return err
+		return 0, err
 	}
-	qh.PostDay(bucket, bucketName, parts[2]+"/"+parts[3]+"/")
-	return nil
+	n, err := qh.PostDay(bucket, bucketName, parts[2]+"/"+parts[3]+"/")
+	if err != nil {
+		log.Println(err)
+		metrics.FailCount.WithLabelValues("PostDayError").Inc()
+	}
+	return n, err
 }
 
 // handleLoop processes requests on input channel
 func (qh *ChannelQueueHandler) handleLoop(next api.BasicPipe, bucketOpts ...option.ClientOption) {
 	log.Println("Starting handler for", qh.Queue)
+	qh.waitForEmptyQueue()
 	for {
-		qh.waitForEmptyQueue()
-
 		prefix, more := <-qh.MsgChan
 		if !more {
 			close(qh.ResponseChan)
 			break
 		}
-		err := qh.processOneRequest(prefix, bucketOpts...)
-		if err == nil {
-			// This may block if previous hasn't finished.  Should be rare.
-			if next != nil {
-				next.Sink() <- prefix
-			}
-		} else {
+		n, err := qh.processOneRequest(prefix, bucketOpts...)
+		if err != nil {
 			// TODO return error through Response()
+		}
+
+		// Must wait for empty queue before proceeding with dedupping.
+		// This ensures that the data has actually been processed, rather
+		// than just sitting in the queue or in the pipeline.
+		qh.waitForEmptyQueue()
+		// This may block if previous hasn't finished.  Should be rare.
+		if n > 0 && next != nil {
+			next.Sink() <- prefix
 		}
 	}
 	log.Println("Exiting handler for", qh.Queue)

@@ -42,8 +42,12 @@ func NewDispatcher(httpClient *http.Client, project, queueBase string, numQueues
 	handlers := make([]api.BasicPipe, 0, numQueues)
 	for i := 0; i < numQueues; i++ {
 		queue := fmt.Sprintf("%s%d", queueBase, i)
+		// First build the dedup handler.
+		dedup := NewDedupHandler()
+		// Build QueueHandler that chains to dedup handler.
+
 		cqh, err := tq.NewChannelQueueHandler(httpClient, project,
-			queue, nil, bucketOpts...)
+			queue, dedup, bucketOpts...)
 		if err != nil {
 			return nil, err
 		}
@@ -91,8 +95,8 @@ func (disp *Dispatcher) Add(prefix string) error {
 	return nil
 }
 
-// DoDispatchLoop looks for next work to do.
-// It should generally be blocked on the queues.
+// DoDispatchLoop just sequences through archives in date order.
+// It will generally be blocked on the queues.
 func (disp *Dispatcher) DoDispatchLoop(bucket string, experiments []string) {
 	next := disp.StartDate
 
