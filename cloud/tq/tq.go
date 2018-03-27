@@ -266,8 +266,7 @@ func (qh *QueueHandler) PostDay(bucket *storage.BucketHandle, bucketName, prefix
 	}
 	// TODO - can this error?  Or do errors only occur on iterator ops?
 	it := bucket.Objects(context.Background(), &qry)
-	fileCount, err := qh.PostAll(bucketName, it)
-	return fileCount, err
+	return qh.PostAll(bucketName, it)
 }
 
 // *******************************************************************

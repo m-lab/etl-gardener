@@ -41,7 +41,7 @@ func (dh *DedupHandler) Response() <-chan error {
 	return dh.ResponseChan
 }
 
-// waitForEmptyQueue loops checking queue until empty.
+// waitForStableTable loops checking until table exists and has no streaming buffer.
 func waitForStableTable(tt *bigquery.Table) error {
 	log.Println("Wait for table ready", tt.FullyQualifiedName())
 	var err error
@@ -84,17 +84,15 @@ ErrorTimeout:
 	}
 
 	// If we fall through here, then there is some problem...
-	switch {
-	case strings.Contains(err.Error(), "Not found: Table"):
+	if strings.Contains(err.Error(), "Not found: Table") {
 		log.Println("Timeout waiting for table creation:", tt.FullyQualifiedName())
 		metrics.FailCount.WithLabelValues("TableNotFoundTimeout")
 		return ErrTableNotFound
-	default:
-		// We are seeing occasional Error 500: An internal error ...
-		log.Println(err, tt.FullyQualifiedName())
-		metrics.FailCount.WithLabelValues("TableMetaErr")
-		return err
 	}
+	// We are seeing occasional Error 500: An internal error ...
+	log.Println(err, tt.FullyQualifiedName())
+	metrics.FailCount.WithLabelValues("TableMetaErr")
+	return err
 }
 
 // processOneRequest waits on the channel for a new request, and handles it.
