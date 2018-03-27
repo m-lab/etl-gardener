@@ -105,6 +105,7 @@ func (qh *ChannelQueueHandler) processOneRequest(prefix string, bucketOpts ...op
 		log.Println(err)
 		metrics.FailCount.WithLabelValues("PostDayError").Inc()
 	}
+	log.Println("Added ", n, prefix, " tasks to ", qh.Queue)
 	return n, err
 }
 
@@ -121,6 +122,7 @@ func (qh *ChannelQueueHandler) handleLoop(next api.BasicPipe, bucketOpts ...opti
 		n, err := qh.processOneRequest(prefix, bucketOpts...)
 		if err != nil {
 			// TODO return error through Response()
+			// Currently, processOneRequest logs error and increments metric.
 		}
 
 		// Must wait for empty queue before proceeding with dedupping.

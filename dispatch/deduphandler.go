@@ -18,6 +18,11 @@ import (
 	"google.golang.org/api/option"
 )
 
+// Dedup related errors.
+var (
+	ErrTableNotFound = errors.New("Table not found")
+)
+
 // DedupHandler handles requests to dedup a table.
 type DedupHandler struct {
 	Project      string
@@ -38,35 +43,57 @@ func (dh *DedupHandler) Response() <-chan error {
 
 // waitForEmptyQueue loops checking queue until empty.
 func waitForStableTable(tt *bigquery.Table) error {
-	log.Println("Wait for table ready", tt.TableID)
+	log.Println("Wait for table ready", tt.FullyQualifiedName())
+	var err error
+	var meta *bigquery.TableMetadata
+	errorDeadline := time.Now().Add(2 * time.Minute)
+ErrorTimeout:
+	// Check table status until streaming buffer is empty, OR there is
+	// an error condition we don't expect to recover from.
 	for {
-		ctx, cf := context.WithTimeout(context.Background(), 60*time.Second)
+		ctx, cf := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cf()
-		meta, err := tt.Metadata(ctx)
-		if ctx.Err() != nil {
-			if ctx.Err() != context.DeadlineExceeded {
-				log.Println(ctx.Err())
-				return err
-			}
+		meta, err = tt.Metadata(ctx)
+		if err == nil && ctx.Err() != nil {
+			// Convert context timeout into regular error.
+			err = ctx.Err()
 		}
 		switch {
 		case err == nil:
+			// Restart the timer whenever Metadata succeeds.
+			errorDeadline = time.Now().Add(2 * time.Minute)
 			if meta.StreamingBuffer == nil {
-				// All good, we can move on.
+				// Buffer is empty, so we can move on.
 				return nil
 			}
-		case strings.Contains(err.Error(), "Not found: Table"):
-			// The table doesn't exist yet, so just try again.
-			// Retry roughly every 10 seconds.
-			time.Sleep(time.Duration(5+rand.Intn(10)) * time.Second)
+			// Otherwise just wait and check again.
 		case err == io.EOF:
+			// EOF is usually due to using a fake test client, so
+			// treat it as a success.
 			log.Println("EOF error - is this a test client?")
 			return nil
 		default:
-			metrics.FailCount.WithLabelValues("TableMetaErr")
-			log.Println(err)
-			return err
+			// For any error, just retry until success or timeout.
+			if time.Now().After(errorDeadline) {
+				// If still getting errors after two minutes, give up.
+				break ErrorTimeout
+			}
+			// Otherwise just wait and try again.
 		}
+		time.Sleep(time.Duration(5+rand.Intn(10)) * time.Second)
+	}
+
+	// If we fall through here, then there is some problem...
+	switch {
+	case strings.Contains(err.Error(), "Not found: Table"):
+		log.Println("Timeout waiting for table creation:", tt.FullyQualifiedName())
+		metrics.FailCount.WithLabelValues("TableNotFoundTimeout")
+		return ErrTableNotFound
+	default:
+		// We are seeing occasional Error 500: An internal error ...
+		log.Println(err, tt.FullyQualifiedName())
+		metrics.FailCount.WithLabelValues("TableMetaErr")
+		return err
 	}
 }
 
@@ -86,7 +113,6 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, prefix string, clientOpt
 	tt := ds.Table(parts[2] + "_" + strings.Join(strings.Split(parts[3], "/"), ""))
 	err = waitForStableTable(tt)
 	if err != nil {
-		metrics.FailCount.WithLabelValues("StreamingBufferWaitFailed")
 		return err
 	}
 
@@ -99,16 +125,17 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, prefix string, clientOpt
 		if err == io.EOF {
 			log.Println("EOF error - is this a test client?")
 		} else {
-			log.Println(err)
+			log.Println(err, tt.FullyQualifiedName())
 			metrics.FailCount.WithLabelValues("DedupFailed")
 			return err
 		}
 	} else if status.Err() != nil {
-		log.Println(status.Err())
+		log.Println(status.Err(), tt.FullyQualifiedName())
 		metrics.FailCount.WithLabelValues("DedupError")
 		return err
 	}
 
+	log.Println("Completed deduplication, deleting", tt.FullyQualifiedName())
 	// If deduplication was successful, we should delete the source table.
 	ctx, cf := context.WithTimeout(context.Background(), time.Minute)
 	defer cf()
@@ -125,6 +152,7 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, prefix string, clientOpt
 		}
 	}
 
+	log.Println("Deleted", tt.FullyQualifiedName())
 	return nil
 }
 

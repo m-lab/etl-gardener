@@ -225,10 +225,6 @@ func (qh *QueueHandler) postWithRetry(bucket, filepath string) error {
 // PostAll posts all normal file items in an ObjectIterator into the appropriate queue.
 func (qh *QueueHandler) PostAll(bucket string, it *storage.ObjectIterator) (int, error) {
 	fileCount := 0
-	defer func() {
-		log.Println("Added ", fileCount, " tasks to ", qh.Queue)
-	}()
-
 	qpErrCount := 0
 	gcsErrCount := 0
 	for o, err := it.Next(); err != iterator.Done; o, err = it.Next() {
@@ -270,7 +266,8 @@ func (qh *QueueHandler) PostDay(bucket *storage.BucketHandle, bucketName, prefix
 	}
 	// TODO - can this error?  Or do errors only occur on iterator ops?
 	it := bucket.Objects(context.Background(), &qry)
-	return qh.PostAll(bucketName, it)
+	fileCount, err := qh.PostAll(bucketName, it)
+	return fileCount, err
 }
 
 // *******************************************************************
