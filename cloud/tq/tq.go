@@ -225,10 +225,6 @@ func (qh *QueueHandler) postWithRetry(bucket, filepath string) error {
 // PostAll posts all normal file items in an ObjectIterator into the appropriate queue.
 func (qh *QueueHandler) PostAll(bucket string, it *storage.ObjectIterator) (int, error) {
 	fileCount := 0
-	defer func() {
-		log.Println("Added ", fileCount, " tasks to ", qh.Queue)
-	}()
-
 	qpErrCount := 0
 	gcsErrCount := 0
 	for o, err := it.Next(); err != iterator.Done; o, err = it.Next() {
