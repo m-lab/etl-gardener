@@ -48,7 +48,7 @@ spec:
         - name: START_DATE
           value: "20170501"
         - name: EXPERIMENTS
-          value: "ndt,sidestream"  # For example "ndt,sidestream,switch"
+          value: "ndt"  # For example "ndt,sidestream,switch"
         - name: DATASET
           value: batch
         - name: QUEUE_BASE
