@@ -46,7 +46,7 @@ spec:
         - name: TASKFILE_BUCKET
           value: "archive-{{GCLOUD_PROJECT}}"
         - name: START_DATE
-          value: "20170501"
+          value: "20170523"
         - name: EXPERIMENTS
           value: "ndt"  # For example "ndt,sidestream,switch"
         - name: DATASET
@@ -54,7 +54,7 @@ spec:
         - name: QUEUE_BASE
           value: etl-ndt-batch-
         - name: NUM_QUEUES
-          value: "8"
+          value: "16"
         ports:
         - name: prometheus-port
           containerPort: 9090

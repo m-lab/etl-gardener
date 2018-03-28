@@ -129,6 +129,7 @@ func (qh *ChannelQueueHandler) handleLoop(next api.BasicPipe, bucketOpts ...opti
 		// This ensures that the data has actually been processed, rather
 		// than just sitting in the queue or in the pipeline.
 		qh.waitForEmptyQueue()
+		log.Println(qh.Queue, "sending", prefix, "to dedup handler")
 		// This may block if previous hasn't finished.  Should be rare.
 		if n > 0 && next != nil {
 			next.Sink() <- prefix
