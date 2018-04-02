@@ -46,7 +46,7 @@ spec:
         - name: TASKFILE_BUCKET
           value: "archive-{{GCLOUD_PROJECT}}"
         - name: START_DATE
-          value: "20170523"
+          value: "20170501"
         - name: EXPERIMENTS
           value: "ndt"  # For example "ndt,sidestream,switch"
         - name: DATASET
