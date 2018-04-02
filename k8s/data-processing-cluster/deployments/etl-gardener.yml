@@ -46,11 +46,13 @@ spec:
         - name: TASKFILE_BUCKET
           value: "archive-{{GCLOUD_PROJECT}}"
         - name: START_DATE
-          value: "20170501"
+          value: "20180301"
         - name: EXPERIMENTS
-          value: "ndt"  # For example "ndt,sidestream,switch"
+          value: "sidestream,ndt"  # For example "ndt,sidestream,switch"
         - name: DATASET
           value: batch
+        - name: FINAL_DATASET
+          value: ""  # e.g. base_tables
         - name: QUEUE_BASE
           value: etl-ndt-batch-
         - name: NUM_QUEUES
