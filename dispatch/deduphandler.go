@@ -183,6 +183,10 @@ func (dh *DedupHandler) handleLoop(opts ...option.ClientOption) {
 // feeding channel is closed, and processing is complete.
 func NewDedupHandler(opts ...option.ClientOption) *DedupHandler {
 	project := os.Getenv("PROJECT")
+	// HACK
+	if project == "mlab-oti" {
+		project = "measurement-lab" // destination for production tables.
+	}
 	dataset := os.Getenv("DATASET")
 	msg := make(chan string)
 	rsp := make(chan error)
