@@ -2,6 +2,7 @@ package tq
 
 import (
 	"errors"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -81,6 +82,10 @@ func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 	for {
 		stats, err := GetTaskqueueStats(qh.HTTPClient, qh.Project, qh.Queue)
 		if err != nil {
+			if err == io.EOF {
+				log.Println(err, "GetTaskqueueStats returned EOF - test client?")
+				return
+			}
 			// We don't expect errors here, so log and retry,
 			// in case there is some bad network condition, service failure,
 			// or perhaps the queue_pusher is down.

@@ -152,10 +152,6 @@ func GetTaskqueueStats(client *http.Client, project string, name string) (stats 
 	var n int
 	n, err = io.ReadFull(resp.Body, data)
 	if err != io.ErrUnexpectedEOF {
-		if err == io.EOF {
-			log.Println(err, "No content from task queue request - test client?")
-			err = nil
-		}
 		return
 	}
 	var statsSlice []taskqueue.QueueStatistics
