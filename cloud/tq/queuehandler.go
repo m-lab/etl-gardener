@@ -81,16 +81,12 @@ func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 	for {
 		stats, err := GetTaskqueueStats(qh.HTTPClient, qh.Project, qh.Queue)
 		if err != nil {
-			// We don't expect errors here, so try logging, and a large backoff
+			// We don't expect errors here, so log and retry,
 			// in case there is some bad network condition, service failure,
 			// or perhaps the queue_pusher is down.
 			log.Println(err)
-			metrics.WarningCount.WithLabelValues("IsEmptyError").Inc()
-			// TODO update metric
-			time.Sleep(time.Duration(60+rand.Intn(120)) * time.Second)
-			continue
-		}
-		if stats.Tasks > 0 || stats.InFlight > 0 {
+			metrics.WarningCount.WithLabelValues("ErrGetTaskqueueStats").Inc()
+		} else if stats.Tasks > 0 || stats.InFlight > 0 {
 			// Good data, queue is not empty...
 			lastValid = stats
 			inactiveStartTime = nullTime
