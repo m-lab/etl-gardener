@@ -96,7 +96,7 @@ func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 			lastValid = stats
 			inactiveStartTime = nullTime
 		} else if stats.Executed1Minute > 0 {
-			log.Printf("Looks good: %+v vs %+v", stats, lastValid)
+			log.Printf("Looks good (%s): %+v vs %+v", qh.Queue, stats, lastValid)
 			break // Likely valid empty queue.
 		} else {
 			// Record the first time we see an apparently empty queue.
@@ -108,10 +108,10 @@ func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 				// in flight, we will just assume it is likely to finish.
 				break
 			}
-			log.Printf("Suspicious: %+v", stats)
+			log.Printf("Suspicious (%s): %+v\n", qh.Queue, stats)
 			if time.Since(inactiveStartTime) > 120*time.Second {
 				// It's been long enough to assume the queue is really empty.
-				log.Printf("Timeout.  Last valid was: %+v", lastValid)
+				log.Printf("Timeout. (%s) Last valid was: %+v", qh.Queue, lastValid)
 				break
 			}
 		}
