@@ -137,7 +137,7 @@ deploy:
   on:
     repo: m-lab/etl-gardener
     all_branches: true
-    condition: $TRAVIS_BRANCH == staging-* && $TRAVIS_EVENT_TYPE == push
+    condition: $TRAVIS_BRANCH == master && $TRAVIS_EVENT_TYPE == push
 
 #########################################
 ## Production
