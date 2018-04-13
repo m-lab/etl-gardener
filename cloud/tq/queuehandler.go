@@ -77,7 +77,7 @@ func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 	// Don't want to accept a date until we can actually queue it.
 	log.Println("Wait for empty queue ", qh.Queue)
 	var lastValid taskqueue.QueueStatistics
-	inactiveStartTime := time.Now()
+	inactiveStartTime := time.Now() // If the queue is actually empty, this allows timeout.
 	nullTime := time.Time{}
 	for {
 		stats, err := GetTaskqueueStats(qh.HTTPClient, qh.Project, qh.Queue)
@@ -109,7 +109,7 @@ func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 				break
 			}
 			log.Printf("Suspicious (%s): %+v\n", qh.Queue, stats)
-			if time.Since(inactiveStartTime) > 120*time.Second {
+			if time.Since(inactiveStartTime) > 180*time.Second {
 				// It's been long enough to assume the queue is really empty.
 				log.Printf("Timeout. (%s) Last valid was: %+v", qh.Queue, lastValid)
 				break
