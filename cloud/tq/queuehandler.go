@@ -70,13 +70,15 @@ var ErrChannelClosed = errors.New("source channel closed")
 // seems to persist for a minute or more.  This is indistinguishable
 // from an actual empty queue, so we use a slightly different criteria:
 //  1. If queue was most recently 0 pending, >0 in flight, then we trust
-//     trust the empty queue state.
+//     the empty queue state.
 //  2. If queue most recently had >0 pending, then we assume a zero state may
 //     be spurious, and check two more times over the next two minutes or so.
+//  3. If the queue appears empty (or errors) for 3 minutes, then we return,
+//     basically assuming it is empty now.
 func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 	// Don't want to accept a date until we can actually queue it.
 	log.Println("Wait for empty queue ", qh.Queue)
-	var lastValid taskqueue.QueueStatistics
+	var lastTrusted taskqueue.QueueStatistics
 	inactiveStartTime := time.Now() // If the queue is actually empty, this allows timeout.
 	nullTime := time.Time{}
 	for {
@@ -93,27 +95,28 @@ func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 			metrics.WarningCount.WithLabelValues("ErrGetTaskqueueStats").Inc()
 		} else if stats.Tasks > 0 || stats.InFlight > 0 {
 			// Good data, queue is not empty...
-			lastValid = stats
+			lastTrusted = stats
 			inactiveStartTime = nullTime
 		} else if stats.Executed1Minute > 0 {
-			log.Printf("Looks good (%s): %+v vs %+v", qh.Queue, stats, lastValid)
+			log.Printf("Looks good (%s): %+v vs %+v", qh.Queue, stats, lastTrusted)
 			break // Likely valid empty queue.
 		} else {
 			// Record the first time we see an apparently empty queue.
 			if inactiveStartTime == nullTime {
 				inactiveStartTime = time.Now()
 			}
-			if lastValid.Tasks == 0 {
+			if lastTrusted.Tasks == 0 {
 				// Most likely we really are done now.  Even if something is still
 				// in flight, we will just assume it is likely to finish.
 				break
 			}
 			log.Printf("Suspicious (%s): %+v\n", qh.Queue, stats)
-			if time.Since(inactiveStartTime) > 180*time.Second {
-				// It's been long enough to assume the queue is really empty.
-				log.Printf("Timeout. (%s) Last valid was: %+v", qh.Queue, lastValid)
-				break
-			}
+		}
+		if time.Since(inactiveStartTime) > 180*time.Second {
+			// It's been long enough to assume the queue is really empty.
+			// Or possibly we've just been getting errors all this time.
+			log.Printf("Timeout. (%s) Last trusted was: %+v", qh.Queue, lastTrusted)
+			break
 		}
 		// Check about once every minute.
 		time.Sleep(time.Duration(30+rand.Intn(60)) * time.Second)
