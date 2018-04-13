@@ -2,6 +2,7 @@ package tq
 
 import (
 	"errors"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"github.com/m-lab/etl-gardener/api"
 	"github.com/m-lab/etl-gardener/metrics"
 	"google.golang.org/api/option"
+	"google.golang.org/appengine/taskqueue"
 )
 
 // ChannelQueueHandler is an autonomous queue handler running in a go
@@ -63,22 +65,61 @@ func ParsePrefix(prefix string) ([]string, error) {
 var ErrChannelClosed = errors.New("source channel closed")
 
 // waitForEmptyQueue loops checking queue until empty.
+// There is a bug in task queue status (from AppEngine) which causes it to
+// occasionally (a few times a day) return all zeros. This erronious report
+// seems to persist for a minute or more.  This is indistinguishable
+// from an actual empty queue, so we use a slightly different criteria:
+//  1. If queue was most recently 0 pending, >0 in flight, then we trust
+//     the empty queue state.
+//  2. If queue most recently had >0 pending, then we assume a zero state may
+//     be spurious, and check two more times over the next two minutes or so.
+//  3. If the queue appears empty (or errors) for 3 minutes, then we return,
+//     basically assuming it is empty now.
 func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 	// Don't want to accept a date until we can actually queue it.
 	log.Println("Wait for empty queue ", qh.Queue)
-	for err := qh.IsEmpty(); err != nil; err = qh.IsEmpty() {
-		if err == ErrMoreTasks {
-			// Wait 5-15 seconds before checking again.
-			time.Sleep(time.Duration(5+rand.Intn(10)) * time.Second)
-		} else if err != nil {
-			// We don't expect errors here, so try logging, and a large backoff
+	var lastTrusted taskqueue.QueueStatistics
+	inactiveStartTime := time.Now() // If the queue is actually empty, this allows timeout.
+	nullTime := time.Time{}
+	for {
+		stats, err := GetTaskqueueStats(qh.HTTPClient, qh.Project, qh.Queue)
+		if err != nil {
+			if err == io.EOF {
+				log.Println(err, "GetTaskqueueStats returned EOF - test client?")
+				return
+			}
+			// We don't expect errors here, so log and retry,
 			// in case there is some bad network condition, service failure,
 			// or perhaps the queue_pusher is down.
 			log.Println(err)
-			metrics.WarningCount.WithLabelValues("IsEmptyError").Inc()
-			// TODO update metric
-			time.Sleep(time.Duration(60+rand.Intn(120)) * time.Second)
+			metrics.WarningCount.WithLabelValues("ErrGetTaskqueueStats").Inc()
+		} else if stats.Tasks > 0 || stats.InFlight > 0 {
+			// Good data, queue is not empty...
+			lastTrusted = stats
+			inactiveStartTime = nullTime
+		} else if stats.Executed1Minute > 0 {
+			log.Printf("Looks good (%s): %+v vs %+v", qh.Queue, stats, lastTrusted)
+			break // Likely valid empty queue.
+		} else {
+			// Record the first time we see an apparently empty queue.
+			if inactiveStartTime == nullTime {
+				inactiveStartTime = time.Now()
+			}
+			if lastTrusted.Tasks == 0 {
+				// Most likely we really are done now.  Even if something is still
+				// in flight, we will just assume it is likely to finish.
+				break
+			}
+			log.Printf("Suspicious (%s): %+v\n", qh.Queue, stats)
 		}
+		if time.Since(inactiveStartTime) > 180*time.Second {
+			// It's been long enough to assume the queue is really empty.
+			// Or possibly we've just been getting errors all this time.
+			log.Printf("Timeout. (%s) Last trusted was: %+v", qh.Queue, lastTrusted)
+			break
+		}
+		// Check about once every minute.
+		time.Sleep(time.Duration(30+rand.Intn(60)) * time.Second)
 	}
 }
 

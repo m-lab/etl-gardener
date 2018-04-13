@@ -146,4 +146,5 @@ deploy:
   skip_cleanup: true
   on:
     repo: m-lab/etl-gardener
-    tags: true
+    all_branches: true
+    condition: $TRAVIS_TAG == prod-*
