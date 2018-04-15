@@ -112,7 +112,7 @@ func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 			}
 			log.Printf("Suspicious (%s): %+v\n", qh.Queue, stats)
 		}
-		if time.Since(inactiveStartTime) > 180*time.Second {
+		if inactiveStartTime != nullTime && time.Since(inactiveStartTime) > 180*time.Second {
 			// It's been long enough to assume the queue is really empty.
 			// Or possibly we've just been getting errors all this time.
 			log.Printf("Timeout. (%s) Last trusted was: %+v", qh.Queue, lastTrusted)
