@@ -12,6 +12,7 @@ import (
 
 	"github.com/m-lab/etl-gardener/api"
 	"github.com/m-lab/etl-gardener/cloud/tq"
+	"github.com/m-lab/etl-gardener/state"
 	"google.golang.org/api/option"
 )
 
@@ -24,7 +25,7 @@ import (
 
 // Dispatcher globals
 type Dispatcher struct {
-	Handlers    []api.BasicPipe
+	Handlers    []api.TaskPipe
 	StartDate   time.Time
 	Terminating bool // Indicates when Terminate has been called.
 	lock        sync.Mutex
@@ -39,7 +40,7 @@ var (
 // QueueHandlers.
 // bucketOpts may be used to provide a fake client for bucket operations.
 func NewDispatcher(httpClient *http.Client, project, queueBase string, numQueues int, startDate time.Time, bucketOpts ...option.ClientOption) (*Dispatcher, error) {
-	handlers := make([]api.BasicPipe, 0, numQueues)
+	handlers := make([]api.TaskPipe, 0, numQueues)
 	for i := 0; i < numQueues; i++ {
 		queue := fmt.Sprintf("%s%d", queueBase, i)
 		// First build the dedup handler.
@@ -83,11 +84,14 @@ func (disp *Dispatcher) Add(prefix string) error {
 	if disp.Terminating {
 		return ErrTerminating
 	}
+	// TODO - create Task entry in persistent store, in Initializing state.
+	task := state.Task{Name: prefix, State: state.Initializing}
+
 	// Easiest to do this on the fly, since it requires the prefix in the cases.
 	cases := make([]reflect.SelectCase, 0, len(disp.Handlers))
 	for i := range disp.Handlers {
 		c := reflect.SelectCase{Dir: reflect.SelectSend,
-			Chan: reflect.ValueOf(disp.Handlers[i].Sink()), Send: reflect.ValueOf(prefix)}
+			Chan: reflect.ValueOf(disp.Handlers[i].Sink()), Send: reflect.ValueOf(task)}
 		cases = append(cases, c)
 	}
 	log.Println("Waiting for empty queue for", prefix)

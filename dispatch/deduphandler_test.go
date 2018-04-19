@@ -9,12 +9,13 @@ import (
 	"github.com/m-lab/etl-gardener/api"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/dispatch"
+	"github.com/m-lab/etl-gardener/state"
 	"google.golang.org/api/option"
 )
 
 // This just asserts that DedupHandler satisfies the Downstream interface.
-func assertBasicPipe() {
-	func(ds api.BasicPipe) {}(&dispatch.DedupHandler{})
+func assertTaskPipe() {
+	func(ds api.TaskPipe) {}(&dispatch.DedupHandler{})
 }
 
 // This is much too whitebox.  Can we find better abstractions to improve testing?
@@ -27,7 +28,8 @@ func TestDedupHandler(t *testing.T) {
 
 	dedup := dispatch.NewDedupHandler(option.WithHTTPClient(client))
 
-	dedup.Sink() <- "gs://gfr/sidestream/2001/01/01/"
+	// TODO - also test with inconsistent state.
+	dedup.Sink() <- state.Task{Name: "gs://gfr/sidestream/2001/01/01/", State: state.Stabilizing}
 	close(dedup.Sink())
 	<-dedup.Response()
 
