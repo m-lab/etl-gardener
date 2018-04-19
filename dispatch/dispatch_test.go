@@ -28,8 +28,6 @@ func (s *S) SaveTask(t state.Task) error {
 
 func (s *S) DeleteTask(t state.Task) error { return nil }
 
-func (s *S) SaveSystem(ss *state.SystemState) error { return nil }
-
 func assertSaver() { func(ex state.Saver) {}(&S{}) }
 
 func TestDispatcherLifeCycle(t *testing.T) {

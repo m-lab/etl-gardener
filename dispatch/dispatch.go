@@ -26,7 +26,7 @@ import (
 
 // Dispatcher globals
 type Dispatcher struct {
-	Handlers    []api.BasicPipe
+	Handlers    []api.TaskPipe
 	StartDate   time.Time
 	Terminating bool // Indicates when Terminate has been called.
 	Saver       state.Saver
@@ -44,7 +44,7 @@ var (
 func NewDispatcher(httpClient *http.Client, project, queueBase string, numQueues int,
 	startDate time.Time, saver state.Saver, bucketOpts ...option.ClientOption) (*Dispatcher, error) {
 
-	handlers := make([]api.BasicPipe, 0, numQueues)
+	handlers := make([]api.TaskPipe, 0, numQueues)
 	for i := 0; i < numQueues; i++ {
 		queue := fmt.Sprintf("%s%d", queueBase, i)
 		// First build the dedup handler.

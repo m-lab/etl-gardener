@@ -1,28 +1,12 @@
-// Package state handles persistent state required across instances
+// Package state handles persistent state required across instances.
 package state
 
-// TODO - work out how to manage queues and new tasks.
-// Some simplificaitons:
-// 1. available queues should come from config, not state.
-// 2. Tasks contain all info about queues in use.
-// 3. Don't need to list the tasks in the persistent state.
-// 4. The local state needs to cache quite a lot of this though.
-
+// NOTE: Avoid dependencies on any other m-lab code.
 import (
 	"errors"
-	"io"
-	"time"
 )
 
-// High level design:
-//  SystemState holds the dispatcher state, and has a GoRoutine that handles
-//  state changes communicated to it through a single channel.
-//
-//  Task objects hold the state for individual taskes that are in flight.
-//  Each task is initially allocated a Queue to host that task, and the
-//  queue is returned to the SystemState when the task no longer needs it.
-
-// State is a simple enum to indicate the state of a single Task/Task in flight.
+// State indicates the state of a single Task in flight.
 type State int
 
 // State definitions
@@ -36,54 +20,41 @@ const (
 	Done                // Done all processing, ok to delete state.
 )
 
-// Loader provides API for persisting and retrieving state.
-type Loader interface {
-	LoadTask(name string) (*Task, error)
-	LoadAllTasks(name string) ([]Task, error)
-
-	LoadSystemState(ss *SystemState) error
-}
-
 // Saver provides API for saving Task state.
 type Saver interface {
 	SaveTask(t Task) error
 	DeleteTask(t Task) error
-
-	SaveSystem(s *SystemState) error
 }
 
+// DatastoreSaver will implement a Saver that stores Task state in DataStore.
 type DatastoreSaver struct {
 	// TODO - add datastore stuff
 }
 
-func (s *DatastoreSaver) SaveTask(t Task) error            { return nil }
-func (s *DatastoreSaver) DeleteTask(t Task) error          { return nil }
-func (s *DatastoreSaver) SaveSystem(ss *SystemState) error { return nil }
+// SaveTask implements Saver.SaveTask using Datastore.
+func (s *DatastoreSaver) SaveTask(t Task) error { return nil }
 
-// Helpers contains all the helpers required when running a Task.
-type Helpers struct {
-	saver     Saver
-	updater   chan<- Task
-	terminate <-chan struct{}
-}
+// DeleteTask implements Saver.DeleteTask using Datastore.
+func (s *DatastoreSaver) DeleteTask(t Task) error { return nil }
 
-// Task contains the full state of a particular queue.
-// Given a DateState, we can determine what the most recent action was,
-// what event to wait for, and what to do next.
+// Task contains the state of a single Task.
+// These will be stored and retrieved from DataStore
 type Task struct {
-	Name    string // e.g. ndt/2017/06/01/
+	Name    string // e.g. gs://archive-mlab-oti/ndt/2017/06/01/
 	Suffix  string // e.g. 20170601
 	State   State
 	Queue   string // The queue the tasks were submitted to, or empty.
 	JobID   string // JobID, when the state is Deduplicating
-	Err     error  // standard error, if any
+	Err     error  // Processing error, if any
 	ErrInfo string // More context about any error, if any
 
-	saver Saver
+	saver Saver // Saver is used for Save operations. Stored locally, but not persisted.
 }
 
+// ErrNoSaver is returned when saver has not been set.
 var ErrNoSaver = errors.New("Task.saver is nil")
 
+// Save saves the task state to the "saver".
 func (t *Task) Save() error {
 	if t.saver == nil {
 		return ErrNoSaver
@@ -91,6 +62,7 @@ func (t *Task) Save() error {
 	return t.saver.SaveTask(*t)
 }
 
+// Update updates the task state, and saves to the "saver".
 func (t *Task) Update(st State) error {
 	if t.saver == nil {
 		return ErrNoSaver
@@ -99,6 +71,7 @@ func (t *Task) Update(st State) error {
 	return t.saver.SaveTask(*t)
 }
 
+// Delete removes by calling saver.DeleteTask.
 func (t *Task) Delete() error {
 	if t.saver == nil {
 		return ErrNoSaver
@@ -106,6 +79,7 @@ func (t *Task) Delete() error {
 	return t.saver.DeleteTask(*t)
 }
 
+// SetError adds error information and saves to the "saver"
 func (t *Task) SetError(err error, info string) error {
 	if t.saver == nil {
 		return ErrNoSaver
@@ -115,29 +89,7 @@ func (t *Task) SetError(err error, info string) error {
 	return t.saver.SaveTask(*t)
 }
 
+// SetSaver sets the value of the saver to be used for all other calls.
 func (t *Task) SetSaver(saver Saver) {
 	t.saver = saver
-}
-
-// SystemState holds the high level state of the reprocessing dispatcher.
-// Note that the DataStore representation will have separate entries for
-// each map entry.
-type SystemState struct {
-	NextDate time.Time           // The date about to be queued, or to be queued next.
-	AllTasks map[string]struct{} // set of names of all tasks in flight.
-}
-
-// Thread safety invariants for SystemState
-//  1. Only MonitorTasks updates the AllTasks/allTasks maps.
-//  2. All accesses to NextDate and AllTasks are protected with Mutex "lock"
-//  3. Updates to persistent store are lazy for Task removals.  AllTask inserts
-//      and NextDate updates are always pushed to Saver before launching task. ????
-
-// Describe writes a description of the complete state to w
-func (ss *SystemState) Describe(w *io.Writer) {
-
-}
-
-// Add adds a single task.  Msg back to changeChan will update local state and DS
-func (ss *SystemState) Add(t Task) {
 }

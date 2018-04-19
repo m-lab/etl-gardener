@@ -14,8 +14,8 @@ import (
 )
 
 // This just asserts that DedupHandler satisfies the Downstream interface.
-func assertBasicPipe() {
-	func(ds api.BasicPipe) {}(&dispatch.DedupHandler{})
+func assertTaskPipe() {
+	func(ds api.TaskPipe) {}(&dispatch.DedupHandler{})
 }
 
 // This is much too whitebox.  Can we find better abstractions to improve testing?

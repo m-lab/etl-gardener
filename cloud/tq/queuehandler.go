@@ -35,8 +35,8 @@ func (qh *ChannelQueueHandler) Response() <-chan error {
 	return qh.ResponseChan
 }
 
-func assertBasicPipe(ds api.BasicPipe) {
-	func(ds api.BasicPipe) {}(&ChannelQueueHandler{})
+func assertTaskPipe(ds api.TaskPipe) {
+	func(ds api.TaskPipe) {}(&ChannelQueueHandler{})
 }
 
 const start = `^gs://(?P<bucket>.*)/(?P<exp>[^/]*)/`
@@ -152,7 +152,7 @@ func (qh *ChannelQueueHandler) processOneRequest(prefix string, bucketOpts ...op
 }
 
 // handleLoop processes requests on input channel
-func (qh *ChannelQueueHandler) handleLoop(next api.BasicPipe, bucketOpts ...option.ClientOption) {
+func (qh *ChannelQueueHandler) handleLoop(next api.TaskPipe, bucketOpts ...option.ClientOption) {
 	log.Println("Starting handler for", qh.Queue)
 	qh.waitForEmptyQueue()
 	for {
@@ -191,7 +191,7 @@ func (qh *ChannelQueueHandler) handleLoop(next api.BasicPipe, bucketOpts ...opti
 // StartHandleLoop starts a go routine that waits for work on channel, and
 // processes it.
 // Returns a channel that closes when input channel is closed and final processing is complete.
-func (qh *ChannelQueueHandler) StartHandleLoop(next api.BasicPipe, bucketOpts ...option.ClientOption) {
+func (qh *ChannelQueueHandler) StartHandleLoop(next api.TaskPipe, bucketOpts ...option.ClientOption) {
 	go qh.handleLoop(next, bucketOpts...)
 }
 
@@ -199,7 +199,7 @@ func (qh *ChannelQueueHandler) StartHandleLoop(next api.BasicPipe, bucketOpts ..
 // from a channel.
 // Returns feeding channel, and done channel, which will return true when
 // feeding channel is closed, and processing is complete.
-func NewChannelQueueHandler(httpClient *http.Client, project, queue string, next api.BasicPipe, bucketOpts ...option.ClientOption) (*ChannelQueueHandler, error) {
+func NewChannelQueueHandler(httpClient *http.Client, project, queue string, next api.TaskPipe, bucketOpts ...option.ClientOption) (*ChannelQueueHandler, error) {
 	qh, err := NewQueueHandler(httpClient, project, queue)
 	if err != nil {
 		return nil, err
