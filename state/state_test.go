@@ -8,6 +8,11 @@ import (
 	"github.com/m-lab/etl-gardener/state"
 )
 
+func init() {
+	// Always prepend the filename and line number.
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
 type testSaver struct {
 	tasks  map[string][]state.Task
 	delete map[string]struct{}
@@ -19,7 +24,6 @@ func (s *testSaver) SaveTask(t state.Task) error {
 }
 
 func (s *testSaver) DeleteTask(t state.Task) error {
-	log.Println(t.Name)
 	s.delete[t.Name] = struct{}{}
 	return nil
 }
@@ -70,5 +74,4 @@ func TestTaskBasics(t *testing.T) {
 	if !ok {
 		t.Fatal("Should have called delete")
 	}
-
 }

@@ -4,6 +4,7 @@ package state
 // NOTE: Avoid dependencies on any other m-lab code.
 import (
 	"errors"
+	"fmt"
 )
 
 // State indicates the state of a single Task in flight.
@@ -20,6 +21,17 @@ const (
 	Finishing           // Deleting template table, copying to final table, deleting partition.
 	Done                // Done all processing, ok to delete state.
 )
+
+// StateNames maps from State to string, for use in String()
+var StateNames map[State]string = map[State]string{
+	Initializing:  "Initializing",
+	Queuing:       "Queuing",
+	Processing:    "Processing",
+	Stabilizing:   "Stabilizing",
+	Deduplicating: "Deduplicating",
+	Finishing:     "Finishing",
+	Done:          "Done",
+}
 
 // Saver provides API for saving Task state.
 type Saver interface {
@@ -50,6 +62,10 @@ type Task struct {
 	ErrInfo     string // More context about any error, if any
 
 	saver Saver // Saver is used for Save operations. Stored locally, but not persisted.
+}
+
+func (t Task) String() string {
+	return fmt.Sprintf("{%s: %s, Q:%s, J:%s, E:%v (%s)}", t.Name, StateNames[t.State], t.Queue, t.JobID, t.Err, t.ErrInfo)
 }
 
 // ErrNoSaver is returned when saver has not been set.
