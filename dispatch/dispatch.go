@@ -91,9 +91,10 @@ func (disp *Dispatcher) Add(prefix string) error {
 	// TODO - create Task entry in persistent store, in Initializing state.
 	task := state.Task{Name: prefix, State: state.Initializing}
 	task.SetSaver(disp.Saver)
-	err := disp.Saver.SaveTask(task)
+	err := task.Save()
 	if err != nil {
-
+		// We don't expect errors here.  What should we do?
+		// TODO - ???
 	}
 
 	// Easiest to do this on the fly, since it requires the prefix in the cases.

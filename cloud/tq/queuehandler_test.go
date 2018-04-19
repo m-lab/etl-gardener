@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/m-lab/etl-gardener/cloud/tq"
+	"github.com/m-lab/etl-gardener/state"
 )
 
 func init() {
@@ -20,7 +21,7 @@ func TestChannelQueueHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 19; i < 29; i++ {
-		cqh.Sink() <- fmt.Sprintf("gs://archive-mlab-test/ndt/2017/09/%2d/", i)
+		cqh.Sink() <- state.Task{Name: fmt.Sprintf("gs://archive-mlab-test/ndt/2017/09/%2d/", i)}
 	}
 	close(cqh.Sink())
 	<-cqh.Response()

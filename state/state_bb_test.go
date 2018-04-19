@@ -16,7 +16,8 @@ func init() {
 
 type S struct{}
 
-func (s *S) SaveTask(t state.Task) error { return nil }
+func (s *S) SaveTask(t state.Task) error   { return nil }
+func (s *S) DeleteTask(t state.Task) error { return nil }
 
 func (s *S) SaveSystem(ss *state.SystemState) error { return nil }
 

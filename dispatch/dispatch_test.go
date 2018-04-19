@@ -17,9 +17,16 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
-type S struct{}
+type S struct {
+	tasks map[string][]state.Task
+}
 
-func (s *S) SaveTask(t state.Task) error { return nil }
+func (s *S) SaveTask(t state.Task) error {
+	s.tasks[t.Name] = append(s.tasks[t.Name], t)
+	return nil
+}
+
+func (s *S) DeleteTask(t state.Task) error { return nil }
 
 func (s *S) SaveSystem(ss *state.SystemState) error { return nil }
 
@@ -29,7 +36,7 @@ func TestDispatcherLifeCycle(t *testing.T) {
 	// Use a fake client so we intercept all the http ops.
 	client, counter := tq.DryRunQueuerClient()
 
-	saver := S{}
+	saver := S{tasks: make(map[string][]state.Task)}
 
 	// With time.Now(), this shouldn't send any requests.
 	// Inject fake client for bucket ops, so it doesn't hit the backends at all.
@@ -52,8 +59,30 @@ func TestDispatcherLifeCycle(t *testing.T) {
 		t.Errorf("Count was %d instead of 6", counter.Count())
 	}
 
-	err = d.Add("gs://foobar/ndt/2001/01/01/")
+	err = d.Add("gs://foobar/ndt/2001/01/02/")
 	if err != dispatch.ErrTerminating {
 		t.Error("Should get", dispatch.ErrTerminating)
 	}
+
+	taskStates, ok := saver.tasks["gs://foobar/ndt/2001/01/01/"]
+	if !ok {
+		t.Fatal("Task not saved")
+	}
+	// For now, state should have progressed to Stabilizing.
+	if len(taskStates) != 4 {
+		t.Fatal("Wrong number of states:", len(taskStates))
+	}
+
+	if taskStates[1].State != state.Queuing {
+		t.Errorf("Wrong state %+v\n", taskStates[1])
+	}
+
+	if taskStates[2].State != state.Processing {
+		t.Errorf("Wrong state %+v\n", taskStates[2])
+	}
+
+	if taskStates[3].State != state.Stabilizing {
+		t.Errorf("Wrong state %+v\n", taskStates[3])
+	}
+
 }

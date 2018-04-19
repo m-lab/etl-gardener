@@ -162,8 +162,7 @@ func (qh *ChannelQueueHandler) handleLoop(next api.BasicPipe, bucketOpts ...opti
 			break
 		}
 		task.Queue = qh.Queue
-		task.State = state.Queuing
-		task.Save()
+		task.Update(state.Queuing)
 
 		n, err := qh.processOneRequest(task.Name, bucketOpts...)
 		if err != nil {
@@ -174,13 +173,11 @@ func (qh *ChannelQueueHandler) handleLoop(next api.BasicPipe, bucketOpts ...opti
 		// Must wait for empty queue before proceeding with dedupping.
 		// This ensures that the data has actually been processed, rather
 		// than just sitting in the queue or in the pipeline.
-		task.State = state.Processing
-		task.Save()
+		task.Update(state.Processing)
 		qh.waitForEmptyQueue()
 
-		task.State = state.Stabilizing
 		task.Queue = ""
-		task.Save()
+		task.Update(state.Stabilizing)
 
 		log.Println(qh.Queue, "sending", task.Name, "to dedup handler")
 		// This may block if previous hasn't finished.  Should be rare.

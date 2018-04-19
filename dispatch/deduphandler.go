@@ -104,6 +104,7 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientO
 		log.Println(err)
 		// TODO update metric
 		metrics.FailCount.WithLabelValues("BadDedupPrefix")
+		task.SetError(err, "")
 		return err
 	}
 
@@ -112,27 +113,50 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientO
 	tt := ds.Table(parts[2] + "_" + strings.Join(strings.Split(parts[3], "/"), ""))
 	err = WaitForStableTable(tt)
 	if err != nil {
+		task.SetError(err, "")
 		return err
 	}
+
+	task.Update(state.Deduplicating)
 
 	// Now deduplicate the table.  NOTE that this will overwrite the destination partition
 	// if it still exists.
 	dest := ds.Table(parts[2] + "$" + strings.Join(strings.Split(parts[3], "/"), ""))
 	log.Println("Dedupping", tt.FullyQualifiedName())
-	status, err := DedupAndWait(ds, tt.TableID, dest)
+	//status, err := DedupAndWait(ds, tt.TableID, dest)
+	job, err := Dedup(ds, tt.TableID, dest)
+	// TODO - improve on this testing hack.
 	if err != nil {
 		if err == io.EOF {
 			log.Println("EOF error - is this a test client?")
+			task.JobID = "fake jobID"
+			task.Save()
 		} else {
 			log.Println(err, tt.FullyQualifiedName())
-			metrics.FailCount.WithLabelValues("DedupFailed")
+			metrics.FailCount.WithLabelValues("DedupJobError")
+			task.SetError(err, "")
 			return err
 		}
-	} else if status.Err() != nil {
-		log.Println(status.Err(), tt.FullyQualifiedName())
-		metrics.FailCount.WithLabelValues("DedupError")
-		return err
+	} else {
+		task.JobID = job.ID()
+		task.Save()
+		status, err := job.Wait(context.Background())
+		if err != nil {
+			log.Println(status.Err(), tt.FullyQualifiedName())
+			metrics.FailCount.WithLabelValues("DedupError")
+			task.SetError(err, "")
+			return err
+		}
+		if status.Err() != nil {
+			log.Println(status.Err(), tt.FullyQualifiedName())
+			metrics.FailCount.WithLabelValues("DedupError")
+			task.SetError(status.Err(), "")
+			return status.Err()
+		}
 	}
+
+	task.JobID = ""
+	task.Update(state.Finishing)
 
 	log.Println("Completed deduplication, deleting", tt.FullyQualifiedName())
 	// If deduplication was successful, we should delete the source table.
@@ -141,17 +165,23 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientO
 	err = tt.Delete(ctx)
 	if err != nil {
 		metrics.FailCount.WithLabelValues("TableDeleteErr")
+		task.SetError(err, "")
 		log.Println(err)
 	}
 	if ctx.Err() != nil {
 		if ctx.Err() != context.DeadlineExceeded {
 			metrics.FailCount.WithLabelValues("TableDeleteTimeout")
 			log.Println(ctx.Err())
+			task.SetError(ctx.Err(), "")
 			return err
 		}
 	}
 
 	log.Println("Deleted", tt.FullyQualifiedName())
+
+	task.JobID = ""
+	task.Update(state.Finishing)
+
 	return nil
 }
 
@@ -164,12 +194,14 @@ func (dh *DedupHandler) handleLoop(opts ...option.ClientOption) {
 		if more {
 			ds, err := bqext.NewDataset(dh.Project, dh.Dataset, opts...)
 			if err != nil {
+				task.SetError(err, "NewDataset")
 				metrics.FailCount.WithLabelValues("NewDataset")
 				log.Println(err)
 				continue
 			}
 
 			dh.waitAndDedup(&ds, task, opts...)
+			// TODO - delete the task??
 		} else {
 			log.Println("Exiting handler for ...")
 			close(dh.ResponseChan)

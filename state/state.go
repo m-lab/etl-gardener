@@ -47,9 +47,18 @@ type Loader interface {
 // Saver provides API for saving Task state.
 type Saver interface {
 	SaveTask(t Task) error
+	DeleteTask(t Task) error
 
 	SaveSystem(s *SystemState) error
 }
+
+type DatastoreSaver struct {
+	// TODO - add datastore stuff
+}
+
+func (s *DatastoreSaver) SaveTask(t Task) error            { return nil }
+func (s *DatastoreSaver) DeleteTask(t Task) error          { return nil }
+func (s *DatastoreSaver) SaveSystem(ss *SystemState) error { return nil }
 
 // Helpers contains all the helpers required when running a Task.
 type Helpers struct {
@@ -79,7 +88,30 @@ func (t *Task) Save() error {
 	if t.saver == nil {
 		return ErrNoSaver
 	}
+	return t.saver.SaveTask(*t)
+}
 
+func (t *Task) Update(st State) error {
+	if t.saver == nil {
+		return ErrNoSaver
+	}
+	t.State = st
+	return t.saver.SaveTask(*t)
+}
+
+func (t *Task) Delete() error {
+	if t.saver == nil {
+		return ErrNoSaver
+	}
+	return t.saver.DeleteTask(*t)
+}
+
+func (t *Task) SetError(err error, info string) error {
+	if t.saver == nil {
+		return ErrNoSaver
+	}
+	t.Err = err
+	t.ErrInfo = info
 	return t.saver.SaveTask(*t)
 }
 
