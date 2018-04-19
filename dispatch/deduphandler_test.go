@@ -9,6 +9,7 @@ import (
 	"github.com/m-lab/etl-gardener/api"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/dispatch"
+	"github.com/m-lab/etl-gardener/state"
 	"google.golang.org/api/option"
 )
 
@@ -27,7 +28,8 @@ func TestDedupHandler(t *testing.T) {
 
 	dedup := dispatch.NewDedupHandler(option.WithHTTPClient(client))
 
-	dedup.Sink() <- "gs://gfr/sidestream/2001/01/01/"
+	// TODO - also test with inconsistent state.
+	dedup.Sink() <- state.Task{Name: "gs://gfr/sidestream/2001/01/01/", State: state.Stabilizing}
 	close(dedup.Sink())
 	<-dedup.Response()
 

@@ -1,9 +1,11 @@
 // Package api contains interfaces used in the project.
 package api
 
+import "github.com/m-lab/etl-gardener/state"
+
 // BasicPipe specifies an interface for sending jobs to a downstream handler.
 type BasicPipe interface {
-	Sink() chan<- string
+	Sink() chan<- state.Task
 	Response() <-chan error
 }
 
@@ -11,7 +13,7 @@ type BasicPipe interface {
 type NilBasicPipe struct{}
 
 // Sink returns the sink channel, for use by the sender.
-func (nd *NilBasicPipe) Sink() chan<- string {
+func (nd *NilBasicPipe) Sink() chan<- state.Task {
 	return nil
 }
 

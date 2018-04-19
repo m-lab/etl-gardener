@@ -9,6 +9,7 @@ package state
 // 4. The local state needs to cache quite a lot of this though.
 
 import (
+	"errors"
 	"io"
 	"time"
 )
@@ -37,17 +38,17 @@ const (
 
 // Loader provides API for persisting and retrieving state.
 type Loader interface {
-	LoadTask(name string) Task
-	LoadAllTasks(name string) []Task
+	LoadTask(name string) (*Task, error)
+	LoadAllTasks(name string) ([]Task, error)
 
-	LoadSystemState(ss *SystemState)
+	LoadSystemState(ss *SystemState) error
 }
 
 // Saver provides API for saving Task state.
 type Saver interface {
-	SaveTask(t Task)
+	SaveTask(t Task) error
 
-	SaveSystem(s *SystemState)
+	SaveSystem(s *SystemState) error
 }
 
 // Helpers contains all the helpers required when running a Task.
@@ -61,14 +62,29 @@ type Helpers struct {
 // Given a DateState, we can determine what the most recent action was,
 // what event to wait for, and what to do next.
 type Task struct {
-	Task   string // e.g. ndt/2017/06/01/
-	Suffix string // e.g. 20170601
-	State  State
-	Queue  string // The queue the tasks were submitted to
-	// Task should set to "" when no longer needed.
+	Name    string // e.g. ndt/2017/06/01/
+	Suffix  string // e.g. 20170601
+	State   State
+	Queue   string // The queue the tasks were submitted to, or empty.
 	JobID   string // JobID, when the state is Deduplicating
 	Err     error  // standard error, if any
 	ErrInfo string // More context about any error, if any
+
+	saver Saver
+}
+
+var ErrNoSaver = errors.New("Task.saver is nil")
+
+func (t *Task) Save() error {
+	if t.saver == nil {
+		return ErrNoSaver
+	}
+
+	return t.saver.SaveTask(*t)
+}
+
+func (t *Task) SetSaver(saver Saver) {
+	t.saver = saver
 }
 
 // SystemState holds the high level state of the reprocessing dispatcher.

@@ -9,6 +9,7 @@ import (
 
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/dispatch"
+	"github.com/m-lab/etl-gardener/state"
 )
 
 func init() {
@@ -16,14 +17,24 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
+type S struct{}
+
+func (s *S) SaveTask(t state.Task) error { return nil }
+
+func (s *S) SaveSystem(ss *state.SystemState) error { return nil }
+
+func assertSaver() { func(ex state.Saver) {}(&S{}) }
+
 func TestDispatcherLifeCycle(t *testing.T) {
 	// Use a fake client so we intercept all the http ops.
 	client, counter := tq.DryRunQueuerClient()
 
+	saver := S{}
+
 	// With time.Now(), this shouldn't send any requests.
 	// Inject fake client for bucket ops, so it doesn't hit the backends at all.
 	// Construction will trigger 4 HTTP calls, one to check that each queue is empty.
-	d, err := dispatch.NewDispatcher(client, "project", "queue-base-", 4, time.Now(), option.WithHTTPClient(client))
+	d, err := dispatch.NewDispatcher(client, "project", "queue-base-", 4, time.Now(), &saver, option.WithHTTPClient(client))
 	if err != nil {
 		t.Fatal(err)
 	}

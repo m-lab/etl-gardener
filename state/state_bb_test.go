@@ -16,10 +16,9 @@ func init() {
 
 type S struct{}
 
-func (s *S) SaveTask(t state.Task) {
-}
+func (s *S) SaveTask(t state.Task) error { return nil }
 
-func (s *S) SaveSystem(ss *state.SystemState) {}
+func (s *S) SaveSystem(ss *state.SystemState) error { return nil }
 
 func assertSaver() { func(ex state.Saver) {}(&S{}) }
 
@@ -51,7 +50,7 @@ func (ex *Exec) AdvanceState(t *state.Task) {
 type L struct{}
 
 func (ldr *L) Fetch(taskName string) state.Task {
-	return state.Task{Task: taskName, Queue: "Q-" + taskName}
+	return state.Task{Name: taskName, Queue: "Q-" + taskName}
 }
 
 func (ldr *L) LoadFromPS(ss *state.SystemState) {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/m-lab/etl-gardener/api"
 	"github.com/m-lab/etl-gardener/metrics"
+	"github.com/m-lab/etl-gardener/state"
 	"google.golang.org/api/option"
 	"google.golang.org/appengine/taskqueue"
 )
@@ -20,12 +21,12 @@ import (
 type ChannelQueueHandler struct {
 	*QueueHandler
 	// Handler listens on this channel for prefixes.
-	MsgChan      chan string
+	MsgChan      chan state.Task
 	ResponseChan chan error
 }
 
 // Sink returns the sink channel, for use by the sender.
-func (qh *ChannelQueueHandler) Sink() chan<- string {
+func (qh *ChannelQueueHandler) Sink() chan<- state.Task {
 	return qh.MsgChan
 }
 
@@ -155,12 +156,16 @@ func (qh *ChannelQueueHandler) handleLoop(next api.BasicPipe, bucketOpts ...opti
 	log.Println("Starting handler for", qh.Queue)
 	qh.waitForEmptyQueue()
 	for {
-		prefix, more := <-qh.MsgChan
+		task, more := <-qh.MsgChan
 		if !more {
 			close(qh.ResponseChan)
 			break
 		}
-		n, err := qh.processOneRequest(prefix, bucketOpts...)
+		task.Queue = qh.Queue
+		task.State = state.Queuing
+		task.Save()
+
+		n, err := qh.processOneRequest(task.Name, bucketOpts...)
 		if err != nil {
 			// TODO return error through Response()
 			// Currently, processOneRequest logs error and increments metric.
@@ -169,11 +174,18 @@ func (qh *ChannelQueueHandler) handleLoop(next api.BasicPipe, bucketOpts ...opti
 		// Must wait for empty queue before proceeding with dedupping.
 		// This ensures that the data has actually been processed, rather
 		// than just sitting in the queue or in the pipeline.
+		task.State = state.Processing
+		task.Save()
 		qh.waitForEmptyQueue()
-		log.Println(qh.Queue, "sending", prefix, "to dedup handler")
+
+		task.State = state.Stabilizing
+		task.Queue = ""
+		task.Save()
+
+		log.Println(qh.Queue, "sending", task.Name, "to dedup handler")
 		// This may block if previous hasn't finished.  Should be rare.
 		if n > 0 && next != nil {
-			next.Sink() <- prefix
+			next.Sink() <- task
 		}
 	}
 	log.Println("Exiting handler for", qh.Queue)
@@ -195,7 +207,7 @@ func NewChannelQueueHandler(httpClient *http.Client, project, queue string, next
 	if err != nil {
 		return nil, err
 	}
-	msg := make(chan string)
+	msg := make(chan state.Task)
 	rsp := make(chan error)
 	cqh := ChannelQueueHandler{qh, msg, rsp}
 

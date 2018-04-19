@@ -14,6 +14,7 @@ import (
 	"cloud.google.com/go/bigquery"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/metrics"
+	"github.com/m-lab/etl-gardener/state"
 	"github.com/m-lab/go/bqext"
 	"google.golang.org/api/option"
 )
@@ -27,12 +28,12 @@ var (
 type DedupHandler struct {
 	Project      string
 	Dataset      string
-	MsgChan      chan string
+	MsgChan      chan state.Task
 	ResponseChan chan error
 }
 
 // Sink returns the sink channel, for use by the sender.
-func (dh *DedupHandler) Sink() chan<- string {
+func (dh *DedupHandler) Sink() chan<- state.Task {
 	return dh.MsgChan
 }
 
@@ -96,8 +97,8 @@ ErrorTimeout:
 }
 
 // processOneRequest waits on the channel for a new request, and handles it.
-func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, prefix string, clientOpts ...option.ClientOption) error {
-	parts, err := tq.ParsePrefix(prefix)
+func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientOpts ...option.ClientOption) error {
+	parts, err := tq.ParsePrefix(task.Name)
 	if err != nil {
 		// If there is a parse error, log and skip request.
 		log.Println(err)
@@ -159,7 +160,7 @@ func (dh *DedupHandler) handleLoop(opts ...option.ClientOption) {
 	log.Println("Starting handler for ...")
 
 	for {
-		req, more := <-dh.MsgChan
+		task, more := <-dh.MsgChan
 		if more {
 			ds, err := bqext.NewDataset(dh.Project, dh.Dataset, opts...)
 			if err != nil {
@@ -168,7 +169,7 @@ func (dh *DedupHandler) handleLoop(opts ...option.ClientOption) {
 				continue
 			}
 
-			dh.waitAndDedup(&ds, req, opts...)
+			dh.waitAndDedup(&ds, task, opts...)
 		} else {
 			log.Println("Exiting handler for ...")
 			close(dh.ResponseChan)
@@ -189,7 +190,7 @@ func NewDedupHandler(opts ...option.ClientOption) *DedupHandler {
 		project = "measurement-lab" // destination for production tables.
 	}
 	dataset := os.Getenv("DATASET")
-	msg := make(chan string)
+	msg := make(chan state.Task)
 	rsp := make(chan error)
 	dh := DedupHandler{project, dataset, msg, rsp}
 
@@ -278,9 +279,8 @@ func Dedup(dsExt *bqext.Dataset, src string, destTable *bigquery.Table) (*bigque
 // Waits for query completion and returns JobStatus
 func DedupAndWait(dsExt *bqext.Dataset, src string, destTable *bigquery.Table) (*bigquery.JobStatus, error) {
 	job, err := Dedup(dsExt, src, destTable)
-	status, err := job.Wait(context.Background())
 	if err != nil {
-		return status, err
+		return nil, err
 	}
-	return status, nil
+	return job.Wait(context.Background())
 }
