@@ -11,6 +11,7 @@ import (
 
 	"github.com/m-lab/etl-gardener/api"
 	"github.com/m-lab/etl-gardener/metrics"
+	"github.com/m-lab/etl-gardener/state"
 	"google.golang.org/api/option"
 	"google.golang.org/appengine/taskqueue"
 )
@@ -20,12 +21,12 @@ import (
 type ChannelQueueHandler struct {
 	*QueueHandler
 	// Handler listens on this channel for prefixes.
-	MsgChan      chan string
+	MsgChan      chan state.Task
 	ResponseChan chan error
 }
 
 // Sink returns the sink channel, for use by the sender.
-func (qh *ChannelQueueHandler) Sink() chan<- string {
+func (qh *ChannelQueueHandler) Sink() chan<- state.Task {
 	return qh.MsgChan
 }
 
@@ -34,8 +35,8 @@ func (qh *ChannelQueueHandler) Response() <-chan error {
 	return qh.ResponseChan
 }
 
-func assertBasicPipe(ds api.BasicPipe) {
-	func(ds api.BasicPipe) {}(&ChannelQueueHandler{})
+func assertTaskPipe(ds api.TaskPipe) {
+	func(ds api.TaskPipe) {}(&ChannelQueueHandler{})
 }
 
 const start = `^gs://(?P<bucket>.*)/(?P<exp>[^/]*)/`
@@ -151,16 +152,19 @@ func (qh *ChannelQueueHandler) processOneRequest(prefix string, bucketOpts ...op
 }
 
 // handleLoop processes requests on input channel
-func (qh *ChannelQueueHandler) handleLoop(next api.BasicPipe, bucketOpts ...option.ClientOption) {
+func (qh *ChannelQueueHandler) handleLoop(next api.TaskPipe, bucketOpts ...option.ClientOption) {
 	log.Println("Starting handler for", qh.Queue)
 	qh.waitForEmptyQueue()
 	for {
-		prefix, more := <-qh.MsgChan
+		task, more := <-qh.MsgChan
 		if !more {
 			close(qh.ResponseChan)
 			break
 		}
-		n, err := qh.processOneRequest(prefix, bucketOpts...)
+		task.Queue = qh.Queue
+		task.Update(state.Queuing)
+
+		n, err := qh.processOneRequest(task.Name, bucketOpts...)
 		if err != nil {
 			// TODO return error through Response()
 			// Currently, processOneRequest logs error and increments metric.
@@ -169,11 +173,16 @@ func (qh *ChannelQueueHandler) handleLoop(next api.BasicPipe, bucketOpts ...opti
 		// Must wait for empty queue before proceeding with dedupping.
 		// This ensures that the data has actually been processed, rather
 		// than just sitting in the queue or in the pipeline.
+		task.Update(state.Processing)
 		qh.waitForEmptyQueue()
-		log.Println(qh.Queue, "sending", prefix, "to dedup handler")
+
+		task.Queue = ""
+		task.Update(state.Stabilizing)
+
+		log.Println(qh.Queue, "sending", task.Name, "to dedup handler")
 		// This may block if previous hasn't finished.  Should be rare.
 		if n > 0 && next != nil {
-			next.Sink() <- prefix
+			next.Sink() <- task
 		}
 	}
 	log.Println("Exiting handler for", qh.Queue)
@@ -182,7 +191,7 @@ func (qh *ChannelQueueHandler) handleLoop(next api.BasicPipe, bucketOpts ...opti
 // StartHandleLoop starts a go routine that waits for work on channel, and
 // processes it.
 // Returns a channel that closes when input channel is closed and final processing is complete.
-func (qh *ChannelQueueHandler) StartHandleLoop(next api.BasicPipe, bucketOpts ...option.ClientOption) {
+func (qh *ChannelQueueHandler) StartHandleLoop(next api.TaskPipe, bucketOpts ...option.ClientOption) {
 	go qh.handleLoop(next, bucketOpts...)
 }
 
@@ -190,12 +199,12 @@ func (qh *ChannelQueueHandler) StartHandleLoop(next api.BasicPipe, bucketOpts ..
 // from a channel.
 // Returns feeding channel, and done channel, which will return true when
 // feeding channel is closed, and processing is complete.
-func NewChannelQueueHandler(httpClient *http.Client, project, queue string, next api.BasicPipe, bucketOpts ...option.ClientOption) (*ChannelQueueHandler, error) {
+func NewChannelQueueHandler(httpClient *http.Client, project, queue string, next api.TaskPipe, bucketOpts ...option.ClientOption) (*ChannelQueueHandler, error) {
 	qh, err := NewQueueHandler(httpClient, project, queue)
 	if err != nil {
 		return nil, err
 	}
-	msg := make(chan string)
+	msg := make(chan state.Task)
 	rsp := make(chan error)
 	cqh := ChannelQueueHandler{qh, msg, rsp}
 

@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/m-lab/etl-gardener/state"
+
 	"github.com/m-lab/etl-gardener/api"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"google.golang.org/api/option"
@@ -24,9 +26,10 @@ import (
 
 // Dispatcher globals
 type Dispatcher struct {
-	Handlers    []api.BasicPipe
+	Handlers    []api.TaskPipe
 	StartDate   time.Time
 	Terminating bool // Indicates when Terminate has been called.
+	Saver       state.Saver
 	lock        sync.Mutex
 }
 
@@ -38,8 +41,10 @@ var (
 // NewDispatcher creates a dispatcher that will spread requests across multiple
 // QueueHandlers.
 // bucketOpts may be used to provide a fake client for bucket operations.
-func NewDispatcher(httpClient *http.Client, project, queueBase string, numQueues int, startDate time.Time, bucketOpts ...option.ClientOption) (*Dispatcher, error) {
-	handlers := make([]api.BasicPipe, 0, numQueues)
+func NewDispatcher(httpClient *http.Client, project, queueBase string, numQueues int,
+	startDate time.Time, saver state.Saver, bucketOpts ...option.ClientOption) (*Dispatcher, error) {
+
+	handlers := make([]api.TaskPipe, 0, numQueues)
 	for i := 0; i < numQueues; i++ {
 		queue := fmt.Sprintf("%s%d", queueBase, i)
 		// First build the dedup handler.
@@ -54,7 +59,7 @@ func NewDispatcher(httpClient *http.Client, project, queueBase string, numQueues
 		handlers = append(handlers, cqh)
 	}
 
-	return &Dispatcher{Handlers: handlers, StartDate: startDate, Terminating: false}, nil
+	return &Dispatcher{Handlers: handlers, StartDate: startDate, Terminating: false, Saver: saver}, nil
 }
 
 // Terminate closes all the channels, and waits for all the dones.
@@ -83,11 +88,20 @@ func (disp *Dispatcher) Add(prefix string) error {
 	if disp.Terminating {
 		return ErrTerminating
 	}
+	// TODO - create Task entry in persistent store, in Initializing state.
+	task := state.Task{Name: prefix, State: state.Initializing}
+	task.SetSaver(disp.Saver)
+	err := task.Save()
+	if err != nil {
+		// We don't expect errors here.  What should we do?
+		// TODO - ???
+	}
+
 	// Easiest to do this on the fly, since it requires the prefix in the cases.
 	cases := make([]reflect.SelectCase, 0, len(disp.Handlers))
 	for i := range disp.Handlers {
 		c := reflect.SelectCase{Dir: reflect.SelectSend,
-			Chan: reflect.ValueOf(disp.Handlers[i].Sink()), Send: reflect.ValueOf(prefix)}
+			Chan: reflect.ValueOf(disp.Handlers[i].Sink()), Send: reflect.ValueOf(task)}
 		cases = append(cases, c)
 	}
 	log.Println("Waiting for empty queue for", prefix)
