@@ -183,6 +183,11 @@ func (dh *DedupHandler) handleLoop(opts ...option.ClientOption) {
 // feeding channel is closed, and processing is complete.
 func NewDedupHandler(opts ...option.ClientOption) *DedupHandler {
 	project := os.Getenv("PROJECT")
+	// When running in prod, the task files and queues are in mlab-oti, but the destination
+	// BigQuery tables are in measurement-lab.
+	if project == "mlab-oti" {
+		project = "measurement-lab" // destination for production tables.
+	}
 	dataset := os.Getenv("DATASET")
 	msg := make(chan string)
 	rsp := make(chan error)
