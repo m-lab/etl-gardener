@@ -20,7 +20,7 @@ func TestPostOneTask(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	q.PostOneTask("archive-mlab-test", "test-file")
+	q.PostOneTask("archive-mlab-testing", "test-file")
 	if err != nil {
 		t.Fatal(err)
 	}
