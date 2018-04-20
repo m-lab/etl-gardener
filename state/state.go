@@ -11,7 +11,8 @@ type State int
 
 // State definitions
 const (
-	Initializing  State = iota
+	Invalid       State = iota
+	Initializing        // Task is being initialized.
 	Queuing             // Queuing all task files for the task (date/experiment).
 	Processing          // Done queuing, waiting for the queue to empty.
 	Stabilizing         // Waiting for streaming buffer to be empty
@@ -45,7 +46,7 @@ type Task struct {
 	State       State
 	Queue       string // The queue the task files are submitted to, or "".
 	JobID       string // BigQuery JobID, when the state is Deduplicating
-	Err         error  // Processing error, if any
+	Err         error  // Task handling error, if any
 	ErrInfo     string // More context about any error, if any
 
 	saver Saver // Saver is used for Save operations. Stored locally, but not persisted.

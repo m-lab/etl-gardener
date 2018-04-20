@@ -27,7 +27,7 @@ func (s *testSaver) DeleteTask(t state.Task) error {
 func assertSaver() { func(ex state.Saver) {}(&testSaver{}) }
 
 func TestTaskBasics(t *testing.T) {
-	task := state.Task{Name: "foobar"}
+	task := state.Task{Name: "foobar", State: state.Initializing}
 	saver := testSaver{make(map[string][]state.Task), make(map[string]struct{})}
 	task.SetSaver(&saver)
 
