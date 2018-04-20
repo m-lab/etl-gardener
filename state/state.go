@@ -12,7 +12,7 @@ type State int
 // State definitions
 const (
 	Initializing  State = iota
-	Queuing             // Queuing all tasks for the task.
+	Queuing             // Queuing all task files for the task (date/experiment).
 	Processing          // Done queuing, waiting for the queue to empty.
 	Stabilizing         // Waiting for streaming buffer to be empty
 	Deduplicating       // Bigquery deduplication query in process.
@@ -26,7 +26,7 @@ type Saver interface {
 	DeleteTask(t Task) error
 }
 
-// DatastoreSaver will implement a Saver that stores Task state in DataStore.
+// DatastoreSaver will implement a Saver that stores Task state in Datastore.
 type DatastoreSaver struct {
 	// TODO - add datastore stuff
 }
@@ -40,13 +40,13 @@ func (s *DatastoreSaver) DeleteTask(t Task) error { return nil }
 // Task contains the state of a single Task.
 // These will be stored and retrieved from DataStore
 type Task struct {
-	Name    string // e.g. gs://archive-mlab-oti/ndt/2017/06/01/
-	Suffix  string // e.g. 20170601
-	State   State
-	Queue   string // The queue the tasks were submitted to, or empty.
-	JobID   string // JobID, when the state is Deduplicating
-	Err     error  // Processing error, if any
-	ErrInfo string // More context about any error, if any
+	Name        string // e.g. gs://archive-mlab-oti/ndt/2017/06/01/
+	TableSuffix string // e.g. 20170601
+	State       State
+	Queue       string // The queue the task files are submitted to, or "".
+	JobID       string // BigQuery JobID, when the state is Deduplicating
+	Err         error  // Processing error, if any
+	ErrInfo     string // More context about any error, if any
 
 	saver Saver // Saver is used for Save operations. Stored locally, but not persisted.
 }

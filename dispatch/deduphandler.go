@@ -166,6 +166,7 @@ func (dh *DedupHandler) handleLoop(opts ...option.ClientOption) {
 			if err != nil {
 				metrics.FailCount.WithLabelValues("NewDataset")
 				log.Println(err)
+				// TODO do we want to do any recovery here?
 				continue
 			}
 
