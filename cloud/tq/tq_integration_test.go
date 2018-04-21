@@ -30,7 +30,7 @@ func TestGetTaskqueueStats(t *testing.T) {
 // NOTE: this test depends on actual bucket content.  If it starts failing,
 // check that the bucket content has not been changed.
 func TestGetBucket(t *testing.T) {
-	bucketName := "archive-mlab-test"
+	bucketName := "archive-mlab-testing"
 	bucket, err := tq.GetBucket(nil, "mlab-testing", bucketName, false)
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +80,7 @@ func TestPostDay(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Use a real storage bucket.
-	bucketName := "archive-mlab-test"
+	bucketName := "archive-mlab-testing"
 	bucket, err := tq.GetBucket(nil, "mlab-testing", bucketName, false)
 	if err != nil {
 		t.Fatal(err)
