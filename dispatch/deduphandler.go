@@ -104,6 +104,7 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientO
 		log.Println(err)
 		// TODO update metric
 		metrics.FailCount.WithLabelValues("BadDedupPrefix")
+		task.SetError(err, "")
 		return err
 	}
 
@@ -112,8 +113,11 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientO
 	tt := ds.Table(parts[2] + "_" + strings.Join(strings.Split(parts[3], "/"), ""))
 	err = waitForStableTable(tt)
 	if err != nil {
+		task.SetError(err, "")
 		return err
 	}
+
+	task.Update(state.Deduplicating)
 
 	// Now deduplicate the table.  NOTE that this will overwrite the destination partition
 	// if it still exists.
@@ -134,6 +138,9 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientO
 		return err
 	}
 
+	task.JobID = ""
+	task.Update(state.Finishing)
+
 	log.Println("Completed deduplication, deleting", tt.FullyQualifiedName())
 	// If deduplication was successful, we should delete the source table.
 	ctx, cf := context.WithTimeout(context.Background(), time.Minute)
@@ -141,12 +148,14 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientO
 	err = tt.Delete(ctx)
 	if err != nil {
 		metrics.FailCount.WithLabelValues("TableDeleteErr")
+		task.SetError(err, "")
 		log.Println(err)
 	}
 	if ctx.Err() != nil {
 		if ctx.Err() != context.DeadlineExceeded {
 			metrics.FailCount.WithLabelValues("TableDeleteTimeout")
 			log.Println(ctx.Err())
+			task.SetError(ctx.Err(), "")
 			return err
 		}
 	}
@@ -164,6 +173,7 @@ func (dh *DedupHandler) handleLoop(opts ...option.ClientOption) {
 		if more {
 			ds, err := bqext.NewDataset(dh.Project, dh.Dataset, opts...)
 			if err != nil {
+				task.SetError(err, "NewDataset")
 				metrics.FailCount.WithLabelValues("NewDataset")
 				log.Println(err)
 				// TODO do we want to do any recovery here?

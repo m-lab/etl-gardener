@@ -5,7 +5,6 @@
 //  2. It expects destination table to be partitioned.
 //  3. It does not explicitly check for schema compatibility,
 //      though it will fail if they are incompatible.
-
 package dedup
 
 import (
