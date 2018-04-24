@@ -23,7 +23,7 @@ const (
 )
 
 // StateNames maps from State to string, for use in String()
-var StateNames map[State]string = map[State]string{
+var StateNames = map[State]string{
 	Initializing:  "Initializing",
 	Queuing:       "Queuing",
 	Processing:    "Processing",
