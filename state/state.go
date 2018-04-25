@@ -83,14 +83,14 @@ type Task struct {
 	State       State
 	Queue       string // The queue the task files are submitted to, or "".
 	JobID       string // BigQuery JobID, when the state is Deduplicating
-	Err         error  // Task handling error, if any
+	ErrMsg      string // Task handling error, if any
 	ErrInfo     string // More context about any error, if any
 
 	saver Saver // Saver is used for Save operations. Stored locally, but not persisted.
 }
 
 func (t Task) String() string {
-	return fmt.Sprintf("{%s: %s, Q:%s, J:%s, E:%v (%s)}", t.Name, StateNames[t.State], t.Queue, t.JobID, t.Err, t.ErrInfo)
+	return fmt.Sprintf("{%s: %s, Q:%s, J:%s, E:%s (%s)}", t.Name, StateNames[t.State], t.Queue, t.JobID, t.ErrMsg, t.ErrInfo)
 }
 
 // ErrNoSaver is returned when saver has not been set.
@@ -126,7 +126,7 @@ func (t *Task) SetError(err error, info string) error {
 	if t.saver == nil {
 		return ErrNoSaver
 	}
-	t.Err = err
+	t.ErrMsg = err.Error()
 	t.ErrInfo = info
 	return t.saver.SaveTask(*t)
 }

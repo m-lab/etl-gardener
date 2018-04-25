@@ -31,6 +31,22 @@ func (s *S) DeleteTask(t state.Task) error { return nil }
 
 func assertSaver() { func(ex state.Saver) {}(&S{}) }
 
+func TestSaver(t *testing.T) {
+	os.Setenv("GCLOUD_PROJECT", "mlab-testing")
+
+	saver, err := state.NewDatastoreSaver()
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := state.Task{Name: "gs://foobar/test-task"}
+	task.SetSaver(saver)
+
+	err = task.Update(state.Queuing)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestDispatcherLifeCycle(t *testing.T) {
 	os.Setenv("GCLOUD_PROJECT", "mlab-testing")
 	os.Setenv("UNIT_TEST_MODE", "true")

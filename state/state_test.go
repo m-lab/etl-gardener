@@ -62,7 +62,7 @@ func TestTaskBasics(t *testing.T) {
 	if tasks[2].State != state.Queuing {
 		t.Error("Should be queuing", tasks[2])
 	}
-	if tasks[2].Err.Error() != "test error" {
+	if tasks[2].ErrMsg != "test error" {
 		t.Error("Should have error", tasks[2])
 	}
 	if tasks[2].ErrInfo != "test" {
