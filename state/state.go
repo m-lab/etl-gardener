@@ -3,8 +3,12 @@ package state
 
 // NOTE: Avoid dependencies on any other m-lab code.
 import (
+	"context"
 	"errors"
 	"fmt"
+	"os"
+
+	"cloud.google.com/go/datastore"
 )
 
 // State indicates the state of a single Task in flight.
@@ -41,14 +45,35 @@ type Saver interface {
 
 // DatastoreSaver will implement a Saver that stores Task state in Datastore.
 type DatastoreSaver struct {
-	// TODO - add datastore stuff
+	Client    *datastore.Client
+	Namespace string
+}
+
+// NewDatastoreSaver creates and returns an appropriate saver.
+func NewDatastoreSaver() (*DatastoreSaver, error) {
+	project := os.Getenv("GCLOUD_PROJECT")
+	client, err := datastore.NewClient(context.Background(), project)
+	if err != nil {
+		return nil, err
+	}
+	return &DatastoreSaver{client, "gardener"}, nil
 }
 
 // SaveTask implements Saver.SaveTask using Datastore.
-func (s *DatastoreSaver) SaveTask(t Task) error { return nil }
+// TODO - do we want to use transactions and some consistency checking?
+func (ds *DatastoreSaver) SaveTask(t Task) error {
+	k := datastore.NameKey("task", t.Name, nil)
+	k.Namespace = ds.Namespace
+	_, err := ds.Client.Put(context.Background(), k, &t)
+	return err
+}
 
 // DeleteTask implements Saver.DeleteTask using Datastore.
-func (s *DatastoreSaver) DeleteTask(t Task) error { return nil }
+func (ds *DatastoreSaver) DeleteTask(t Task) error {
+	k := datastore.NameKey("task", t.Name, nil)
+	k.Namespace = ds.Namespace
+	return ds.Client.Delete(context.Background(), k)
+}
 
 // Task contains the state of a single Task.
 // These will be stored and retrieved from DataStore

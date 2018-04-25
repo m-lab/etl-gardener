@@ -48,6 +48,9 @@ func waitForStableTable(tt *bigquery.Table) error {
 	var err error
 	var meta *bigquery.TableMetadata
 	errorDeadline := time.Now().Add(2 * time.Minute)
+	if os.Getenv("UNIT_TEST_MODE") != "" {
+		errorDeadline = time.Now().Add(time.Second)
+	}
 ErrorTimeout:
 	// Check table status until streaming buffer is empty, OR there is
 	// an error condition we don't expect to recover from.
@@ -96,7 +99,7 @@ ErrorTimeout:
 	return err
 }
 
-// processOneRequest waits on the channel for a new request, and handles it.
+// waitAndDedup waits until table is stable, then deduplicates it.
 func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientOpts ...option.ClientOption) error {
 	parts, err := tq.ParsePrefix(task.Name)
 	if err != nil {
@@ -104,7 +107,7 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientO
 		log.Println(err)
 		// TODO update metric
 		metrics.FailCount.WithLabelValues("BadDedupPrefix")
-		task.SetError(err, "")
+		task.SetError(err, "BadDedupPrefix")
 		return err
 	}
 
@@ -113,7 +116,8 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientO
 	tt := ds.Table(parts[2] + "_" + strings.Join(strings.Split(parts[3], "/"), ""))
 	err = waitForStableTable(tt)
 	if err != nil {
-		task.SetError(err, "")
+		metrics.FailCount.WithLabelValues("WaitForStableTable")
+		task.SetError(err, "WaitForStableTable")
 		return err
 	}
 
@@ -134,7 +138,7 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientO
 		} else {
 			log.Println(err, tt.FullyQualifiedName())
 			metrics.FailCount.WithLabelValues("DedupJobError")
-			task.SetError(err, "")
+			task.SetError(err, "DedupJobError")
 			return err
 		}
 	} else {
@@ -144,13 +148,13 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientO
 		if err != nil {
 			log.Println(status.Err(), tt.FullyQualifiedName())
 			metrics.FailCount.WithLabelValues("DedupError")
-			task.SetError(err, "")
+			task.SetError(err, "DedupError1")
 			return err
 		}
 		if status.Err() != nil {
 			log.Println(status.Err(), tt.FullyQualifiedName())
 			metrics.FailCount.WithLabelValues("DedupError")
-			task.SetError(status.Err(), "")
+			task.SetError(status.Err(), "DedupError2")
 			return status.Err()
 		}
 	}
@@ -165,46 +169,50 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientO
 	err = tt.Delete(ctx)
 	if err != nil {
 		metrics.FailCount.WithLabelValues("TableDeleteErr")
-		task.SetError(err, "")
+		task.SetError(err, "TableDeleteErr")
 		log.Println(err)
 	}
 	if ctx.Err() != nil {
 		if ctx.Err() != context.DeadlineExceeded {
 			metrics.FailCount.WithLabelValues("TableDeleteTimeout")
 			log.Println(ctx.Err())
-			task.SetError(ctx.Err(), "")
+			task.SetError(ctx.Err(), "TableDeleteTimeout")
 			return err
 		}
 	}
 
 	log.Println("Deleted", tt.FullyQualifiedName())
+
+	task.JobID = ""
+	task.Save()
 	return nil
 }
 
 // handleLoop processes requests on input channel
 func (dh *DedupHandler) handleLoop(opts ...option.ClientOption) {
-	log.Println("Starting handler for ...")
-
-	for {
-		task, more := <-dh.MsgChan
-		if more {
-			ds, err := bqext.NewDataset(dh.Project, dh.Dataset, opts...)
-			if err != nil {
-				task.SetError(err, "NewDataset")
-				metrics.FailCount.WithLabelValues("NewDataset")
-				log.Println(err)
-				// TODO do we want to do any recovery here?
-				continue
-			}
-
-			dh.waitAndDedup(&ds, task, opts...)
-			// TODO - delete the task??
-		} else {
-			log.Println("Exiting handler for ...")
-			close(dh.ResponseChan)
-			break
+	var last state.Task
+	for task := range dh.MsgChan {
+		//testMode := strings.HasPrefix(task.Queue, "test-queue")
+		last = task
+		log.Println("Deduping", task)
+		ds, err := bqext.NewDataset(dh.Project, dh.Dataset, opts...)
+		if err != nil {
+			task.SetError(err, "NewDataset")
+			metrics.FailCount.WithLabelValues("NewDataset")
+			log.Println(err)
+			// TODO do we want to do any recovery here?
+			continue
 		}
+
+		dh.waitAndDedup(&ds, task, opts...)
+
+		// TODO - sanity check and copy to final destination.
+
+		task.Update(state.Done)
+		task.Delete()
 	}
+	log.Println("Exiting handler after", last)
+	close(dh.ResponseChan)
 }
 
 // NewDedupHandler creates a new QueueHandler, sets up a go routine to feed it

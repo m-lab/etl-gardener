@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"regexp"
 	"time"
 
@@ -86,7 +87,9 @@ func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 		stats, err := GetTaskqueueStats(qh.HTTPClient, qh.Project, qh.Queue)
 		if err != nil {
 			if err == io.EOF {
-				log.Println(err, "GetTaskqueueStats returned EOF - test client?")
+				if os.Getenv("UNIT_TEST_MODE") == "" {
+					log.Println(err, "GetTaskqueueStats returned EOF - test client?")
+				}
 				return
 			}
 			// We don't expect errors here, so log and retry,
@@ -153,39 +156,60 @@ func (qh *ChannelQueueHandler) processOneRequest(prefix string, bucketOpts ...op
 
 // handleLoop processes requests on input channel
 func (qh *ChannelQueueHandler) handleLoop(next api.TaskPipe, bucketOpts ...option.ClientOption) {
+	testMode := os.Getenv("UNIT_TEST_MODE") != ""
+	log.Println("testMode", testMode, os.Getenv("UNIT_TEST_MODE"))
+
 	log.Println("Starting handler for", qh.Queue)
+	// TODO - should we purge the queue here?
 	qh.waitForEmptyQueue()
-	for {
-		task, more := <-qh.MsgChan
-		if !more {
-			close(qh.ResponseChan)
-			break
-		}
+	for task := range qh.MsgChan {
+		log.Println("Handling", task)
 		task.Queue = qh.Queue
 		task.Update(state.Queuing)
 
 		n, err := qh.processOneRequest(task.Name, bucketOpts...)
-		if err != nil {
+		if err != nil && err != io.EOF {
 			// TODO return error through Response()
 			// Currently, processOneRequest logs error and increments metric.
+			log.Println(err)
+			task.SetError(err, "ProcessOneRequest")
+			continue
+		}
+		if testMode {
+			log.Println("test mode")
+			n = 1
 		}
 
-		// Must wait for empty queue before proceeding with dedupping.
-		// This ensures that the data has actually been processed, rather
-		// than just sitting in the queue or in the pipeline.
 		task.Update(state.Processing)
-		qh.waitForEmptyQueue()
 
-		task.Queue = ""
-		task.Update(state.Stabilizing)
+		if n > 0 {
+			// Must wait for empty queue before proceeding with dedupping.
+			// This ensures that the data has actually been processed, rather
+			// than just sitting in the queue or in the pipeline.
+			qh.waitForEmptyQueue()
+			task.Queue = ""
+			task.Update(state.Stabilizing)
 
-		log.Println(qh.Queue, "sending", task.Name, "to dedup handler")
-		// This may block if previous hasn't finished.  Should be rare.
-		if n > 0 && next != nil {
-			next.Sink() <- task
+			log.Println(qh.Queue, "sending", task.Name, "to dedup handler")
+			// This may block if previous hasn't finished.  Should be rare.
+			if next != nil {
+				next.Sink() <- task
+			} else {
+				// TODO - or error?
+				task.Queue = ""
+				task.Update(state.Done)
+			}
+		} else {
+			log.Println("No task files")
 		}
 	}
+	log.Println(qh.Queue, "waiting for deduper to close")
+	if next != nil {
+		close(next.Sink())
+		<-next.Response()
+	}
 	log.Println("Exiting handler for", qh.Queue)
+	close(qh.ResponseChan)
 }
 
 // StartHandleLoop starts a go routine that waits for work on channel, and
