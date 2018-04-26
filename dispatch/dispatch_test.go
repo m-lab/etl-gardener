@@ -31,7 +31,8 @@ func (s *S) DeleteTask(t state.Task) error { return nil }
 
 func assertSaver() { func(ex state.Saver) {}(&S{}) }
 
-func TestSaver(t *testing.T) {
+// Remove leading x to manually test DatastoreSaver.
+func xTestSaver(t *testing.T) {
 	os.Setenv("GCLOUD_PROJECT", "mlab-testing")
 
 	saver, err := state.NewDatastoreSaver()
