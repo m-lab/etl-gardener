@@ -191,8 +191,8 @@ func (qh *ChannelQueueHandler) handleLoop(next api.TaskPipe, bucketOpts ...optio
 			task.Update(state.Stabilizing)
 
 			log.Println(qh.Queue, "sending", task.Name, "to dedup handler")
-			// This may block if previous hasn't finished.  Should be rare.
 			if next != nil {
+				// This may block if previous hasn't finished.  Should be rare.
 				next.Sink() <- task
 			} else {
 				// TODO - or error?

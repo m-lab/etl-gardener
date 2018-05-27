@@ -127,11 +127,12 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientO
 	// if it still exists.
 	dest := ds.Table(parts[2] + "$" + strings.Join(strings.Split(parts[3], "/"), ""))
 	log.Println("Dedupping", tt.FullyQualifiedName())
-	//status, err := DedupAndWait(ds, tt.TableID, dest)
 	job, err := Dedup(ds, tt.TableID, dest)
-	// TODO - improve on this testing hack.
 	if err != nil {
 		if err == io.EOF {
+			// TODO - improve on this testing hack.
+			// It would be nice to use a fake Job, but that seems impossible.
+			// Could instead return our own Job interface object??
 			log.Println("EOF error - is this a test client?")
 			task.JobID = "fake jobID"
 			task.Save()
@@ -312,12 +313,3 @@ func Dedup(dsExt *bqext.Dataset, src string, destTable *bigquery.Table) (*bigque
 	return job, nil
 }
 
-// DedupAndWait executes a query that dedups and writes to destination partition.
-// Waits for query completion and returns JobStatus
-func DedupAndWait(dsExt *bqext.Dataset, src string, destTable *bigquery.Table) (*bigquery.JobStatus, error) {
-	job, err := Dedup(dsExt, src, destTable)
-	if err != nil {
-		return nil, err
-	}
-	return job.Wait(context.Background())
-}
