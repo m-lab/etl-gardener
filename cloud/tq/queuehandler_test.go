@@ -3,6 +3,7 @@ package tq_test
 import (
 	"fmt"
 	"log"
+	"os"
 	"testing"
 
 	"github.com/m-lab/etl-gardener/cloud/tq"
@@ -15,6 +16,10 @@ func init() {
 }
 
 func TestChannelQueueHandler(t *testing.T) {
+	err := os.Setenv("UNIT_TEST_MODE", "true")
+	if err != nil {
+		t.Fatal("Unable to setenv")
+	}
 	client, counter := tq.DryRunQueuerClient()
 	cqh, err := tq.NewChannelQueueHandler(client, "mlab-testing", "test-queue", nil)
 	if err != nil {
@@ -25,9 +30,9 @@ func TestChannelQueueHandler(t *testing.T) {
 	}
 	close(cqh.Sink())
 	<-cqh.Response()
-	// There will be one http request for each IsEmpty() call (10), and one for each task file (76).
+	// There will be one http request for each GetTaskqueueStatistics() call (10), and one for each task file (76).
 	if counter.Count() != 87 {
 		log.Println(counter.Count())
-		t.Error("Count != 87")
+		t.Errorf("Count = %d, expected 87", counter.Count())
 	}
 }

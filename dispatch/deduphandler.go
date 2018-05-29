@@ -48,6 +48,9 @@ func waitForStableTable(tt *bigquery.Table) error {
 	var err error
 	var meta *bigquery.TableMetadata
 	errorDeadline := time.Now().Add(2 * time.Minute)
+	if os.Getenv("UNIT_TEST_MODE") != "" {
+		errorDeadline = time.Now().Add(time.Second)
+	}
 ErrorTimeout:
 	// Check table status until streaming buffer is empty, OR there is
 	// an error condition we don't expect to recover from.
@@ -96,7 +99,7 @@ ErrorTimeout:
 	return err
 }
 
-// processOneRequest waits on the channel for a new request, and handles it.
+// waitAndDedup waits until table is stable, then deduplicates it.
 func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientOpts ...option.ClientOption) error {
 	parts, err := tq.ParsePrefix(task.Name)
 	if err != nil {
@@ -104,6 +107,7 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientO
 		log.Println(err)
 		// TODO update metric
 		metrics.FailCount.WithLabelValues("BadDedupPrefix")
+		task.SetError(err, "BadDedupPrefix")
 		return err
 	}
 
@@ -112,27 +116,52 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientO
 	tt := ds.Table(parts[2] + "_" + strings.Join(strings.Split(parts[3], "/"), ""))
 	err = waitForStableTable(tt)
 	if err != nil {
+		metrics.FailCount.WithLabelValues("WaitForStableTable")
+		task.SetError(err, "WaitForStableTable")
 		return err
 	}
+
+	task.Update(state.Deduplicating)
 
 	// Now deduplicate the table.  NOTE that this will overwrite the destination partition
 	// if it still exists.
 	dest := ds.Table(parts[2] + "$" + strings.Join(strings.Split(parts[3], "/"), ""))
 	log.Println("Dedupping", tt.FullyQualifiedName())
-	status, err := Dedup(ds, tt.TableID, dest)
+	job, err := Dedup(ds, tt.TableID, dest)
 	if err != nil {
 		if err == io.EOF {
+			// TODO - improve on this testing hack.
+			// It would be nice to use a fake Job, but that seems impossible.
+			// Could instead return our own Job interface object??
 			log.Println("EOF error - is this a test client?")
+			task.JobID = "fake jobID"
+			task.Save()
 		} else {
 			log.Println(err, tt.FullyQualifiedName())
-			metrics.FailCount.WithLabelValues("DedupFailed")
+			metrics.FailCount.WithLabelValues("DedupJobError")
+			task.SetError(err, "DedupJobError")
 			return err
 		}
-	} else if status.Err() != nil {
-		log.Println(status.Err(), tt.FullyQualifiedName())
-		metrics.FailCount.WithLabelValues("DedupError")
-		return err
+	} else {
+		task.JobID = job.ID()
+		task.Save()
+		status, err := job.Wait(context.Background())
+		if err != nil {
+			log.Println(status.Err(), tt.FullyQualifiedName())
+			metrics.FailCount.WithLabelValues("DedupError")
+			task.SetError(err, "DedupError1")
+			return err
+		}
+		if status.Err() != nil {
+			log.Println(status.Err(), tt.FullyQualifiedName())
+			metrics.FailCount.WithLabelValues("DedupError")
+			task.SetError(status.Err(), "DedupError2")
+			return status.Err()
+		}
 	}
+
+	task.JobID = ""
+	task.Update(state.Finishing)
 
 	log.Println("Completed deduplication, deleting", tt.FullyQualifiedName())
 	// If deduplication was successful, we should delete the source table.
@@ -141,43 +170,50 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientO
 	err = tt.Delete(ctx)
 	if err != nil {
 		metrics.FailCount.WithLabelValues("TableDeleteErr")
+		task.SetError(err, "TableDeleteErr")
 		log.Println(err)
 	}
 	if ctx.Err() != nil {
 		if ctx.Err() != context.DeadlineExceeded {
 			metrics.FailCount.WithLabelValues("TableDeleteTimeout")
 			log.Println(ctx.Err())
+			task.SetError(ctx.Err(), "TableDeleteTimeout")
 			return err
 		}
 	}
 
 	log.Println("Deleted", tt.FullyQualifiedName())
+
+	task.JobID = ""
+	task.Save()
 	return nil
 }
 
 // handleLoop processes requests on input channel
 func (dh *DedupHandler) handleLoop(opts ...option.ClientOption) {
-	log.Println("Starting handler for ...")
-
-	for {
-		task, more := <-dh.MsgChan
-		if more {
-			ds, err := bqext.NewDataset(dh.Project, dh.Dataset, opts...)
-			if err != nil {
-				metrics.FailCount.WithLabelValues("NewDataset")
-				log.Println(err)
-				// TODO do we want to do any recovery here?
-				continue
-			}
-
-			dh.waitAndDedup(&ds, task, opts...)
-			// TODO - delete the task??
-		} else {
-			log.Println("Exiting handler for ...")
-			close(dh.ResponseChan)
-			break
+	var last state.Task
+	for task := range dh.MsgChan {
+		//testMode := strings.HasPrefix(task.Queue, "test-queue")
+		last = task
+		log.Println("Deduping", task)
+		ds, err := bqext.NewDataset(dh.Project, dh.Dataset, opts...)
+		if err != nil {
+			task.SetError(err, "NewDataset")
+			metrics.FailCount.WithLabelValues("NewDataset")
+			log.Println(err)
+			// TODO do we want to do any recovery here?
+			continue
 		}
+
+		dh.waitAndDedup(&ds, task, opts...)
+
+		// TODO - sanity check and copy to final destination.
+
+		task.Update(state.Done)
+		task.Delete()
 	}
+	log.Println("Exiting handler after", last)
+	close(dh.ResponseChan)
 }
 
 // NewDedupHandler creates a new QueueHandler, sets up a go routine to feed it
@@ -244,7 +280,7 @@ var dedupTemplateSidestream = `
 //
 // NOTE: If destination table is partitioned, destTable MUST include the partition
 // suffix to avoid accidentally overwriting the entire table.
-func Dedup(dsExt *bqext.Dataset, src string, destTable *bigquery.Table) (*bigquery.JobStatus, error) {
+func Dedup(dsExt *bqext.Dataset, src string, destTable *bigquery.Table) (*bigquery.Job, error) {
 	if !strings.Contains(destTable.TableID, "$") {
 		meta, err := destTable.Metadata(context.Background())
 		if err == nil && meta.TimePartitioning != nil {
@@ -255,17 +291,25 @@ func Dedup(dsExt *bqext.Dataset, src string, destTable *bigquery.Table) (*bigque
 	}
 
 	log.Printf("Removing dups and writing to %s.%s\n", destTable.DatasetID, destTable.TableID)
+	var queryString string
 	switch {
 	case strings.HasPrefix(destTable.TableID, "sidestream"):
-		queryString := fmt.Sprintf(dedupTemplateSidestream, src)
-		query := dsExt.DestQuery(queryString, destTable, bigquery.WriteTruncate)
-		return dsExt.ExecDestQuery(query)
+		queryString = fmt.Sprintf(dedupTemplateSidestream, src)
 	case strings.HasPrefix(destTable.TableID, "ndt"):
-		queryString := fmt.Sprintf(dedupTemplateNDT, src)
-		query := dsExt.DestQuery(queryString, destTable, bigquery.WriteTruncate)
-		return dsExt.ExecDestQuery(query)
+		queryString = fmt.Sprintf(dedupTemplateNDT, src)
 	default:
 		metrics.FailCount.WithLabelValues("UnknownTableType")
 		return nil, errors.New("Only handles sidestream, ndt, not " + destTable.TableID)
 	}
+	query := dsExt.DestQuery(queryString, destTable, bigquery.WriteTruncate)
+
+	if query.QueryConfig.Dst == nil && query.QueryConfig.DryRun == false {
+		return nil, errors.New("query must be a destination or dry run")
+	}
+	job, err := query.Run(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return job, nil
 }
+

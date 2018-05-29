@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/m-lab/etl-gardener/dispatch"
+	"github.com/m-lab/etl-gardener/state"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -55,7 +56,13 @@ func dispatcherFromEnv(client *http.Client) (*dispatch.Dispatcher, error) {
 		return nil, errors.New("START_DATE not set")
 	}
 
-	return dispatch.NewDispatcher(client, project, queueBase, numQueues, startDate)
+	ds, err := state.NewDatastoreSaver()
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	return dispatch.NewDispatcher(client, project, queueBase, numQueues, startDate, ds)
 }
 
 // StartDateRFC3339 is the date at which reprocessing will start when it catches

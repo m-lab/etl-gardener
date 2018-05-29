@@ -3,7 +3,12 @@ package state
 
 // NOTE: Avoid dependencies on any other m-lab code.
 import (
+	"context"
 	"errors"
+	"fmt"
+	"os"
+
+	"cloud.google.com/go/datastore"
 )
 
 // State indicates the state of a single Task in flight.
@@ -21,6 +26,17 @@ const (
 	Done                // Done all processing, ok to delete state.
 )
 
+// StateNames maps from State to string, for use in String()
+var StateNames = map[State]string{
+	Initializing:  "Initializing",
+	Queuing:       "Queuing",
+	Processing:    "Processing",
+	Stabilizing:   "Stabilizing",
+	Deduplicating: "Deduplicating",
+	Finishing:     "Finishing",
+	Done:          "Done",
+}
+
 // Saver provides API for saving Task state.
 type Saver interface {
 	SaveTask(t Task) error
@@ -29,14 +45,35 @@ type Saver interface {
 
 // DatastoreSaver will implement a Saver that stores Task state in Datastore.
 type DatastoreSaver struct {
-	// TODO - add datastore stuff
+	Client    *datastore.Client
+	Namespace string
+}
+
+// NewDatastoreSaver creates and returns an appropriate saver.
+func NewDatastoreSaver() (*DatastoreSaver, error) {
+	project := os.Getenv("GCLOUD_PROJECT")
+	client, err := datastore.NewClient(context.Background(), project)
+	if err != nil {
+		return nil, err
+	}
+	return &DatastoreSaver{client, "gardener"}, nil
 }
 
 // SaveTask implements Saver.SaveTask using Datastore.
-func (s *DatastoreSaver) SaveTask(t Task) error { return nil }
+// TODO - do we want to use transactions and some consistency checking?
+func (ds *DatastoreSaver) SaveTask(t Task) error {
+	k := datastore.NameKey("task", t.Name, nil)
+	k.Namespace = ds.Namespace
+	_, err := ds.Client.Put(context.Background(), k, &t)
+	return err
+}
 
 // DeleteTask implements Saver.DeleteTask using Datastore.
-func (s *DatastoreSaver) DeleteTask(t Task) error { return nil }
+func (ds *DatastoreSaver) DeleteTask(t Task) error {
+	k := datastore.NameKey("task", t.Name, nil)
+	k.Namespace = ds.Namespace
+	return ds.Client.Delete(context.Background(), k)
+}
 
 // Task contains the state of a single Task.
 // These will be stored and retrieved from DataStore
@@ -46,10 +83,14 @@ type Task struct {
 	State       State
 	Queue       string // The queue the task files are submitted to, or "".
 	JobID       string // BigQuery JobID, when the state is Deduplicating
-	Err         error  // Task handling error, if any
+	ErrMsg      string // Task handling error, if any
 	ErrInfo     string // More context about any error, if any
 
 	saver Saver // Saver is used for Save operations. Stored locally, but not persisted.
+}
+
+func (t Task) String() string {
+	return fmt.Sprintf("{%s: %s, Q:%s, J:%s, E:%s (%s)}", t.Name, StateNames[t.State], t.Queue, t.JobID, t.ErrMsg, t.ErrInfo)
 }
 
 // ErrNoSaver is returned when saver has not been set.
@@ -85,7 +126,7 @@ func (t *Task) SetError(err error, info string) error {
 	if t.saver == nil {
 		return ErrNoSaver
 	}
-	t.Err = err
+	t.ErrMsg = err.Error()
 	t.ErrInfo = info
 	return t.saver.SaveTask(*t)
 }
