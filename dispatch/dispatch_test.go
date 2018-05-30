@@ -33,7 +33,7 @@ func assertSaver() { func(ex state.Saver) {}(&S{}) }
 
 // Remove leading x to manually test DatastoreSaver.
 func xTestSaver(t *testing.T) {
-	os.Setenv("GCLOUD_PROJECT", "mlab-testing")
+	os.Setenv("PROJECT", "mlab-testing")
 
 	saver, err := state.NewDatastoreSaver()
 	if err != nil {
@@ -49,7 +49,7 @@ func xTestSaver(t *testing.T) {
 }
 
 func TestDispatcherLifeCycle(t *testing.T) {
-	os.Setenv("GCLOUD_PROJECT", "mlab-testing")
+	os.Setenv("PROJECT", "mlab-testing")
 	os.Setenv("UNIT_TEST_MODE", "true")
 	// Use a fake client so we intercept all the http ops.
 	client, counter := tq.DryRunQueuerClient()

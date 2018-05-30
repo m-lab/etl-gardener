@@ -51,7 +51,7 @@ type DatastoreSaver struct {
 
 // NewDatastoreSaver creates and returns an appropriate saver.
 func NewDatastoreSaver() (*DatastoreSaver, error) {
-	project := os.Getenv("GCLOUD_PROJECT")
+	project := os.Getenv("PROJECT")
 	client, err := datastore.NewClient(context.Background(), project)
 	if err != nil {
 		return nil, err
