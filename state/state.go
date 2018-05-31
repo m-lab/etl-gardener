@@ -155,10 +155,10 @@ type Task struct {
 	JobID       string // BigQuery JobID, when the state is Deduplicating
 	ErrMsg      string // Task handling error, if any
 	ErrInfo     string // More context about any error, if any
-	Err         error  // TODO make this unexported
 
 	UpdateTime time.Time `datastore:",noindex"`
 
+	err   error // internal error representation.  Not persisted.
 	saver Saver // Saver is used for Save operations. Stored locally, but not persisted.
 }
 
@@ -202,7 +202,7 @@ func (t *Task) SourceAndDest(ds *bqext.Dataset) (*bigquery.Table, *bigquery.Tabl
 }
 
 func (t Task) String() string {
-	return fmt.Sprintf("{%s: %s, Q:%s, J:%s, E:%v (%s)}", t.Name, StateNames[t.State], t.Queue, t.JobID, t.Err, t.ErrInfo)
+	return fmt.Sprintf("{%s: %s, Q:%s, J:%s, E:%v (%s)}", t.Name, StateNames[t.State], t.Queue, t.JobID, t.err, t.ErrInfo)
 }
 
 // ErrNoSaver is returned when saver has not been set.
@@ -244,6 +244,16 @@ func (t *Task) SetError(err error, info string) error {
 	t.ErrInfo = info
 	t.UpdateTime = time.Now()
 	return t.saver.SaveTask(*t)
+}
+
+// HasError returns true if the task has encountered an error.
+func (t *Task) HasError() bool {
+	return t.err != nil || t.ErrMsg != ""
+}
+
+// IsSuspended indicates whether the task is suspended due to termination
+func (t *Task) IsSuspended() bool {
+	return t.err == ErrTaskSuspended || t.ErrMsg == ErrTaskSuspended.Error()
 }
 
 // SetSaver sets the value of the saver to be used for all other calls.

@@ -107,8 +107,9 @@ func (rex *ReprocessingExecutor) DoAction(t *state.Task, terminate <-chan struct
 		rex.waitForParsing(t, terminate)
 	case state.Stabilizing:
 		// Wait for the streaming buffer to be nil.
-		t.Err = dispatch.WaitForStableTable(nil)
-		if t.Err != nil {
+		err := dispatch.WaitForStableTable(nil)
+		if err != nil {
+			t.SetError(err, "WaitForStableTable")
 		}
 	case state.Deduplicating:
 		rex.dedup(t, terminate)
@@ -123,15 +124,15 @@ func (rex *ReprocessingExecutor) waitForParsing(t *state.Task, terminate <-chan 
 	// Don't want to accept a date until we can actually queue it.
 	qh, err := tq.NewQueueHandler(rex.Client, rex.Project, t.Queue)
 	if err != nil {
-		metrics.FailCount.WithLabelValues("NewDataset")
-		t.Err = err
+		metrics.FailCount.WithLabelValues("NewQueueHandler")
+		t.SetError(err, "NewQueueHandler")
 		return
 	}
 	log.Println("Wait for empty queue ", qh.Queue)
 	for err := qh.IsEmpty(); err != nil; err = qh.IsEmpty() {
 		select {
 		case <-terminate:
-			t.Err = state.ErrTaskSuspended
+			t.SetError(err, "Terminating")
 			return
 		default:
 		}
@@ -156,8 +157,8 @@ func (rex *ReprocessingExecutor) queue(t *state.Task, terminate <-chan struct{})
 	//func (qh *ChannelQueueHandler) handleLoop(next api.BasicPipe, bucketOpts ...option.ClientOption) {
 	qh, err := tq.NewQueueHandler(rex.Client, rex.Project, t.Queue)
 	if err != nil {
-		metrics.FailCount.WithLabelValues("NewDataset")
-		t.Err = err
+		metrics.FailCount.WithLabelValues("NewQueueHandler")
+		t.SetError(err, "NewQueueHandler")
 		return
 	}
 	parts, err := t.ParsePrefix()
@@ -165,7 +166,7 @@ func (rex *ReprocessingExecutor) queue(t *state.Task, terminate <-chan struct{})
 		// If there is a parse error, log and skip request.
 		log.Println(err)
 		metrics.FailCount.WithLabelValues("BadPrefix").Inc()
-		t.Err = err
+		t.SetError(err, "BadPrefix")
 		return
 	}
 	bucketName := parts[1]
@@ -173,7 +174,7 @@ func (rex *ReprocessingExecutor) queue(t *state.Task, terminate <-chan struct{})
 	if err != nil {
 		log.Println(err)
 		metrics.FailCount.WithLabelValues("BucketError").Inc()
-		t.Err = err
+		t.SetError(err, "BucketError")
 		return
 	}
 	// TODO maybe check terminate while queuing?
@@ -181,7 +182,7 @@ func (rex *ReprocessingExecutor) queue(t *state.Task, terminate <-chan struct{})
 	if err != nil {
 		log.Println(err)
 		metrics.FailCount.WithLabelValues("PostDayError").Inc()
-		t.Err = err
+		t.SetError(err, "PostDayError")
 		return
 	}
 	log.Println("Added ", n, t.Name, " tasks to ", qh.Queue)
@@ -192,13 +193,13 @@ func (rex *ReprocessingExecutor) dedup(t *state.Task, terminate <-chan struct{})
 	ds, err := rex.GetDS()
 	if err != nil {
 		metrics.FailCount.WithLabelValues("NewDataset")
-		t.Err = err
+		t.SetError(err, "GetDS")
 		return
 	}
 	src, dest, err := t.SourceAndDest(&ds)
 	if err != nil {
-		metrics.FailCount.WithLabelValues("BadDedupPrefix")
-		t.Err = err
+		metrics.FailCount.WithLabelValues("SourceAndDest")
+		t.SetError(err, "SourceAndDest")
 		return
 	}
 
@@ -211,7 +212,7 @@ func (rex *ReprocessingExecutor) dedup(t *state.Task, terminate <-chan struct{})
 		} else {
 			log.Println(err, src.FullyQualifiedName())
 			metrics.FailCount.WithLabelValues("DedupFailed")
-			t.Err = err
+			t.SetError(err, "DedupFailed")
 			return
 		}
 	}
@@ -258,19 +259,19 @@ func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}
 	ds, err := bqext.NewDataset(rex.Project, rex.Dataset, rex.Options...)
 	if err != nil {
 		metrics.FailCount.WithLabelValues("NewDataset")
-		t.Err = err
+		t.SetError(err, "NewDataset")
 		return
 	}
 	src, _, err := t.SourceAndDest(&ds)
 	if err != nil {
-		metrics.FailCount.WithLabelValues("BadDedupPrefix")
-		t.Err = err
+		metrics.FailCount.WithLabelValues("SourceAndDest")
+		t.SetError(err, "SourceAndDest")
 		return
 	}
 	job, err := ds.BqClient.JobFromID(context.Background(), t.JobID)
 	if err != nil {
 		metrics.FailCount.WithLabelValues("JobFromID")
-		t.Err = err
+		t.SetError(err, "JobFromID")
 		return
 	}
 	// TODO - should loop, and check terminate channel
@@ -279,8 +280,8 @@ func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}
 	if err != nil {
 		if err != state.ErrTaskSuspended {
 			log.Println(status.Err(), src.FullyQualifiedName())
-			metrics.FailCount.WithLabelValues("DedupError")
-			t.Err = err
+			metrics.FailCount.WithLabelValues("DedupJobWait")
+			t.SetError(err, "DedupJobWait")
 		}
 		return
 	}
@@ -297,8 +298,8 @@ func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}
 	}
 	if ctx.Err() != nil {
 		if ctx.Err() != context.DeadlineExceeded {
-			t.Err = ctx.Err()
 			metrics.FailCount.WithLabelValues("TableDeleteTimeout")
+			t.SetError(err, "TableDeleteTimeout")
 			log.Println(ctx.Err())
 			return
 		}
@@ -389,7 +390,7 @@ func (ss *ReprocState) MonitorTasks() {
 			ss.sysSaver.SaveSystem(ss)
 			ss.lock.Unlock()
 			ss.wg.Done()
-		} else if t.Err == state.ErrTaskSuspended {
+		} else if t.IsSuspended() {
 			ss.wg.Done()
 		}
 	}
