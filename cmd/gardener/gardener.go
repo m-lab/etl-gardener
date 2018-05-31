@@ -28,13 +28,18 @@ import (
 )
 
 // Environment provides "global" variables.
+// Any env vars that we want to read only at startup should be stored here.
 type environment struct {
-	Error error
-
+	// Vars for newDispatcher
+	Error     error
 	Project   string
 	QueueBase string
 	NumQueues int
 	StartDate time.Time
+
+	// Vars for Status()
+	Commit  string
+	Release string
 
 	TestMode bool
 }
@@ -82,6 +87,9 @@ func LoadEnv() {
 			log.Println(env.Error)
 		}
 	}
+
+	env.Commit = os.Getenv("GIT_COMMIT")
+	env.Release = os.Getenv("RELEASE_TAG")
 }
 
 func init() {
@@ -99,6 +107,11 @@ func init() {
 // dispatcherFromEnv creates a Dispatcher struct initialized from environment variables.
 // It uses PROJECT, QUEUE_BASE, and NUM_QUEUES.
 func dispatcherFromEnv(client *http.Client) (*dispatch.Dispatcher, error) {
+	if env.Error != nil {
+		log.Println(env.Error)
+		log.Println(env)
+		return nil, env.Error
+	}
 	ds, err := state.NewDatastoreSaver()
 	if err != nil {
 		log.Println(err)
@@ -141,13 +154,11 @@ func setupPrometheus() {
 // variables, so we can hide sensitive vars. https://github.com/m-lab/etl/issues/384
 func Status(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "<html><body>\n")
-	commit := os.Getenv("GIT_COMMIT")
-	release := os.Getenv("RELEASE_TAG")
-	if len(commit) >= 8 {
+	if len(env.Commit) >= 8 {
 		fmt.Fprintf(w, "Release: %s <br>  Commit: <a href=\"https://github.com/m-lab/etl-gardener/tree/%s\">%s</a><br>\n",
-			release, commit, commit[0:7])
+			env.Release, env.Commit, env.Commit[0:7])
 	} else {
-		fmt.Fprintf(w, "Release: %s <br>  Commit: unknown\n", release)
+		fmt.Fprintf(w, "Release: %s <br>  Commit: unknown\n", env.Release)
 	}
 
 	fmt.Fprintf(w, "</br></br>\n")
