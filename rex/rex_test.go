@@ -1,5 +1,5 @@
 package rex
 
-//func GetQueueChan(ss *SystemState) chan<- string {
-//	return ss.queues
-//}
+func GetQueueChan(ss *ReprocState) chan<- string {
+	return ss.queues
+}

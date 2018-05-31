@@ -99,8 +99,8 @@ func TestBasic(t *testing.T) {
 	}
 	go ss.DoDispatchLoop("Fake", []string{"ndt"}, time.Now().Add(-10*24*time.Hour))
 
-	//rex.GetQueueChan(ss) <- "Q1"
-	//rex.GetQueueChan(ss) <- "Q2"
+	rex.GetQueueChan(ss) <- "Q1"
+	rex.GetQueueChan(ss) <- "Q2"
 	time.Sleep(20 * time.Millisecond)
 	ss.Terminate()
 	ss.WaitForTerminate()
