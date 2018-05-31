@@ -50,7 +50,6 @@ func xTestSaver(t *testing.T) {
 
 func TestDispatcherLifeCycle(t *testing.T) {
 	os.Setenv("PROJECT", "mlab-testing")
-	os.Setenv("UNIT_TEST_MODE", "true")
 	// Use a fake client so we intercept all the http ops.
 	client, counter := tq.DryRunQueuerClient()
 

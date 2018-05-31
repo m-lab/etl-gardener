@@ -3,6 +3,7 @@ package dispatch
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -18,6 +19,21 @@ import (
 	"github.com/m-lab/go/bqext"
 	"google.golang.org/api/option"
 )
+
+// Environment provides "global" variables.
+type environment struct {
+	TestMode bool
+}
+
+// env provides environment vars.
+var env environment
+
+func init() {
+	// HACK This allows some modified behavior when running unit tests.
+	if flag.Lookup("test.v") != nil {
+		env.TestMode = true
+	}
+}
 
 // Dedup related errors.
 var (
@@ -44,13 +60,14 @@ func (dh *DedupHandler) Response() <-chan error {
 
 // WaitForStableTable loops checking until table exists and has no streaming buffer.
 func WaitForStableTable(tt *bigquery.Table) error {
+	errorTimeout := 2 * time.Minute
+	if env.TestMode {
+		errorTimeout = time.Second
+	}
+	errorDeadline := time.Now().Add(errorTimeout)
 	log.Println("Wait for table ready", tt.FullyQualifiedName())
 	var err error
 	var meta *bigquery.TableMetadata
-	errorDeadline := time.Now().Add(2 * time.Minute)
-	if os.Getenv("UNIT_TEST_MODE") != "" {
-		errorDeadline = time.Now().Add(time.Second)
-	}
 ErrorTimeout:
 	// Check table status until streaming buffer is empty, OR there is
 	// an error condition we don't expect to recover from.
@@ -62,10 +79,11 @@ ErrorTimeout:
 			// Convert context timeout into regular error.
 			err = ctx.Err()
 		}
+
 		switch {
 		case err == nil:
 			// Restart the timer whenever Metadata succeeds.
-			errorDeadline = time.Now().Add(2 * time.Minute)
+			errorDeadline = time.Now().Add(errorTimeout)
 			if meta.StreamingBuffer == nil {
 				// Buffer is empty, so we can move on.
 				return nil
