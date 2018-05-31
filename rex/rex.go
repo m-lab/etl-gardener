@@ -97,6 +97,7 @@ var ErrNoSaver = errors.New("Task.saver is nil")
 // It may terminate prematurely if terminate is closed prior to completion.
 // TODO - consider returning any error to caller.
 func (rex *ReprocessingExecutor) DoAction(t *state.Task, terminate <-chan struct{}) {
+	log.Println("Do", t)
 	// Note that only the state in state.Task is maintained between actions.
 	switch t.State {
 	case state.Initializing:
@@ -107,9 +108,20 @@ func (rex *ReprocessingExecutor) DoAction(t *state.Task, terminate <-chan struct
 		rex.waitForParsing(t, terminate)
 	case state.Stabilizing:
 		// Wait for the streaming buffer to be nil.
-		err := dispatch.WaitForStableTable(nil)
+		ds, err := rex.GetDS()
+		if err != nil {
+			t.SetError(err, "GetDS")
+			return
+		}
+		s, _, err := t.SourceAndDest(&ds)
+		if err != nil {
+			t.SetError(err, "SourceAndDest")
+			return
+		}
+		err = dispatch.WaitForStableTable(s)
 		if err != nil {
 			t.SetError(err, "WaitForStableTable")
+			return
 		}
 	case state.Deduplicating:
 		rex.dedup(t, terminate)
@@ -437,7 +449,7 @@ func (ss *ReprocState) DoDispatchLoop(bucket string, experiments []string, start
 				return
 			case q := <-ss.queues:
 				prefix := ss.NextDate.Format(fmt.Sprintf("gs://%s/%s/2006/01/02/", bucket, e))
-				t := state.Task{Name: prefix, Queue: q}
+				t := state.Task{Name: prefix, State: state.Initializing, Queue: q}
 				// This may block waiting for a queue.ch
 				ss.Add(t)
 			}
