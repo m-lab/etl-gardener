@@ -7,6 +7,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -26,6 +27,71 @@ import (
 	_ "expvar"
 )
 
+// Environment provides "global" variables.
+type environment struct {
+	Error error
+
+	Project   string
+	QueueBase string
+	NumQueues int
+	StartDate time.Time
+
+	TestMode bool
+}
+
+// env provides environment vars.
+var env environment
+
+// Errors associated with environment.
+var (
+	ErrNoProject    = errors.New("No env var for Project")
+	ErrNoQueueBase  = errors.New("No env var for QueueBase")
+	ErrNoNumQueues  = errors.New("No env var for NumQueues")
+	ErrNoStartDate  = errors.New("No env var for StartDate")
+	ErrBadStartDate = errors.New("Bad StartDate")
+)
+
+// LoadEnv loads any required environment variables.
+func LoadEnv() {
+	var ok bool
+	env.Project, ok = os.LookupEnv("PROJECT")
+	if !ok {
+		env.Error = ErrNoProject
+		log.Println(env.Error)
+	}
+	env.QueueBase, ok = os.LookupEnv("QUEUE_BASE")
+	if !ok {
+		env.Error = ErrNoQueueBase
+		log.Println(env.Error)
+	}
+	var err error
+	env.NumQueues, err = strconv.Atoi(os.Getenv("NUM_QUEUES"))
+	if err != nil {
+		env.Error = ErrNoNumQueues
+		log.Println(err)
+		log.Println(env.Error)
+	}
+	startString, ok := os.LookupEnv("START_DATE")
+	if !ok {
+		env.Error = ErrNoStartDate
+		log.Println(env.Error)
+	} else {
+		env.StartDate, err = time.Parse("20060102", startString)
+		if !ok {
+			env.Error = ErrBadStartDate
+			log.Println(env.Error)
+		}
+	}
+}
+
+func init() {
+	// HACK This allows some modified behavior when running unit tests.
+	if flag.Lookup("test.v") != nil {
+		env.TestMode = true
+	}
+	LoadEnv()
+}
+
 // ###############################################################################
 //  Batch processing task scheduling and support code
 // ###############################################################################
@@ -33,36 +99,13 @@ import (
 // dispatcherFromEnv creates a Dispatcher struct initialized from environment variables.
 // It uses PROJECT, QUEUE_BASE, and NUM_QUEUES.
 func dispatcherFromEnv(client *http.Client) (*dispatch.Dispatcher, error) {
-	project, ok := os.LookupEnv("PROJECT")
-	if !ok {
-		return nil, errors.New("PROJECT not set")
-	}
-	queueBase, ok := os.LookupEnv("QUEUE_BASE")
-	if !ok {
-		return nil, errors.New("QUEUE_BASE not set")
-	}
-	numQueues, err := strconv.Atoi(os.Getenv("NUM_QUEUES"))
-	if err != nil {
-		log.Println(err)
-		return nil, errors.New("Parse error on NUM_QUEUES")
-	}
-	startString, ok := os.LookupEnv("START_DATE")
-	if !ok {
-		return nil, errors.New("START_DATE not set")
-	}
-	startDate, err := time.Parse("20060102", startString)
-	if err != nil {
-		log.Println("Invalid start date:", startString)
-		return nil, errors.New("START_DATE not set")
-	}
-
 	ds, err := state.NewDatastoreSaver()
 	if err != nil {
 		log.Println(err)
 		return nil, err
 	}
 
-	return dispatch.NewDispatcher(client, project, queueBase, numQueues, startDate, ds)
+	return dispatch.NewDispatcher(client, env.Project, env.QueueBase, env.NumQueues, env.StartDate, ds)
 }
 
 // StartDateRFC3339 is the date at which reprocessing will start when it catches

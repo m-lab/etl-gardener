@@ -19,6 +19,18 @@ import (
 	"github.com/m-lab/go/bqext"
 )
 
+// Environment provides "global" variables.
+type environment struct {
+	Project string
+}
+
+// env provides environment vars.
+var env environment
+
+func init() {
+	env.Project = os.Getenv("PROJECT")
+}
+
 // High level design:
 //  SystemState holds the dispatcher state, and has a GoRoutine that handles
 //  state changes communicated to it through a single channel.
@@ -84,8 +96,7 @@ type DatastoreSaver struct {
 
 // NewDatastoreSaver creates and returns an appropriate saver.
 func NewDatastoreSaver() (*DatastoreSaver, error) {
-	project := os.Getenv("PROJECT")
-	client, err := datastore.NewClient(context.Background(), project)
+	client, err := datastore.NewClient(context.Background(), env.Project)
 	if err != nil {
 		return nil, err
 	}
