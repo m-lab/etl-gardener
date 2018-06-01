@@ -10,6 +10,7 @@ package rex
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -26,6 +27,21 @@ import (
 	"github.com/m-lab/go/bqext"
 	"google.golang.org/api/option"
 )
+
+// Environment provides "global" variables.
+type environment struct {
+	TestMode bool
+}
+
+// env provides environment vars.
+var env environment
+
+func init() {
+	// HACK This allows some modified behavior when running unit tests.
+	if flag.Lookup("test.v") != nil {
+		env.TestMode = true
+	}
+}
 
 // SaveSystem saves the top level system state.
 func (s *DatastoreSaver) SaveSystem(ss *ReprocState) error { return nil }
@@ -152,6 +168,10 @@ func (rex *ReprocessingExecutor) waitForParsing(t *state.Task, terminate <-chan 
 			// Wait 5-15 seconds before checking again.
 			time.Sleep(time.Duration(5+rand.Intn(10)) * time.Second)
 		} else if err != nil {
+			if err == io.EOF && env.TestMode {
+				// Expected when using test client.
+				return
+			}
 			// We don't expect errors here, so try logging, and a large backoff
 			// in case there is some bad network condition, service failure,
 			// or perhaps the queue_pusher is down.
@@ -220,7 +240,10 @@ func (rex *ReprocessingExecutor) dedup(t *state.Task, terminate <-chan struct{})
 	job, err := dispatch.Dedup(&ds, src.TableID, dest)
 	if err != nil {
 		if err == io.EOF {
-			log.Println("EOF error - is this a test client?")
+			if env.TestMode {
+				t.JobID = "fakeJobID"
+				return
+			}
 		} else {
 			log.Println(err, src.FullyQualifiedName())
 			metrics.FailCount.WithLabelValues("DedupFailed")

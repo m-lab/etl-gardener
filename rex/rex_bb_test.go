@@ -3,13 +3,13 @@ package rex_test
 import (
 	"log"
 	"math/rand"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/rex"
 	"github.com/m-lab/etl-gardener/state"
+	"google.golang.org/api/option"
 )
 
 func init() {
@@ -122,20 +122,19 @@ func TestBasic(t *testing.T) {
 }
 
 func TestActual(t *testing.T) {
-	os.Setenv("PROJECT", "mlab-testing")
-	os.Setenv("DATASET", "dataset")
-
 	saver := testSaver{make(map[string][]state.Task), make(map[string]struct{})}
 	client, counter := tq.DryRunQueuerClient()
-	exec := rex.ReprocessingExecutor{Client: client, Project: "mlab-testing", Dataset: "fake"}
+	options := []option.ClientOption{option.WithHTTPClient(client)}
+	exec := rex.ReprocessingExecutor{Client: client, Project: "mlab-testing", Dataset: "fake", Options: options, BucketOpts: options}
 	ss := rex.LoadAndInitReprocState(&L{}, &exec, &saver, &SS{})
 	if len(ss.AllTasks) != 0 {
 		t.Fatal("error", ss.AllTasks)
 	}
 	go ss.DoDispatchLoop("Fake", []string{"ndt"}, time.Now().Add(-10*24*time.Hour))
 
+	// Add two (fake) task queues.
 	rex.GetQueueChan(ss) <- "Q1"
-	//rex.GetQueueChan(ss) <- "Q2"
+	rex.GetQueueChan(ss) <- "Q2"
 	time.Sleep(20 * time.Millisecond)
 	ss.Terminate()
 	ss.WaitForTerminate()
