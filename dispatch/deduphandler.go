@@ -328,6 +328,7 @@ func Dedup(dsExt *bqext.Dataset, src string, destTable *bigquery.Table) (*bigque
 	}
 	job, err := query.Run(context.Background())
 	if err != nil {
+		log.Println("Err on query.Run")
 		return nil, err
 	}
 	return job, nil

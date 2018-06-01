@@ -332,7 +332,7 @@ type ReprocState struct {
 	allTasks map[string]state.Task // Cache from task names to Task
 
 	lock        *sync.Mutex
-	queues      chan string // Available queues
+	queues      chan string // Names of idle task queues.
 	terminating bool        // Indicates when tasks are being terminated.
 	terminate   chan<- struct{}
 	updateChan  <-chan state.Task
