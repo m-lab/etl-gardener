@@ -185,6 +185,9 @@ func (rex *ReprocessingExecutor) queue(t *state.Task, terminate <-chan struct{})
 	bucketName := parts[1]
 	bucket, err := tq.GetBucket(rex.BucketOpts, rex.Project, bucketName, false)
 	if err != nil {
+		if err == io.EOF && env.TestMode {
+			log.Println("Using fake client, so can't get real bucket")
+		}
 		log.Println(err)
 		metrics.FailCount.WithLabelValues("BucketError").Inc()
 		t.SetError(err, "BucketError")
@@ -237,6 +240,7 @@ func (rex *ReprocessingExecutor) dedup(t *state.Task, terminate <-chan struct{})
 
 // WaitForJob waits for job to complete.  Uses fibonacci backoff until the backoff
 // >= maxBackoff, at which point it continues using same backoff.
+// TODO - develop a BQJob interface for wrapping bigquery.Job, and allowing fakes.
 // TODO - move this to go/bqext, since it is bigquery specific and general purpose.
 func waitForJob(ctx context.Context, job *bigquery.Job, maxBackoff time.Duration, terminate <-chan struct{}) error {
 	backoff := 10 * time.Millisecond
