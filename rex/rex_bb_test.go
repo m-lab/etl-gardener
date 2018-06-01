@@ -139,11 +139,24 @@ func TestActual(t *testing.T) {
 	ss.Terminate()
 	ss.WaitForTerminate()
 
-	for i := range saver.tasks {
-		log.Println(i, len(saver.tasks[i]), saver.tasks[i][len(saver.tasks[i])-1])
-	}
-	log.Printf("%v\n", saver.delete)
 	log.Println(len(saver.tasks), len(saver.delete))
+	for i := range saver.tasks {
+		// We should see 13 state updates for each task.
+		if len(saver.tasks[i]) != 13 {
+			t.Error(i, len(saver.tasks[i]), saver.tasks[i][len(saver.tasks[i])-1])
+		}
+		// Each task should end in Done state.
+		if saver.tasks[i][len(saver.tasks[i])-1].State != state.Done {
+			t.Error(i, len(saver.tasks[i]), saver.tasks[i][len(saver.tasks[i])-1])
+		}
+	}
 
-	log.Println(counter)
+	if len(saver.delete) != 3 {
+		// TODO
+		// t.Error("Expected all tasks to be deleted", saver.delete)
+	}
+
+	if counter.Count() != 15 {
+		t.Error("Expected total of 15 http calls")
+	}
 }
