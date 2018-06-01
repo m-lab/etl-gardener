@@ -43,29 +43,9 @@ func init() {
 	}
 }
 
-// SaveSystem saves the top level system state.
-func (s *DatastoreSaver) SaveSystem(ss *ReprocState) error { return nil }
-
-// DatastoreSaver will implement a Saver that stores Task state in Datastore.
-type DatastoreSaver struct {
-	// TODO - add datastore stuff
-}
-
-// SaveTask implements Saver.SaveTask using Datastore.
-func (s *DatastoreSaver) SaveTask(t state.Task) error {
-	log.Println("Saving", t)
-	return nil
-}
-
-// DeleteTask implements Saver.DeleteTask using Datastore.
-func (s *DatastoreSaver) DeleteTask(t state.Task) error {
-	log.Println("Deleting", t)
-	return nil
-}
-
 // Loader provides API for persisting and retrieving state.
 type Loader interface {
-	LoadFromPS(ss *ReprocState)
+	LoadFromPS(rs *ReprocState)
 }
 
 // SysSaver provides API for persisting system state.
@@ -113,7 +93,6 @@ var ErrNoSaver = errors.New("Task.saver is nil")
 // It may terminate prematurely if terminate is closed prior to completion.
 // TODO - consider returning any error to caller.
 func (rex *ReprocessingExecutor) DoAction(t *state.Task, terminate <-chan struct{}) {
-	log.Println("Do", t)
 	// Note that only the state in state.Task is maintained between actions.
 	switch t.State {
 	case state.Initializing:
@@ -143,6 +122,8 @@ func (rex *ReprocessingExecutor) DoAction(t *state.Task, terminate <-chan struct
 		rex.dedup(t, terminate)
 	case state.Finishing:
 		rex.finish(t, terminate)
+	case state.Done:
+		t.Delete()
 	}
 }
 
@@ -360,14 +341,15 @@ type ReprocState struct {
 	terminate   chan<- struct{}
 	updateChan  <-chan state.Task
 	sysSaver    SysSaver
+	taskSaver   state.Saver
 	helpers     state.Helpers
 
 	wg *sync.WaitGroup // Tracks how many active Tasks there are.
 }
 
 // String formats the ReprocState for printing.
-func (ss ReprocState) String() string {
-	return fmt.Sprintf("{%s %s}", ss.NextDate.Format("2006/01/02"), ss.AllTasks)
+func (rs ReprocState) String() string {
+	return fmt.Sprintf("{%s %s}", rs.NextDate.Format("2006/01/02"), rs.AllTasks)
 }
 
 // Thread safety invariants for ReprocState
@@ -399,92 +381,95 @@ func newReprocState(ex state.Executor, taskSaver state.Saver, sysSaver SysSaver)
 
 // LoadAndInitReprocState creates a new system state object, and initializes it from ps.
 func LoadAndInitReprocState(ldr Loader, ex state.Executor, taskSaver state.Saver, sysSaver SysSaver) *ReprocState {
-	ss := newReprocState(ex, taskSaver, sysSaver)
+	rs := newReprocState(ex, taskSaver, sysSaver)
 	// Set up the go routine that listens for Task state changes.
-	go ss.MonitorTasks()
+	go rs.MonitorTasks()
 	// This loads initial state and calls Add() on each
 	// existing task.
-	ldr.LoadFromPS(ss)
+	ldr.LoadFromPS(rs)
 
 	// Caller should call StartNextTask() on any unused queues ??
-	return ss
+	return rs
 }
 
 // MonitorTasks processes input from updateChan.
-func (ss *ReprocState) MonitorTasks() {
-	for t := range ss.updateChan {
+func (rs *ReprocState) MonitorTasks() {
+	for t := range rs.updateChan {
 		// Update local cache (persistent store should be updated by Task)
-		if t.Queue == "" && ss.allTasks[t.Name].Queue != "" {
-			ss.queues <- ss.allTasks[t.Name].Queue
+		if t.Queue == "" && rs.allTasks[t.Name].Queue != "" {
+			rs.queues <- rs.allTasks[t.Name].Queue
 		}
-		ss.allTasks[t.Name] = t
+		rs.allTasks[t.Name] = t
 		if t.State == state.Done {
-			ss.lock.Lock()
-			delete(ss.allTasks, t.Name)
-			delete(ss.AllTasks, t.Name)
-			ss.sysSaver.SaveSystem(ss)
-			ss.lock.Unlock()
-			ss.wg.Done()
+			rs.lock.Lock()
+			delete(rs.allTasks, t.Name)
+			delete(rs.AllTasks, t.Name)
+			rs.sysSaver.SaveSystem(rs)
+			t.Delete()
+			rs.lock.Unlock()
+			rs.wg.Done()
 		} else if t.IsSuspended() {
-			ss.wg.Done()
+			rs.wg.Done()
 		}
 	}
 }
 
 // Describe writes a description of the complete state to w
-func (ss *ReprocState) Describe(w *io.Writer) {
+func (rs *ReprocState) Describe(w *io.Writer) {
 
 }
 
 // Add adds a single task.  Msg back to updateChan will update local state and DS
-func (ss *ReprocState) Add(t state.Task) {
-	ss.lock.Lock()
-	defer ss.lock.Unlock()
-	if !ss.terminating {
-		ss.AllTasks[t.Name] = struct{}{}
-		ss.sysSaver.SaveSystem(ss)
-		ss.wg.Add(1)
-		go t.Process(ss.helpers)
+func (rs *ReprocState) Add(t state.Task) {
+	rs.lock.Lock()
+	defer rs.lock.Unlock()
+	if !rs.terminating {
+		rs.AllTasks[t.Name] = struct{}{}
+		rs.sysSaver.SaveSystem(rs)
+		rs.wg.Add(1)
+		go t.Process(rs.helpers)
 	}
 }
 
 // Terminate signals all Tasks to terminate
-func (ss *ReprocState) Terminate() {
+func (rs *ReprocState) Terminate() {
 	log.Println("Terminating")
-	ss.terminating = true
-	close(ss.terminate)
+	rs.terminating = true
+	close(rs.terminate)
 }
 
 // WaitForTerminate waits until all Tasks have terminated.
-func (ss *ReprocState) WaitForTerminate() {
-	ss.wg.Done() // Consume wait for ReprocState
-	ss.wg.Wait() // Wait until all Tasks have completed.
+func (rs *ReprocState) WaitForTerminate() {
+	rs.wg.Done() // Consume wait for ReprocState
+	rs.wg.Wait() // Wait until all Tasks have completed.
 }
 
 // DoDispatchLoop just sequences through archives in date order.
 // It will generally be blocked on the queues.
-func (ss *ReprocState) DoDispatchLoop(bucket string, experiments []string, startDate time.Time) {
+func (rs *ReprocState) DoDispatchLoop(bucket string, experiments []string, startDate time.Time) {
 	for {
 		for _, e := range experiments {
 			time.Sleep(5 * time.Millisecond) // Good for testing, and negligible for production.
 			select {
-			case <-ss.helpers.Terminate:
+			case <-rs.helpers.Terminate:
 				return
-			case q := <-ss.queues:
-				prefix := ss.NextDate.Format(fmt.Sprintf("gs://%s/%s/2006/01/02/", bucket, e))
-				t := state.Task{Name: prefix, State: state.Initializing, Queue: q}
+			case q := <-rs.queues:
+				prefix := rs.NextDate.Format(fmt.Sprintf("gs://%s/%s/2006/01/02/", bucket, e))
+				t := state.NewTask(prefix, rs.taskSaver)
+				t.State = state.Initializing
+				t.Queue = q
 				// This may block waiting for a queue.ch
-				ss.Add(t)
+				rs.Add(t)
 			}
 		}
 
-		ss.NextDate = ss.NextDate.AddDate(0, 0, 1)
+		rs.NextDate = rs.NextDate.AddDate(0, 0, 1)
 
 		// If gardener has processed all dates up to two days ago,
 		// start over.
-		if ss.NextDate.Add(48 * time.Hour).After(time.Now()) {
+		if rs.NextDate.Add(48 * time.Hour).After(time.Now()) {
 			// TODO - load this from DataStore
-			ss.NextDate = startDate
+			rs.NextDate = startDate
 		}
 	}
 }

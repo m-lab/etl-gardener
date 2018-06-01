@@ -135,14 +135,13 @@ func (ds *DatastoreSaver) DeleteTask(t Task) error {
 // Helpers contains all the helpers required when running a Task.
 type Helpers struct {
 	ex        Executor
-	saver     Saver
 	Updater   chan<- Task
 	Terminate <-chan struct{}
 }
 
 // NewHelpers returns a new Helpers object.
 func NewHelpers(ex Executor, saver Saver, updater chan<- Task, terminator <-chan struct{}) Helpers {
-	return Helpers{ex, saver, updater, terminator}
+	return Helpers{ex, updater, terminator}
 }
 
 // Task contains the state of a single Task.
@@ -159,7 +158,12 @@ type Task struct {
 	UpdateTime time.Time `datastore:",noindex"`
 
 	err   error // internal error representation.  Not persisted.
-	saver Saver // Saver is used for Save operations. Stored locally, but not persisted.
+	saver Saver // Saver is used for Save, Update, Delete, SetError operations.  Stored locally, but not persisted.
+}
+
+// NewTask creates a new task, which will use the provided Saver for persistence operations.
+func NewTask(name string, saver Saver) Task {
+	return Task{Name: name, saver: saver}
 }
 
 // HACK - remove from tq package?
@@ -277,7 +281,7 @@ func nop() {}
 // Process handles all steps of processing a task.
 // TODO: Real implementation. This is a dummy implementation, to support testing TaskHandler.
 func (t Task) Process(ex Executor, tq chan<- string, term Terminator) {
-	for t.State != Done && t.Err == nil {
+	for t.State != Done && t.err == nil {
 		select {
 		case <-term.GetNotifyChannel():
 			break
