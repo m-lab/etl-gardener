@@ -378,7 +378,9 @@ func newReprocState(ex state.Executor, taskSaver state.Saver, sysSaver SysSaver)
 		terminating: false,
 		terminate:   terminate,
 		updateChan:  updater,
-		helpers:     state.NewHelpers(ex, taskSaver, updater, terminate), sysSaver: sysSaver, wg: &wg}
+		helpers:     state.NewHelpers(ex, updater, terminate),
+		sysSaver:    sysSaver,
+		wg:          &wg}
 	sysState.wg.Add(1)
 	return &sysState
 }

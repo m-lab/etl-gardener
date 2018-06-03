@@ -134,14 +134,14 @@ func (ds *DatastoreSaver) DeleteTask(t Task) error {
 
 // Helpers contains all the helpers required when running a Task.
 type Helpers struct {
-	ex        Executor
-	Updater   chan<- Task
-	Terminate <-chan struct{}
+	ex            Executor
+	UpdaterChan   chan<- Task
+	TerminateChan <-chan struct{}
 }
 
 // NewHelpers returns a new Helpers object.
-func NewHelpers(ex Executor, saver Saver, updater chan<- Task, terminator <-chan struct{}) Helpers {
-	return Helpers{ex, updater, terminator}
+func NewHelpers(ex Executor, updaterChan chan<- Task, terminatorChan <-chan struct{}) Helpers {
+	return Helpers{ex, updaterChan, terminatorChan}
 }
 
 // Task contains the state of a single Task.
@@ -284,17 +284,19 @@ func (t Task) Process(ex Executor, tq chan<- string, term Terminator) {
 	for t.State != Done && t.err == nil {
 		select {
 		case <-term.GetNotifyChannel():
-			break
+			t.SetError(ErrTaskSuspended, "Terminating")
+			return
 		default:
 			switch t.State {
-			default:
+			case Initializing:
 				tq <- t.Queue
+
+			default:
 				ex.DoAction(&t, term.GetNotifyChannel())
 				ex.AdvanceState(&t)
 			}
 		}
 	}
-	log.Println("Quitting", t)
 	term.Done()
 }
 
