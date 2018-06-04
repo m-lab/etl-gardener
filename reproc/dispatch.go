@@ -1,17 +1,14 @@
 // Package reproc handles the top level coordination of reprocessing tasks.
 // Its primary responsibilities are:
 //   1. Keep track of tasks in flight.
-//   2. Allocate task queues.
-//   3. Create new tasks.
-//   4. Maintain the persistent state as tasks are created and finished.
+//   2. Create new tasks.
+//   3. Allocate available task queues to new Tasks.
+//   4. Maintain the top level persistent state as tasks are created and finished.
 //   5. Provide status snapshots.
-//
-// A separate Task (??) package provides the detailed processing of individual tasks.
-// TODO make this the dispatch package?
+//   6. Coordinate termination.
 package reproc
 
 import (
-	"flag"
 	"io"
 	"log"
 	"sync"
@@ -19,20 +16,9 @@ import (
 	"github.com/m-lab/etl-gardener/state"
 )
 
-// Environment provides "global" variables.
-type environment struct {
-	TestMode bool
-}
-
-// env provides environment vars.
-var env environment
-
-func init() {
-	// HACK This allows some modified behavior when running unit tests.
-	if flag.Lookup("test.v") != nil {
-		env.TestMode = true
-	}
-}
+/*****************************************************************************/
+/*                         Terminator helper struct                          */
+/*****************************************************************************/
 
 // Terminator provides signals for a termination process.
 //  GetNotifyChannel to get the channel that goroutines should monitor.
@@ -71,15 +57,24 @@ func NewTerminator() *Terminator {
 	return &Terminator{sem, make(chan struct{}), sync.WaitGroup{}}
 }
 
-type statusRequest struct {
-	io.Writer
-	done chan struct{}
-}
+/*****************************************************************************/
+/*                               TaskTracker                                 */
+/*****************************************************************************/
 
 // TaskTracker handles the top level Task coordination and persistence.
+// It is a bit complicated because it is responsible for tracking
+// multiple tasks, each with its own goroutine, status requests (coming from
+// the http server), new task requests, and the termination signal.  It
+// coordinates processing of these sources using selects on channels, avoiding
+// other synchronization primitives, aside from a single WaitGroup used to
+// track how many goroutines are in flight.
+//
+// TODO: Eventually, TaskTracker will also be responsible for persisting state
+// changes to Datastore, through a StateSaver.
+//
 // All exported methods are safe to call from any goroutine.
 // All non-exported methods should be called only from the single goroutine
-// executing Handle
+// launched by RunHandler.
 type TaskTracker struct {
 	updates        chan<- state.Task    // Channel for submitting updates.
 	statusRequests chan<- statusRequest // status request channel
@@ -87,6 +82,11 @@ type TaskTracker struct {
 
 	// For managing termination.
 	*Terminator
+}
+
+type statusRequest struct {
+	io.Writer
+	done chan struct{}
 }
 
 // StartTaskTracker creates and starts processing a TaskTracker.
@@ -101,7 +101,7 @@ func StartTaskTracker(queues []string) (*TaskTracker, error) {
 	}
 
 	tt := TaskTracker{updates, status, taskQueues, NewTerminator()}
-	tt.RunHandler(updates, taskQueues, status)
+	tt.runHandler(updates, taskQueues, status)
 	return &tt, nil
 }
 
@@ -144,18 +144,18 @@ func (tt *TaskTracker) status(request statusRequest) {
 	close(request.done)
 }
 
-// handleUpdate processes state update requests, including updating persistent
-// storage.
+// handleUpdate processes Task update events, primarily to make Task status
+// available for status requests.
 func (tt *TaskTracker) handleUpdate(update state.Task, taskQueueChan chan<- string) {
 	log.Println("Handling", update)
 	// TODO
 }
 
-// RunHandler starts a goroutine that handles ALL operations on the state object,
+// runHandler starts a goroutine that handles ALL operations on the state object,
 // which avoids worrying about concurrency.
 // New Tasks and Task updates arrive on the updates channel.
 // Status requests arrive on the status channel.
-func (tt *TaskTracker) RunHandler(updates <-chan state.Task, taskQueues chan<- string, status <-chan statusRequest) {
+func (tt *TaskTracker) runHandler(updates <-chan state.Task, taskQueues chan<- string, status <-chan statusRequest) {
 	tt.Add(1) // Reservation for this goroutine, outside goroutine to avoid race.
 	exit := tt.GetNotifyChannel()
 	go func() {
