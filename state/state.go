@@ -6,7 +6,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"os"
+	"time"
 
 	"cloud.google.com/go/datastore"
 )
@@ -134,4 +136,34 @@ func (t *Task) SetError(err error, info string) error {
 // SetSaver sets the value of the saver to be used for all other calls.
 func (t *Task) SetSaver(saver Saver) {
 	t.saver = saver
+}
+
+// Terminator interface provides notification and synchronization for termination.
+type Terminator interface {
+	GetNotifyChannel() <-chan struct{}
+	Terminate()
+	Add(n int)
+	Done()
+	Wait()
+}
+
+// Nop does nothing, but is used for coverage testing.
+func nop() {}
+
+// Process handles all steps of processing a task.
+func (t *Task) Process(tq chan<- string, term Terminator) {
+	select {
+	case <-time.After(time.Duration(1+rand.Intn(10)) * time.Millisecond):
+		tq <- t.Queue
+		// Wait until one of these...
+		select {
+		case <-time.After(time.Duration(1+rand.Intn(10)) * time.Millisecond):
+			nop()
+		case <-term.GetNotifyChannel():
+			nop()
+		}
+	case <-term.GetNotifyChannel():
+		nop()
+	}
+	term.Done()
 }

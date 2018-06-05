@@ -1,15 +1,19 @@
 package reproc_test
 
 import (
-	"bytes"
+	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/m-lab/etl-gardener/reproc"
+	"github.com/m-lab/etl-gardener/state"
 )
 
-func TestTerminator(t *testing.T) {
+func assertTaskPipe(t state.Terminator) {
+	func(t state.Terminator) {}(&reproc.Terminator{})
+}
 
+func TestTerminator(t *testing.T) {
 	trm := reproc.NewTerminator()
 	notifier := trm.GetNotifyChannel()
 
@@ -30,15 +34,12 @@ func TestTerminator(t *testing.T) {
 
 func TestBasic(t *testing.T) {
 	// Start tracker with no queues.
-	tt, err := reproc.StartTaskTracker([]string{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	tt := reproc.NewTaskTracker([]string{})
 
 	// This will block because there are no queues.
 	go tt.AddTask("foobar")
 	// Just so it is clear where the message comes from...
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(time.Duration(1+rand.Intn(10)) * time.Millisecond)
 
 	tt.Terminate()
 	tt.Wait() // Race
@@ -46,22 +47,14 @@ func TestBasic(t *testing.T) {
 
 func TestWithTaskQueue(t *testing.T) {
 	// Start tracker with no queues.
-	tt, err := reproc.StartTaskTracker([]string{"queue-1"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	tt := reproc.NewTaskTracker([]string{"queue-1"})
 
-	tt.AddTask("foo")
+	tt.AddTask("a")
 
-	go tt.AddTask("bar")
+	go tt.AddTask("b")
+	go tt.AddTask("c")
 
-	var bb []byte
-	buf := bytes.NewBuffer(bb)
-	tt.GetStatus(buf)
-	if string(buf.Bytes()) != "status..." {
-		t.Error("Expected status...", string(buf.Bytes()))
-	}
-
+	time.Sleep(15 * time.Millisecond)
 	tt.Terminate()
 	tt.Wait()
 }
