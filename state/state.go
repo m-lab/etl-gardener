@@ -167,3 +167,15 @@ func (t *Task) Process(tq chan<- string, term Terminator) {
 	}
 	term.Done()
 }
+
+// GetStatus fetches all Task state from Datastore.
+func (ds *DatastoreSaver) GetStatus(ctx context.Context) ([]Task, error) {
+	q := datastore.NewQuery("task").Namespace(ds.Namespace)
+	tasks := make([]Task, 0, 100)
+	_, err := ds.Client.GetAll(ctx, q, &tasks)
+	if err != nil {
+		return nil, err
+		// Handle error.
+	}
+	return tasks, nil
+}

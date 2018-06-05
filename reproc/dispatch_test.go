@@ -34,27 +34,27 @@ func TestTerminator(t *testing.T) {
 
 func TestBasic(t *testing.T) {
 	// Start tracker with no queues.
-	tt := reproc.NewTaskTracker([]string{})
+	th := reproc.NewTaskHandler([]string{})
 
 	// This will block because there are no queues.
-	go tt.AddTask("foobar")
+	go th.AddTask("foobar")
 	// Just so it is clear where the message comes from...
 	time.Sleep(time.Duration(1+rand.Intn(10)) * time.Millisecond)
 
-	tt.Terminate()
-	tt.Wait() // Race
+	th.Terminate()
+	th.Wait() // Race
 }
 
 func TestWithTaskQueue(t *testing.T) {
 	// Start tracker with no queues.
-	tt := reproc.NewTaskTracker([]string{"queue-1"})
+	th := reproc.NewTaskHandler([]string{"queue-1"})
 
-	tt.AddTask("a")
+	th.AddTask("a")
 
-	go tt.AddTask("b")
-	go tt.AddTask("c")
+	go th.AddTask("b")
+	go th.AddTask("c")
 
 	time.Sleep(15 * time.Millisecond)
-	tt.Terminate()
-	tt.Wait()
+	th.Terminate()
+	th.Wait()
 }

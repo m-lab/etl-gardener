@@ -57,53 +57,57 @@ func NewTerminator() *Terminator {
 }
 
 /*****************************************************************************/
-/*                               TaskTracker                                 */
+/*                               TaskHandler                                 */
 /*****************************************************************************/
 
-// TaskTracker handles the top level Task coordination.
+// TaskHandler handles the top level Task coordination.
 // It is responsible for starting tasks, recycling queues, and handling the
 // termination signal.
-type TaskTracker struct {
+type TaskHandler struct {
 	taskQueues chan string // Channel through which queues recycled.
 
 	// For managing termination.
 	*Terminator
 }
 
-// NewTaskTracker creates a new TaskTracker.
-func NewTaskTracker(queues []string) *TaskTracker {
+// NewTaskHandler creates a new TaskHandler.
+func NewTaskHandler(queues []string) *TaskHandler {
 	// Create taskQueue channel, and preload with queues.
 	taskQueues := make(chan string, len(queues))
 	for _, q := range queues {
 		taskQueues <- q
 	}
 
-	return &TaskTracker{taskQueues, NewTerminator()}
+	return &TaskHandler{taskQueues, NewTerminator()}
 }
 
 // Nop does nothing, but is used for coverage testing.
 func nop() {}
 
 // ErrTerminating is returned e.g. by AddTask, when tracker is terminating.
-var ErrTerminating = errors.New("TaskTracker is terminating")
+var ErrTerminating = errors.New("TaskHandler is terminating")
 
 // AddTask adds a new task, blocking until the task has been accepted.
 // This will typically be repeated called by another goroutine responsible
 // for driving the reprocessing.
-// May return ErrTerminating, if tt has started termination.
-func (tt *TaskTracker) AddTask(prefix string) error {
+// May return ErrTerminating, if th has started termination.
+func (th *TaskHandler) AddTask(prefix string) error {
 	select {
 	// Wait until there is an available task queue.
-	case queue := <-tt.taskQueues:
+	case queue := <-th.taskQueues:
 		t := state.Task{Name: prefix, Queue: queue, State: state.Initializing}
-		tt.Add(1)
+		th.Add(1)
 
-		go t.Process(tt.taskQueues, tt.Terminator)
+		go t.Process(th.taskQueues, th.Terminator)
 		return nil
 
 	// Or until we start termination.
-	case <-tt.GetNotifyChannel():
+	case <-th.GetNotifyChannel():
 		// If we are terminating, do nothing.
 		return ErrTerminating
 	}
+}
+
+type Status struct {
+	Tasks []state.Task // Snapshot of each task.
 }

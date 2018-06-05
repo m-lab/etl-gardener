@@ -1,10 +1,13 @@
 package state_test
 
 import (
+	"context"
 	"errors"
 	"log"
+	"os"
 	"testing"
 
+	"cloud.google.com/go/datastore"
 	"github.com/m-lab/etl-gardener/state"
 )
 
@@ -74,4 +77,43 @@ func TestTaskBasics(t *testing.T) {
 	if !ok {
 		t.Fatal("Should have called delete")
 	}
+}
+
+func CleanupDatastore(ds *state.DatastoreSaver) {
+	ctx := context.Background()
+	q := datastore.NewQuery("").Namespace(ds.Namespace)
+	keys, err := ds.Client.GetAll(ctx, q.KeysOnly(), nil)
+	if err != nil {
+		log.Fatal("Failed cleanup", err)
+	}
+	err = ds.Client.DeleteMulti(ctx, keys)
+	if err != nil {
+		log.Fatal("Failed cleanup", err)
+	}
+}
+
+func TestStatus(t *testing.T) {
+	os.Setenv("PROJECT", "xyz")
+	saver, err := state.NewDatastoreSaver()
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := state.Task{Name: "task1", Queue: "Q1", State: state.Initializing}
+	task.SetSaver(saver)
+	task.Save()
+	task.Name = "task2"
+	task.Queue = "Q2"
+	task.Update(state.Queuing)
+
+	tasks, err := saver.GetStatus(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 2 {
+		t.Error("Should be 2 tasks", len(tasks))
+		for _, t := range tasks {
+			log.Println(t)
+		}
+	}
+	CleanupDatastore(saver)
 }
