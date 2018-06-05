@@ -49,7 +49,7 @@ install:
 - $TRAVIS_BUILD_DIR/travis/install_gcloud.sh kubectl
 
 # Install dependencies
-- GO_IMPORTS=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}' ./... | sort | uniq | grep -v etl-gardener)
+- GO_IMPORTS=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}{{join .XTestImports "\n"}}' ./... | sort | uniq | grep -e / | grep -v m-lab/etl-gardener)
 - go get -u -v -d $GO_IMPORTS
 
 before_script:
