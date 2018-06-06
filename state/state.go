@@ -151,6 +151,7 @@ type Terminator interface {
 func nop() {}
 
 // Process handles all steps of processing a task.
+// TODO: Real implementation. This is a dummy implementation, to support testing TaskHandler.
 func (t *Task) Process(tq chan<- string, term Terminator) {
 	select {
 	case <-time.After(time.Duration(1+rand.Intn(10)) * time.Millisecond):
