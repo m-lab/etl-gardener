@@ -7,4 +7,12 @@
 
 
 
-Gardener provides services for maintaining and reprocessing mlab data.
+## Gardener provides services for maintaining and reprocessing mlab data.
+
+## Unit Testing
+Unit tests now use datastore with a fake project (xyz).  This is enabled by
+running the datastore emulator, which should be started like this:
+
+gcloud beta emulators datastore start --no-store-on-disk &
+
+We may want to arrange for the unit tests themselves to launch the emulator.
