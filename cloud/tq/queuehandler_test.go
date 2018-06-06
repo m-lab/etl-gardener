@@ -31,8 +31,8 @@ func TestChannelQueueHandler(t *testing.T) {
 	close(cqh.Sink())
 	<-cqh.Response()
 	// There will be one http request for each GetTaskqueueStatistics() call (10), and one for each task file (76).
-	if counter.Count() != 87 {
+	if counter.Count() != 18 {
 		log.Println(counter.Count())
-		t.Errorf("Count = %d, expected 87", counter.Count())
+		t.Errorf("Count = %d, expected 18", counter.Count())
 	}
 }
