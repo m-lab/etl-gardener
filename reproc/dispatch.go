@@ -96,8 +96,11 @@ func (th *TaskHandler) AddTask(prefix string) error {
 	// Wait until there is an available task queue.
 	case queue := <-th.taskQueues:
 		t := state.Task{Name: prefix, Queue: queue, State: state.Initializing}
-		th.Add(1)
 
+		// WARNING:  There is a race here when terminating, if a task gets
+		// a queue here and calls Add().  This races with the thread that started
+		// the termination and calls Wait().
+		th.Add(1)
 		go t.Process(th.taskQueues, th.Terminator)
 		return nil
 
@@ -106,8 +109,4 @@ func (th *TaskHandler) AddTask(prefix string) error {
 		// If we are terminating, do nothing.
 		return ErrTerminating
 	}
-}
-
-type Status struct {
-	Tasks []state.Task // Snapshot of each task.
 }
