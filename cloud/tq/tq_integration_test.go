@@ -54,7 +54,7 @@ func TestGetBucket(t *testing.T) {
 		}
 		count++
 	}
-	if count != 76 {
+	if count != 3 {
 		t.Error("Wrong number of objects: ", count)
 	}
 }
@@ -89,10 +89,17 @@ func TestPostDay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n != 76 {
-		t.Errorf("Should have posted 76 items")
+	if n != 3 {
+		t.Error("Should have posted 3 items", n)
 	}
-	if counter.Count() != 76 {
-		t.Errorf("Should have made 76 http requests: %d\n", counter.Count())
+	n, err = q.PostDay(bucket, bucketName, "ndt/2018/05/01/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 45 {
+		t.Error("Should have posted 45 items", n)
+	}
+	if counter.Count() != 48 {
+		t.Error("Should have made 48 http requests:", counter.Count())
 	}
 }
