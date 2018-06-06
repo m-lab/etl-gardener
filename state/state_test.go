@@ -1,11 +1,14 @@
 package state_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log"
 	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"cloud.google.com/go/datastore"
 	"github.com/m-lab/etl-gardener/state"
@@ -79,21 +82,75 @@ func TestTaskBasics(t *testing.T) {
 	}
 }
 
-func CleanupDatastore(ds *state.DatastoreSaver) {
+func CleanupDatastore(ds *state.DatastoreSaver) error {
 	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
 	q := datastore.NewQuery("").Namespace(ds.Namespace)
 	keys, err := ds.Client.GetAll(ctx, q.KeysOnly(), nil)
 	if err != nil {
-		log.Fatal("Failed cleanup", err)
+		return err
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 	err = ds.Client.DeleteMulti(ctx, keys)
 	if err != nil {
-		log.Fatal("Failed cleanup", err)
+		return err
 	}
+	return ctx.Err()
 }
 
 func TestStatus(t *testing.T) {
-	os.Setenv("PROJECT", "xyz")
+	os.Setenv("PROJECT", "mlab-testing")
+	saver, err := state.NewDatastoreSaver()
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := state.Task{Name: "task1", Queue: "Q1", State: state.Initializing}
+	task.SetSaver(saver)
+	log.Println("saving")
+	err = task.Save()
+	if err != nil {
+		t.Fatal(err)
+	}
+	task.Name = "task2"
+	task.Queue = "Q2"
+	err = task.Update(state.Queuing)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Real datastore takes about 100 msec or more before consistency.
+	// In travis, we use the emulator, which should provide consistency
+	// much more quickly.  So we use a modest number here that usually
+	// is sufficient for running on workstation.
+	time.Sleep(200 * time.Millisecond)
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	tasks, err := saver.GetStatus(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ctx.Err() != nil {
+		t.Fatal(ctx.Err())
+	}
+	if len(tasks) != 2 {
+		t.Error("Should be 2 tasks", len(tasks))
+		for _, t := range tasks {
+			log.Println(t)
+		}
+	}
+	err = CleanupDatastore(saver)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWriteStatus(t *testing.T) {
+	os.Setenv("PROJECT", "mlab-testing")
+
 	saver, err := state.NewDatastoreSaver()
 	if err != nil {
 		t.Fatal(err)
@@ -104,16 +161,24 @@ func TestStatus(t *testing.T) {
 	task.Name = "task2"
 	task.Queue = "Q2"
 	task.Update(state.Queuing)
+	time.Sleep(200 * time.Millisecond)
 
-	tasks, err := saver.GetStatus(context.Background())
+	bb := make([]byte, 0, 500)
+	buf := bytes.NewBuffer(bb)
+
+	err = state.WriteHTMLStatusTo(buf)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tasks) != 2 {
-		t.Error("Should be 2 tasks", len(tasks))
-		for _, t := range tasks {
-			log.Println(t)
-		}
+	if !strings.Contains(buf.String(), "task1") {
+		t.Error("Missing task1")
 	}
-	CleanupDatastore(saver)
+	if !strings.Contains(buf.String(), "task2") {
+		t.Error("Missing task2")
+	}
+
+	err = CleanupDatastore(saver)
+	if err != nil {
+		t.Fatal(err)
+	}
 }

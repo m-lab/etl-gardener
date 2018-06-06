@@ -107,6 +107,10 @@ func Status(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Release: %s <br>  Commit: unknown\n", release)
 	}
 
+	fmt.Fprintf(w, "</br></br>\n")
+	state.WriteHTMLStatusTo(w)
+	fmt.Fprintf(w, "</br>\n")
+
 	env := os.Environ()
 	for i := range env {
 		fmt.Fprintf(w, "%s</br>\n", env[i])
