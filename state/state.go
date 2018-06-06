@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"math/rand"
 	"os"
 	"time"
@@ -66,15 +68,28 @@ func NewDatastoreSaver() (*DatastoreSaver, error) {
 func (ds *DatastoreSaver) SaveTask(t Task) error {
 	k := datastore.NameKey("task", t.Name, nil)
 	k.Namespace = ds.Namespace
-	_, err := ds.Client.Put(context.Background(), k, &t)
-	return err
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	_, err := ds.Client.Put(ctx, k, &t)
+	if err != nil {
+		return err
+	}
+	return ctx.Err()
 }
 
 // DeleteTask implements Saver.DeleteTask using Datastore.
 func (ds *DatastoreSaver) DeleteTask(t Task) error {
 	k := datastore.NameKey("task", t.Name, nil)
 	k.Namespace = ds.Namespace
-	return ds.Client.Delete(context.Background(), k)
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	err := ds.Client.Delete(ctx, k)
+	if err != nil {
+		return err
+	}
+	return ctx.Err()
 }
 
 // Task contains the state of a single Task.
@@ -179,4 +194,31 @@ func (ds *DatastoreSaver) GetStatus(ctx context.Context) ([]Task, error) {
 		// Handle error.
 	}
 	return tasks, nil
+}
+
+// WriteHTMLStatusTo writes HTML formatted task status.
+func WriteHTMLStatusTo(w io.Writer) error {
+	ds, err := NewDatastoreSaver()
+	if err != nil {
+		fmt.Fprintln(w, "Error creating Datastore client:", err)
+		return err
+	}
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	tasks, err := ds.GetStatus(ctx)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	if ctx.Err() != nil {
+		return err
+	}
+	fmt.Fprintf(w, "<div>\nTask State</br>\n")
+	for i := range tasks {
+		fmt.Fprintf(w, "%s</br>\n", tasks[i])
+	}
+	fmt.Fprintf(w, "</div>\n")
+	return nil
 }
