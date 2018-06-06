@@ -28,7 +28,7 @@ before_install:
 - if [[ -n "$SERVICE_ACCOUNT_mlab_testing" ]] ; then
   echo "$SERVICE_ACCOUNT_mlab_testing" > $TRAVIS_BUILD_DIR/creds.json ;
   export GOOGLE_APPLICATION_CREDENTIALS=$TRAVIS_BUILD_DIR/creds.json ;
-  travis/activate_service_account $SERVICE_ACCOUNT_mlab_testing ;
+  travis/activate_service_account.sh SERVICE_ACCOUNT_mlab_testing ;
   fi
 
 # Rsync the mlab-testing ndt directory to match expected content.
