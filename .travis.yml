@@ -6,7 +6,6 @@ services:
 go:
    - 1.9.x
 
-
 ###########################################################################
 before_install:
 # Coverage tools
@@ -26,12 +25,16 @@ before_install:
 #
 # All of the gcloud library calls will detect the GOOGLE_APPLICATION_CREDENTIALS
 # environment variable, and use that file for authentication.
-# If the application requires authentication outside the libraries, consider
-# also using travis/activate_service_account.sh
 - if [[ -n "$SERVICE_ACCOUNT_mlab_testing" ]] ; then
   echo "$SERVICE_ACCOUNT_mlab_testing" > $TRAVIS_BUILD_DIR/creds.json ;
   export GOOGLE_APPLICATION_CREDENTIALS=$TRAVIS_BUILD_DIR/creds.json ;
+  travis/activate_service_account $SERVICE_ACCOUNT_mlab_testing ;
   fi
+
+# Rsync the mlab-testing ndt directory to match expected content.
+- cd $TRAVIS_BUILD_DIR/testfiles
+- ./sync.sh
+- cd $TRAVIS_BUILD_DIR
 
 # These directories will be cached on successful "script" builds, and restored,
 # if available, to save time on future builds.
