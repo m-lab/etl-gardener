@@ -28,7 +28,7 @@ import (
 //  Call Done() whenever a goroutine completes.
 //  Call Wait() to wait until all goroutines have completed.
 type Terminator struct {
-	semaphore   chan struct{} // Protects the exit initiation.
+	onlyOnce    chan struct{} // Protects the exit initiation.
 	terminating chan struct{} // Channel to trigger termination.
 	sync.WaitGroup
 }
@@ -41,11 +41,11 @@ func (t *Terminator) GetNotifyChannel() <-chan struct{} {
 // Terminate initiates termination.  May be called multiple times.
 func (t *Terminator) Terminate() {
 	select {
-	case <-t.semaphore:
-		// Consumed the semaphore, so close the channel.
+	case <-t.onlyOnce:
+		// we consumed the token, so close the channel.
 		close(t.terminating)
 	default:
-		// If semaphore already consumed, do nothing.
+		// Another caller consumed the token, so do nothing.
 	}
 }
 
@@ -80,9 +80,6 @@ func NewTaskHandler(queues []string) *TaskHandler {
 
 	return &TaskHandler{taskQueues, NewTerminator()}
 }
-
-// Nop does nothing, but is used for coverage testing.
-func nop() {}
 
 // ErrTerminating is returned e.g. by AddTask, when tracker is terminating.
 var ErrTerminating = errors.New("TaskHandler is terminating")
