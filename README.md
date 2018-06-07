@@ -22,3 +22,7 @@ To start the emulator, .travis.yml now includes:
 - sleep 2 # allow time for emulator to start up.
 - $(gcloud beta emulators datastore env-init)
 ```
+
+You probably don't want to do this on your local machine, as it will leave
+your local machine configured to use datastore emulation.  So be aware
+that if you do, you'll want to clean up the DATASTORE_ environment variables.

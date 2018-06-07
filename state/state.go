@@ -163,6 +163,7 @@ type Terminator interface {
 }
 
 // Nop does nothing, but is used for coverage testing.
+// TODO: remove this once there is actual implementation in Process.
 func nop() {}
 
 // Process handles all steps of processing a task.
