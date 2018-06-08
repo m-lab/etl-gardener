@@ -222,12 +222,13 @@ func (dh *DedupHandler) handleLoop(opts ...option.ClientOption) {
 // feeding channel is closed, and processing is complete.
 func NewDedupHandler(opts ...option.ClientOption) *DedupHandler {
 	project := os.Getenv("PROJECT")
+	dataset := os.Getenv("DATASET")
 	// When running in prod, the task files and queues are in mlab-oti, but the destination
 	// BigQuery tables are in measurement-lab.
-	if project == "mlab-oti" {
+	// However, for sidestream private tables, we leave them in mlab-oti
+	if project == "mlab-oti" && dataset != "private" {
 		project = "measurement-lab" // destination for production tables.
 	}
-	dataset := os.Getenv("DATASET")
 	msg := make(chan state.Task)
 	rsp := make(chan error)
 	dh := DedupHandler{project, dataset, msg, rsp}
@@ -312,4 +313,3 @@ func Dedup(dsExt *bqext.Dataset, src string, destTable *bigquery.Table) (*bigque
 	}
 	return job, nil
 }
-
