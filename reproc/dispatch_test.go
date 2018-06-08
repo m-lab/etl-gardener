@@ -13,6 +13,10 @@ func assertTaskPipe(t state.Terminator) {
 	func(t state.Terminator) {}(&reproc.Terminator{})
 }
 
+// This test exercises the termination sequencing.  It does not check
+// any state, but if the termination does not work properly,
+// may fail to complete.  Also, running with -race may detect race
+// conditions.
 func TestTerminator(t *testing.T) {
 	trm := reproc.NewTerminator()
 	notifier := trm.GetNotifyChannel()
@@ -32,6 +36,10 @@ func TestTerminator(t *testing.T) {
 	trm.Wait()
 }
 
+// This test exercises the task management, including invoking t.Process().
+//  It does not check any state, but if the termination does not work properly,
+// may fail to complete.  Also, running with -race may detect race
+// conditions.
 func TestBasic(t *testing.T) {
 	// Start tracker with no queues.
 	th := reproc.NewTaskHandler([]string{})
@@ -45,6 +53,10 @@ func TestBasic(t *testing.T) {
 	th.Wait() // Race
 }
 
+// This test exercises the task management, including invoking t.Process().
+//  It does not check any state, but if the termination does not work properly,
+// may fail to complete.  Also, running with -race may detect race
+// conditions.
 func TestWithTaskQueue(t *testing.T) {
 	// Start tracker with no queues.
 	th := reproc.NewTaskHandler([]string{"queue-1"})

@@ -28,7 +28,7 @@ import (
 //  Call Done() whenever a goroutine completes.
 //  Call Wait() to wait until all goroutines have completed.
 type Terminator struct {
-	onlyOnce    chan struct{} // Protects the exit initiation.
+	once        sync.Once     // Protects the exit initiation.
 	terminating chan struct{} // Channel to trigger termination.
 	sync.WaitGroup
 }
@@ -40,20 +40,16 @@ func (t *Terminator) GetNotifyChannel() <-chan struct{} {
 
 // Terminate initiates termination.  May be called multiple times.
 func (t *Terminator) Terminate() {
-	select {
-	case <-t.onlyOnce:
+	t.once.Do(func() {
 		// we consumed the token, so close the channel.
-		close(t.terminating)
-	default:
-		// Another caller consumed the token, so do nothing.
-	}
+	})
 }
 
 // NewTerminator creates a new Terminator (termination manager)
 func NewTerminator() *Terminator {
 	sem := make(chan struct{}, 1)
 	sem <- struct{}{}
-	return &Terminator{sem, make(chan struct{}), sync.WaitGroup{}}
+	return &Terminator{sync.Once{}, make(chan struct{}), sync.WaitGroup{}}
 }
 
 /*****************************************************************************/
@@ -88,6 +84,7 @@ var ErrTerminating = errors.New("TaskHandler is terminating")
 // This will typically be repeated called by another goroutine responsible
 // for driving the reprocessing.
 // May return ErrTerminating, if th has started termination.
+// TODO: Add prometheus metrics.
 func (th *TaskHandler) AddTask(prefix string) error {
 	select {
 	// Wait until there is an available task queue.
@@ -98,6 +95,10 @@ func (th *TaskHandler) AddTask(prefix string) error {
 		// a queue here and calls Add().  This races with the thread that started
 		// the termination and calls Wait().
 		th.Add(1)
+		// We are passing taskQueues to Process, so that it can recycle
+		// its taskQueue when it is empty.  Since this runs in its own
+		// go routine, we need to avoid closing the taskQueues channel, which
+		// could then cause panics.
 		go t.Process(th.taskQueues, th.Terminator)
 		return nil
 
