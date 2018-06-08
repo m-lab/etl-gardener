@@ -44,13 +44,13 @@ spec:
         - name: PROJECT
           value: {{GCLOUD_PROJECT}}
         - name: TASKFILE_BUCKET
-          value: "archive-{{GCLOUD_PROJECT}}"
+          value: "scraper-{{GCLOUD_PROJECT}}"
         - name: START_DATE
-          value: "20180301"
+          value: "20170601"
         - name: EXPERIMENTS
-          value: "sidestream,ndt"  # For example "ndt,sidestream,switch"
+          value: "sidestream"  # For example "ndt,sidestream,switch"
         - name: DATASET
-          value: batch
+          value: private
         - name: FINAL_DATASET
           value: ""  # e.g. base_tables
         - name: QUEUE_BASE
