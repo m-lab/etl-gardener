@@ -103,6 +103,8 @@ type Task struct {
 	ErrMsg      string // Task handling error, if any
 	ErrInfo     string // More context about any error, if any
 
+	UpdateTime time.Time `datastore:",noindex"`
+
 	saver Saver // Saver is used for Save operations. Stored locally, but not persisted.
 }
 
@@ -118,6 +120,7 @@ func (t *Task) Save() error {
 	if t.saver == nil {
 		return ErrNoSaver
 	}
+	t.UpdateTime = time.Now()
 	return t.saver.SaveTask(*t)
 }
 
@@ -127,6 +130,7 @@ func (t *Task) Update(st State) error {
 		return ErrNoSaver
 	}
 	t.State = st
+	t.UpdateTime = time.Now()
 	return t.saver.SaveTask(*t)
 }
 
@@ -145,6 +149,7 @@ func (t *Task) SetError(err error, info string) error {
 	}
 	t.ErrMsg = err.Error()
 	t.ErrInfo = info
+	t.UpdateTime = time.Now()
 	return t.saver.SaveTask(*t)
 }
 
