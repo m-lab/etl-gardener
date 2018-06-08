@@ -15,6 +15,7 @@ before_install:
 - echo Branch is ${TRAVIS_BRANCH} and Tag is $TRAVIS_TAG
 
 # Install gcloud, for integration tests.
+# TODO: maybe just use travis apt: packages: ?
 - $TRAVIS_BUILD_DIR/travis/install_gcloud.sh
 - source "${HOME}/google-cloud-sdk/path.bash.inc"
 
@@ -48,12 +49,22 @@ install:
 - $TRAVIS_BUILD_DIR/travis/install_gcloud.sh kubectl
 
 # Install dependencies
-- GO_IMPORTS=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}' ./... | sort | uniq | grep -v etl-gardener)
+- GO_IMPORTS=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}{{join .XTestImports "\n"}}' ./... | sort | uniq | grep -e / | grep -v m-lab/etl-gardener)
 - go get -u -v -d $GO_IMPORTS
+
+before_script:
+# Try removing boto config, recommended for datastore emulator.
+- sudo rm -f /etc/boto.cfg
+
+- gcloud components install beta
+- gcloud components install cloud-datastore-emulator
+- gcloud beta emulators datastore start --no-store-on-disk &
+- sleep 2 # allow time for emulator to start up.
+- $(gcloud beta emulators datastore env-init)
 
 script:
 # To start, run all the non-integration tests.
-- MODULES="dedup dispatch cloud/tq cmd/gardener"
+- MODULES="dedup dispatch cloud/tq cmd/gardener reproc"
 - for module in $MODULES; do
     COVER_PKGS=${COVER_PKGS}./$module/..., ;
   done
@@ -75,7 +86,7 @@ script:
 # Note: we do not run integration tests from forked PRs b/c the SA is unavailable.
 # Note that for modules in subdirectories, this replaces separating slashes with _.
 - if [[ -n "$SERVICE_ACCOUNT_mlab_testing" ]] ; then
-  for module in dedup dispatch cloud/tq cmd/gardener ; do
+  for module in dedup dispatch cloud/tq cmd/gardener reproc; do
     go test -v -coverpkg=$COVER_PKGS -coverprofile=${module//\//_}.cov github.com/m-lab/etl-gardener/$module -tags=integration ;
     EC=$[ $EC || $? ] ;
   done ;

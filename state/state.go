@@ -6,7 +6,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log"
+	"math/rand"
 	"os"
+	"time"
 
 	"cloud.google.com/go/datastore"
 )
@@ -64,15 +68,28 @@ func NewDatastoreSaver() (*DatastoreSaver, error) {
 func (ds *DatastoreSaver) SaveTask(t Task) error {
 	k := datastore.NameKey("task", t.Name, nil)
 	k.Namespace = ds.Namespace
-	_, err := ds.Client.Put(context.Background(), k, &t)
-	return err
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	_, err := ds.Client.Put(ctx, k, &t)
+	if err != nil {
+		return err
+	}
+	return ctx.Err()
 }
 
 // DeleteTask implements Saver.DeleteTask using Datastore.
 func (ds *DatastoreSaver) DeleteTask(t Task) error {
 	k := datastore.NameKey("task", t.Name, nil)
 	k.Namespace = ds.Namespace
-	return ds.Client.Delete(context.Background(), k)
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	err := ds.Client.Delete(ctx, k)
+	if err != nil {
+		return err
+	}
+	return ctx.Err()
 }
 
 // Task contains the state of a single Task.
@@ -85,6 +102,8 @@ type Task struct {
 	JobID       string // BigQuery JobID, when the state is Deduplicating
 	ErrMsg      string // Task handling error, if any
 	ErrInfo     string // More context about any error, if any
+
+	UpdateTime time.Time `datastore:",noindex"`
 
 	saver Saver // Saver is used for Save operations. Stored locally, but not persisted.
 }
@@ -101,6 +120,7 @@ func (t *Task) Save() error {
 	if t.saver == nil {
 		return ErrNoSaver
 	}
+	t.UpdateTime = time.Now()
 	return t.saver.SaveTask(*t)
 }
 
@@ -110,6 +130,7 @@ func (t *Task) Update(st State) error {
 		return ErrNoSaver
 	}
 	t.State = st
+	t.UpdateTime = time.Now()
 	return t.saver.SaveTask(*t)
 }
 
@@ -128,10 +149,82 @@ func (t *Task) SetError(err error, info string) error {
 	}
 	t.ErrMsg = err.Error()
 	t.ErrInfo = info
+	t.UpdateTime = time.Now()
 	return t.saver.SaveTask(*t)
 }
 
 // SetSaver sets the value of the saver to be used for all other calls.
 func (t *Task) SetSaver(saver Saver) {
 	t.saver = saver
+}
+
+// Terminator interface provides notification and synchronization for termination.
+type Terminator interface {
+	GetNotifyChannel() <-chan struct{}
+	Terminate()
+	Add(n int)
+	Done()
+	Wait()
+}
+
+// Nop does nothing, but is used for coverage testing.
+// TODO: remove this once there is actual implementation in Process.
+func nop() {}
+
+// Process handles all steps of processing a task.
+// TODO: Real implementation. This is a dummy implementation, to support testing TaskHandler.
+func (t *Task) Process(tq chan<- string, term Terminator) {
+	select {
+	case <-time.After(time.Duration(1+rand.Intn(10)) * time.Millisecond):
+		tq <- t.Queue
+		// Wait until one of these...
+		select {
+		case <-time.After(time.Duration(1+rand.Intn(10)) * time.Millisecond):
+			nop()
+		case <-term.GetNotifyChannel():
+			nop()
+		}
+	case <-term.GetNotifyChannel():
+		nop()
+	}
+	term.Done()
+}
+
+// GetStatus fetches all Task state from Datastore.
+func (ds *DatastoreSaver) GetStatus(ctx context.Context) ([]Task, error) {
+	q := datastore.NewQuery("task").Namespace(ds.Namespace)
+	tasks := make([]Task, 0, 100)
+	_, err := ds.Client.GetAll(ctx, q, &tasks)
+	if err != nil {
+		return nil, err
+		// Handle error.
+	}
+	return tasks, nil
+}
+
+// WriteHTMLStatusTo writes HTML formatted task status.
+func WriteHTMLStatusTo(w io.Writer) error {
+	ds, err := NewDatastoreSaver()
+	if err != nil {
+		fmt.Fprintln(w, "Error creating Datastore client:", err)
+		return err
+	}
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	tasks, err := ds.GetStatus(ctx)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	if ctx.Err() != nil {
+		return err
+	}
+	fmt.Fprintf(w, "<div>\nTask State</br>\n")
+	for i := range tasks {
+		fmt.Fprintf(w, "%s</br>\n", tasks[i])
+	}
+	fmt.Fprintf(w, "</div>\n")
+	return nil
 }
