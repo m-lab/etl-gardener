@@ -42,6 +42,7 @@ func (t *Terminator) GetNotifyChannel() <-chan struct{} {
 func (t *Terminator) Terminate() {
 	t.once.Do(func() {
 		// we consumed the token, so close the channel.
+		close(t.terminating)
 	})
 }
 
