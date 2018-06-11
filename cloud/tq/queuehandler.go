@@ -201,6 +201,9 @@ func (qh *ChannelQueueHandler) handleLoop(next api.TaskPipe, bucketOpts ...optio
 			}
 		} else {
 			log.Println("No task files")
+			task.Queue = ""
+			task.Update(state.Done)
+			task.Delete()
 		}
 	}
 	log.Println(qh.Queue, "waiting for deduper to close")
