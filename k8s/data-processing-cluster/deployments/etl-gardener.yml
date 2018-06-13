@@ -83,6 +83,8 @@ spec:
         - mountPath: /etl-gardener
           name: etl-gardener-storage
 
+      nodeSelector:
+        scopes: gardener
 
       # Disks created manually, can be named here explicitly using
       # gcePersistentDisk instead of the persistentVolumeClaim.
