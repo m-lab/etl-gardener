@@ -11,12 +11,10 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"fmt"
 	"io"
 	"log"
 	"math/rand"
 	"net/http"
-	"sync"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -41,16 +39,6 @@ func init() {
 	if flag.Lookup("test.v") != nil {
 		env.TestMode = true
 	}
-}
-
-// Loader provides API for persisting and retrieving state.
-type Loader interface {
-	LoadFromPS(rs *ReprocState)
-}
-
-// SysSaver provides API for persisting system state.
-type SysSaver interface {
-	SaveSystem(s *ReprocState) error
 }
 
 // ReprocessingExecutor handles all reprocessing steps.
@@ -326,156 +314,4 @@ func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}
 	}
 
 	// TODO - Copy to base_tables.
-}
-
-// ReprocState holds the high level state of the reprocessing dispatcher.
-// Note that the DataStore representation will have separate entries for
-// each map entry.
-type ReprocState struct {
-	NextDate time.Time           // The date about to be queued, or to be queued next.
-	AllTasks map[string]struct{} // set of names of all tasks in flight.
-
-	// This is used internally, e.g. for Describe
-	// Basically a cache of all the task states.
-	allTasks map[string]state.Task // Cache from task names to Task
-
-	lock        *sync.Mutex
-	queues      chan string // Names of idle task queues.
-	terminating bool        // Indicates when tasks are being terminated.
-	terminate   chan<- struct{}
-	updateChan  <-chan state.Task
-	sysSaver    SysSaver
-	taskSaver   state.Saver
-	helpers     state.Helpers
-
-	wg *sync.WaitGroup // Tracks how many active Tasks there are.
-}
-
-// String formats the ReprocState for printing.
-func (rs ReprocState) String() string {
-	return fmt.Sprintf("{%s %s}", rs.NextDate.Format("2006/01/02"), rs.AllTasks)
-}
-
-// Thread safety invariants for ReprocState
-//  1. Only MonitorTasks updates the AllTasks/allTasks maps.
-//  2. All accesses to NextDate and AllTasks are protected with Mutex "lock"
-//  3. Updates to persistent store are lazy for Task removals.  AllTask inserts
-//      and NextDate updates are always pushed to Saver before launching task. ????
-
-func newReprocState(ex state.Executor, taskSaver state.Saver, sysSaver SysSaver) *ReprocState {
-	lock := sync.Mutex{}
-	queues := make(chan string, 100) // Don't want to block on returning a queue.
-	taskNames := make(map[string]struct{}, 20)
-	taskMap := make(map[string]state.Task, 20)
-	updater := make(chan state.Task)
-	terminate := make(chan struct{})
-	wg := sync.WaitGroup{}
-
-	sysState := ReprocState{NextDate: time.Time{}, AllTasks: taskNames,
-		allTasks:    taskMap,
-		lock:        &lock,
-		queues:      queues,
-		terminating: false,
-		terminate:   terminate,
-		updateChan:  updater,
-		helpers:     state.NewHelpers(ex, updater, terminate),
-		sysSaver:    sysSaver,
-		wg:          &wg}
-	sysState.wg.Add(1)
-	return &sysState
-}
-
-// LoadAndInitReprocState creates a new system state object, and initializes it from ps.
-func LoadAndInitReprocState(ldr Loader, ex state.Executor, taskSaver state.Saver, sysSaver SysSaver) *ReprocState {
-	rs := newReprocState(ex, taskSaver, sysSaver)
-	// Set up the go routine that listens for Task state changes.
-	go rs.MonitorTasks()
-	// This loads initial state and calls Add() on each
-	// existing task.
-	ldr.LoadFromPS(rs)
-
-	// Caller should call StartNextTask() on any unused queues ??
-	return rs
-}
-
-// MonitorTasks processes input from updateChan.
-func (rs *ReprocState) MonitorTasks() {
-	for t := range rs.updateChan {
-		// Update local cache (persistent store should be updated by Task)
-		if t.Queue == "" && rs.allTasks[t.Name].Queue != "" {
-			rs.queues <- rs.allTasks[t.Name].Queue
-		}
-		rs.allTasks[t.Name] = t
-		if t.State == state.Done {
-			rs.lock.Lock()
-			delete(rs.allTasks, t.Name)
-			delete(rs.AllTasks, t.Name)
-			rs.sysSaver.SaveSystem(rs)
-			t.Delete()
-			rs.lock.Unlock()
-			rs.wg.Done()
-		} else if t.IsSuspended() {
-			rs.wg.Done()
-		}
-	}
-}
-
-// Describe writes a description of the complete state to w
-func (rs *ReprocState) Describe(w *io.Writer) {
-
-}
-
-// Add adds a single task.  Msg back to updateChan will update local state and DS
-func (rs *ReprocState) Add(t state.Task) {
-	rs.lock.Lock()
-	defer rs.lock.Unlock()
-	if !rs.terminating {
-		rs.AllTasks[t.Name] = struct{}{}
-		rs.sysSaver.SaveSystem(rs)
-		rs.wg.Add(1)
-		go t.Process(rs.helpers)
-	}
-}
-
-// Terminate signals all Tasks to terminate
-func (rs *ReprocState) Terminate() {
-	log.Println("Terminating")
-	rs.terminating = true
-	close(rs.terminate)
-}
-
-// WaitForTerminate waits until all Tasks have terminated.
-func (rs *ReprocState) WaitForTerminate() {
-	rs.wg.Done() // Consume wait for ReprocState
-	rs.wg.Wait() // Wait until all Tasks have completed.
-}
-
-// DoDispatchLoop just sequences through archives in date order.
-// It will generally be blocked on the queues.
-func (rs *ReprocState) DoDispatchLoop(bucket string, experiments []string, startDate time.Time) {
-	for {
-		for _, e := range experiments {
-			time.Sleep(5 * time.Millisecond) // Good for testing, and negligible for production.
-			select {
-			case <-rs.helpers.Terminate:
-				return
-			case q := <-rs.queues:
-				prefix := rs.NextDate.Format(fmt.Sprintf("gs://%s/%s/2006/01/02/", bucket, e))
-				t := state.NewTask(prefix, rs.taskSaver)
-				t.State = state.Initializing
-				t.Queue = q
-				// This may block waiting for a queue.ch
-				rs.Add(t)
-			}
-		}
-
-		rs.NextDate = rs.NextDate.AddDate(0, 0, 1)
-
-		// If gardener has processed all dates up to two days ago,
-		// start over.
-		if rs.NextDate.Add(48 * time.Hour).After(time.Now()) {
-			// TODO - load this from DataStore
-			rs.NextDate = startDate
-		}
-	}
 }

@@ -31,14 +31,6 @@ func init() {
 	env.Project = os.Getenv("PROJECT")
 }
 
-// High level design:
-//  SystemState holds the dispatcher state, and has a GoRoutine that handles
-//  state changes communicated to it through a single channel.
-//
-//  Task objects hold the state for individual taskes that are in flight.
-//  Each task is initially allocated a Queue to host that task, and the
-//  queue is returned to the SystemState when the task no longer needs it.
-
 // State is a simple enum to indicate the state of a single Task/Task in flight.
 type State int
 
@@ -132,18 +124,6 @@ func (ds *DatastoreSaver) DeleteTask(t Task) error {
 	return ctx.Err()
 }
 
-// Helpers contains all the helpers required when running a Task.
-type Helpers struct {
-	ex            Executor
-	UpdaterChan   chan<- Task
-	TerminateChan <-chan struct{}
-}
-
-// NewHelpers returns a new Helpers object.
-func NewHelpers(ex Executor, updaterChan chan<- Task, terminatorChan <-chan struct{}) Helpers {
-	return Helpers{ex, updaterChan, terminatorChan}
-}
-
 // Task contains the state of a single Task.
 // These will be stored and retrieved from DataStore
 type Task struct {
@@ -159,11 +139,6 @@ type Task struct {
 
 	err   error // internal error representation.  Not persisted.
 	saver Saver // Saver is used for Save, Update, Delete, SetError operations.  Stored locally, but not persisted.
-}
-
-// NewTask creates a new task, which will use the provided Saver for persistence operations.
-func NewTask(name string, saver Saver) Task {
-	return Task{Name: name, saver: saver}
 }
 
 // HACK - remove from tq package?
@@ -269,6 +244,7 @@ func (t *Task) SetSaver(saver Saver) {
 type Terminator interface {
 	GetNotifyChannel() <-chan struct{}
 	Terminate()
+	// This is also the sync.WaitGroup API
 	Add(n int)
 	Done()
 	Wait()
@@ -281,16 +257,20 @@ func nop() {}
 // Process handles all steps of processing a task.
 // TODO: Real implementation. This is a dummy implementation, to support testing TaskHandler.
 func (t Task) Process(ex Executor, tq chan<- string, term Terminator) {
+	log.Println("Processing:", t.Name)
+loop:
 	for t.State != Done && t.err == nil {
 		select {
 		case <-term.GetNotifyChannel():
 			t.SetError(ErrTaskSuspended, "Terminating")
-			return
+			break loop
 		default:
 			switch t.State {
-			case Initializing:
-				tq <- t.Queue
-
+			case Processing:
+				ex.DoAction(&t, term.GetNotifyChannel())
+				log.Println("Returning", t.Queue)
+				tq <- t.Queue // return the queue.
+				ex.AdvanceState(&t)
 			default:
 				ex.DoAction(&t, term.GetNotifyChannel())
 				ex.AdvanceState(&t)

@@ -61,21 +61,22 @@ func NewTerminator() *Terminator {
 // It is responsible for starting tasks, recycling queues, and handling the
 // termination signal.
 type TaskHandler struct {
-	taskQueues chan string // Channel through which queues recycled.
+	exec       state.Executor // Executor passed to new tasks
+	taskQueues chan string    // Channel through which queues recycled.
 
 	// For managing termination.
 	*Terminator
 }
 
 // NewTaskHandler creates a new TaskHandler.
-func NewTaskHandler(queues []string) *TaskHandler {
+func NewTaskHandler(exec state.Executor, queues []string) *TaskHandler {
 	// Create taskQueue channel, and preload with queues.
 	taskQueues := make(chan string, len(queues))
 	for _, q := range queues {
 		taskQueues <- q
 	}
 
-	return &TaskHandler{taskQueues, NewTerminator()}
+	return &TaskHandler{exec, taskQueues, NewTerminator()}
 }
 
 // ErrTerminating is returned e.g. by AddTask, when tracker is terminating.
@@ -100,7 +101,7 @@ func (th *TaskHandler) AddTask(prefix string) error {
 		// its taskQueue when it is empty.  Since this runs in its own
 		// go routine, we need to avoid closing the taskQueues channel, which
 		// could then cause panics.
-		go t.Process(th.taskQueues, th.Terminator)
+		go t.Process(th.exec, th.taskQueues, th.Terminator)
 		return nil
 
 	// Or until we start termination.
