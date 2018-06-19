@@ -2,11 +2,11 @@ package tq
 
 import (
 	"errors"
+	"flag"
 	"io"
 	"log"
 	"math/rand"
 	"net/http"
-	"os"
 	"regexp"
 	"time"
 
@@ -16,6 +16,22 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/appengine/taskqueue"
 )
+
+// Environment provides "global" variables.
+type environment struct {
+	TestMode bool
+}
+
+// env provides environment vars.
+var env environment
+
+func init() {
+	// HACK This allows some modified behavior when running unit tests.
+	if flag.Lookup("test.v") != nil {
+		env.TestMode = true
+	}
+	log.Println(env.TestMode)
+}
 
 // ChannelQueueHandler is an autonomous queue handler running in a go
 // routine, fed by a channel.
@@ -87,7 +103,7 @@ func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 		stats, err := GetTaskqueueStats(qh.HTTPClient, qh.Project, qh.Queue)
 		if err != nil {
 			if err == io.EOF {
-				if os.Getenv("UNIT_TEST_MODE") == "" {
+				if !env.TestMode {
 					log.Println(err, "GetTaskqueueStats returned EOF - test client?")
 				}
 				return
@@ -156,9 +172,6 @@ func (qh *ChannelQueueHandler) processOneRequest(prefix string, bucketOpts ...op
 
 // handleLoop processes requests on input channel
 func (qh *ChannelQueueHandler) handleLoop(next api.TaskPipe, bucketOpts ...option.ClientOption) {
-	testMode := os.Getenv("UNIT_TEST_MODE") != ""
-	log.Println("testMode", testMode, os.Getenv("UNIT_TEST_MODE"))
-
 	log.Println("Starting handler for", qh.Queue)
 	// TODO - should we purge the queue here?
 	qh.waitForEmptyQueue()
@@ -175,7 +188,7 @@ func (qh *ChannelQueueHandler) handleLoop(next api.TaskPipe, bucketOpts ...optio
 			task.SetError(err, "ProcessOneRequest")
 			continue
 		}
-		if testMode {
+		if env.TestMode {
 			log.Println("test mode")
 			n = 1
 		}

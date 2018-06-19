@@ -3,7 +3,6 @@ package tq_test
 import (
 	"fmt"
 	"log"
-	"os"
 	"testing"
 
 	"github.com/m-lab/etl-gardener/cloud/tq"
@@ -16,10 +15,6 @@ func init() {
 }
 
 func TestChannelQueueHandler(t *testing.T) {
-	err := os.Setenv("UNIT_TEST_MODE", "true")
-	if err != nil {
-		t.Fatal("Unable to setenv")
-	}
 	client, counter := tq.DryRunQueuerClient()
 	cqh, err := tq.NewChannelQueueHandler(client, "mlab-testing", "test-queue", nil)
 	if err != nil {

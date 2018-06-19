@@ -1,6 +1,7 @@
 package reproc_test
 
 import (
+	"log"
 	"math/rand"
 	"testing"
 	"time"
@@ -8,6 +9,11 @@ import (
 	"github.com/m-lab/etl-gardener/reproc"
 	"github.com/m-lab/etl-gardener/state"
 )
+
+func init() {
+	// Always prepend the filename and line number.
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
 
 func assertTaskPipe(t state.Terminator) {
 	func(t state.Terminator) {}(&reproc.Terminator{})
