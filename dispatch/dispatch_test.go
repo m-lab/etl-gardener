@@ -50,7 +50,6 @@ func xTestSaver(t *testing.T) {
 
 func TestDispatcherLifeCycle(t *testing.T) {
 	os.Setenv("PROJECT", "mlab-testing")
-	os.Setenv("UNIT_TEST_MODE", "true")
 	// Use a fake client so we intercept all the http ops.
 	client, counter := tq.DryRunQueuerClient()
 
@@ -88,7 +87,7 @@ func TestDispatcherLifeCycle(t *testing.T) {
 		t.Fatal("Task not saved")
 	}
 	// For now, state should have progressed to Stabilizing.
-	if len(taskStates) != 6 {
+	if len(taskStates) != 7 {
 		t.Fatal("Wrong number of states:", len(taskStates))
 	}
 
@@ -104,7 +103,7 @@ func TestDispatcherLifeCycle(t *testing.T) {
 		t.Errorf("Wrong state %+v\n", taskStates[3])
 	}
 
-	if taskStates[5].State != state.Done {
-		t.Errorf("Wrong state %+v\n", taskStates[5])
+	if taskStates[6].State != state.Done {
+		t.Errorf("Wrong state %+v\n", taskStates[6])
 	}
 }

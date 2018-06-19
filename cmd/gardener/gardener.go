@@ -7,6 +7,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -26,6 +27,79 @@ import (
 	_ "expvar"
 )
 
+// Environment provides "global" variables.
+// Any env vars that we want to read only at startup should be stored here.
+type environment struct {
+	// Vars for newDispatcher
+	Error     error
+	Project   string
+	QueueBase string
+	NumQueues int
+	StartDate time.Time
+
+	// Vars for Status()
+	Commit  string
+	Release string
+
+	TestMode bool
+}
+
+// env provides environment vars.
+var env environment
+
+// Errors associated with environment.
+var (
+	ErrNoProject    = errors.New("No env var for Project")
+	ErrNoQueueBase  = errors.New("No env var for QueueBase")
+	ErrNoNumQueues  = errors.New("No env var for NumQueues")
+	ErrNoStartDate  = errors.New("No env var for StartDate")
+	ErrBadStartDate = errors.New("Bad StartDate")
+)
+
+// LoadEnv loads any required environment variables.
+func LoadEnv() {
+	var ok bool
+	env.Project, ok = os.LookupEnv("PROJECT")
+	if !ok {
+		env.Error = ErrNoProject
+		log.Println(env.Error)
+	}
+	env.QueueBase, ok = os.LookupEnv("QUEUE_BASE")
+	if !ok {
+		env.Error = ErrNoQueueBase
+		log.Println(env.Error)
+	}
+	var err error
+	env.NumQueues, err = strconv.Atoi(os.Getenv("NUM_QUEUES"))
+	if err != nil {
+		env.Error = ErrNoNumQueues
+		log.Println(err)
+		log.Println(env.Error)
+	}
+	startString, ok := os.LookupEnv("START_DATE")
+	if !ok {
+		env.Error = ErrNoStartDate
+		log.Println(env.Error)
+	} else {
+		env.StartDate, err = time.Parse("20060102", startString)
+		if !ok {
+			env.Error = ErrBadStartDate
+			log.Println(env.Error)
+		}
+	}
+
+	env.Commit = os.Getenv("GIT_COMMIT")
+	env.Release = os.Getenv("RELEASE_TAG")
+}
+
+func init() {
+	// HACK This allows some modified behavior when running unit tests.
+	if flag.Lookup("test.v") != nil {
+		env.TestMode = true
+	}
+	LoadEnv()
+}
+
 // ###############################################################################
 //  Batch processing task scheduling and support code
 // ###############################################################################
@@ -33,36 +107,18 @@ import (
 // dispatcherFromEnv creates a Dispatcher struct initialized from environment variables.
 // It uses PROJECT, QUEUE_BASE, and NUM_QUEUES.
 func dispatcherFromEnv(client *http.Client) (*dispatch.Dispatcher, error) {
-	project, ok := os.LookupEnv("PROJECT")
-	if !ok {
-		return nil, errors.New("PROJECT not set")
+	if env.Error != nil {
+		log.Println(env.Error)
+		log.Println(env)
+		return nil, env.Error
 	}
-	queueBase, ok := os.LookupEnv("QUEUE_BASE")
-	if !ok {
-		return nil, errors.New("QUEUE_BASE not set")
-	}
-	numQueues, err := strconv.Atoi(os.Getenv("NUM_QUEUES"))
-	if err != nil {
-		log.Println(err)
-		return nil, errors.New("Parse error on NUM_QUEUES")
-	}
-	startString, ok := os.LookupEnv("START_DATE")
-	if !ok {
-		return nil, errors.New("START_DATE not set")
-	}
-	startDate, err := time.Parse("20060102", startString)
-	if err != nil {
-		log.Println("Invalid start date:", startString)
-		return nil, errors.New("START_DATE not set")
-	}
-
 	ds, err := state.NewDatastoreSaver()
 	if err != nil {
 		log.Println(err)
 		return nil, err
 	}
 
-	return dispatch.NewDispatcher(client, project, queueBase, numQueues, startDate, ds)
+	return dispatch.NewDispatcher(client, env.Project, env.QueueBase, env.NumQueues, env.StartDate, ds)
 }
 
 // StartDateRFC3339 is the date at which reprocessing will start when it catches
@@ -98,13 +154,11 @@ func setupPrometheus() {
 // variables, so we can hide sensitive vars. https://github.com/m-lab/etl/issues/384
 func Status(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "<html><body>\n")
-	commit := os.Getenv("GIT_COMMIT")
-	release := os.Getenv("RELEASE_TAG")
-	if len(commit) >= 8 {
+	if len(env.Commit) >= 8 {
 		fmt.Fprintf(w, "Release: %s <br>  Commit: <a href=\"https://github.com/m-lab/etl-gardener/tree/%s\">%s</a><br>\n",
-			release, commit, commit[0:7])
+			env.Release, env.Commit, env.Commit[0:7])
 	} else {
-		fmt.Fprintf(w, "Release: %s <br>  Commit: unknown\n", release)
+		fmt.Fprintf(w, "Release: %s <br>  Commit: unknown\n", env.Release)
 	}
 
 	fmt.Fprintf(w, "</br></br>\n")

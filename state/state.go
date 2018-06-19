@@ -8,14 +8,30 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"os"
+	"regexp"
+	"strings"
 	"time"
 
+	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/datastore"
+	"github.com/m-lab/etl-gardener/metrics"
+	"github.com/m-lab/go/bqext"
 )
 
-// State indicates the state of a single Task in flight.
+// Environment provides "global" variables.
+type environment struct {
+	Project string
+}
+
+// env provides environment vars.
+var env environment
+
+func init() {
+	env.Project = os.Getenv("PROJECT")
+}
+
+// State is a simple enum to indicate the state of a single Task/Task in flight.
 type State int
 
 // State definitions
@@ -32,6 +48,7 @@ const (
 
 // StateNames maps from State to string, for use in String()
 var StateNames = map[State]string{
+	Invalid:       "Invalid",
 	Initializing:  "Initializing",
 	Queuing:       "Queuing",
 	Processing:    "Processing",
@@ -39,6 +56,22 @@ var StateNames = map[State]string{
 	Deduplicating: "Deduplicating",
 	Finishing:     "Finishing",
 	Done:          "Done",
+}
+
+// Task Errors
+var (
+	ErrInvalidQueue  = errors.New("invalid queue")
+	ErrTaskSuspended = errors.New("task suspended")
+)
+
+// Executor describes an object that can do all the required steps to execute a Task.
+// Used for mocking.
+// Interface must update the task in place, so that state changes are all visible.
+type Executor interface {
+	// Advance to the next state.
+	AdvanceState(task *Task)
+	// Advance to the next state.
+	DoAction(task *Task, terminate <-chan struct{})
 }
 
 // Saver provides API for saving Task state.
@@ -55,8 +88,7 @@ type DatastoreSaver struct {
 
 // NewDatastoreSaver creates and returns an appropriate saver.
 func NewDatastoreSaver() (*DatastoreSaver, error) {
-	project := os.Getenv("PROJECT")
-	client, err := datastore.NewClient(context.Background(), project)
+	client, err := datastore.NewClient(context.Background(), env.Project)
 	if err != nil {
 		return nil, err
 	}
@@ -105,11 +137,51 @@ type Task struct {
 
 	UpdateTime time.Time `datastore:",noindex"`
 
-	saver Saver // Saver is used for Save operations. Stored locally, but not persisted.
+	err   error // internal error representation.  Not persisted.
+	saver Saver // Saver is used for Save, Update, Delete, SetError operations.  Stored locally, but not persisted.
+}
+
+// HACK - remove from tq package?
+const start = `^gs://(?P<bucket>.*)/(?P<exp>[^/]*)/`
+const datePath = `(?P<datepath>\d{4}/[01]\d/[0123]\d)/`
+
+// These are here to facilitate use across queue-pusher and parsing components.
+var (
+	// This matches any valid test file name, and some invalid ones.
+	prefixPattern = regexp.MustCompile(start + // #1 #2
+		datePath) // #3 - YYYY/MM/DD
+)
+
+// ParsePrefix Parses prefix, returning {bucket, experiment, date string}, error
+func (t *Task) ParsePrefix() ([]string, error) {
+	fields := prefixPattern.FindStringSubmatch(t.Name)
+
+	if fields == nil {
+		return nil, errors.New("Invalid test path: " + t.Name)
+	}
+	if len(fields) < 4 {
+		return nil, errors.New("Path does not include all fields: " + t.Name)
+	}
+	return fields, nil
+}
+
+// SourceAndDest creates BQ Table entities for the source templated table, and destination partition.
+func (t *Task) SourceAndDest(ds *bqext.Dataset) (*bigquery.Table, *bigquery.Table, error) {
+	// Launch the dedup request, and save the JobID
+	parts, err := t.ParsePrefix()
+	if err != nil {
+		// If there is a parse error, log and skip request.
+		metrics.FailCount.WithLabelValues("BadDedupPrefix")
+		return nil, nil, err
+	}
+
+	src := ds.Table(parts[2] + "_" + strings.Join(strings.Split(parts[3], "/"), ""))
+	dest := ds.Table(parts[2] + "$" + strings.Join(strings.Split(parts[3], "/"), ""))
+	return src, dest, nil
 }
 
 func (t Task) String() string {
-	return fmt.Sprintf("{%s: %s, Q:%s, J:%s, E:%s (%s)}", t.Name, StateNames[t.State], t.Queue, t.JobID, t.ErrMsg, t.ErrInfo)
+	return fmt.Sprintf("{%s: %s, Q:%s, J:%s, E:%v (%s)}", t.Name, StateNames[t.State], t.Queue, t.JobID, t.err, t.ErrInfo)
 }
 
 // ErrNoSaver is returned when saver has not been set.
@@ -153,6 +225,16 @@ func (t *Task) SetError(err error, info string) error {
 	return t.saver.SaveTask(*t)
 }
 
+// HasError returns true if the task has encountered an error.
+func (t *Task) HasError() bool {
+	return t.err != nil || t.ErrMsg != ""
+}
+
+// IsSuspended indicates whether the task is suspended due to termination
+func (t *Task) IsSuspended() bool {
+	return t.err == ErrTaskSuspended || t.ErrMsg == ErrTaskSuspended.Error()
+}
+
 // SetSaver sets the value of the saver to be used for all other calls.
 func (t *Task) SetSaver(saver Saver) {
 	t.saver = saver
@@ -162,6 +244,7 @@ func (t *Task) SetSaver(saver Saver) {
 type Terminator interface {
 	GetNotifyChannel() <-chan struct{}
 	Terminate()
+	// This is also the sync.WaitGroup API
 	Add(n int)
 	Done()
 	Wait()
@@ -173,19 +256,26 @@ func nop() {}
 
 // Process handles all steps of processing a task.
 // TODO: Real implementation. This is a dummy implementation, to support testing TaskHandler.
-func (t *Task) Process(tq chan<- string, term Terminator) {
-	select {
-	case <-time.After(time.Duration(1+rand.Intn(10)) * time.Millisecond):
-		tq <- t.Queue
-		// Wait until one of these...
+func (t Task) Process(ex Executor, tq chan<- string, term Terminator) {
+	log.Println("Processing:", t.Name)
+loop:
+	for t.State != Done && t.err == nil {
 		select {
-		case <-time.After(time.Duration(1+rand.Intn(10)) * time.Millisecond):
-			nop()
 		case <-term.GetNotifyChannel():
-			nop()
+			t.SetError(ErrTaskSuspended, "Terminating")
+			break loop
+		default:
+			switch t.State {
+			case Processing:
+				ex.DoAction(&t, term.GetNotifyChannel())
+				log.Println("Returning", t.Queue)
+				tq <- t.Queue // return the queue.
+				ex.AdvanceState(&t)
+			default:
+				ex.DoAction(&t, term.GetNotifyChannel())
+				ex.AdvanceState(&t)
+			}
 		}
-	case <-term.GetNotifyChannel():
-		nop()
 	}
 	term.Done()
 }
