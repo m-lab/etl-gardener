@@ -52,7 +52,7 @@ func xTestSaver(t *testing.T) {
 func TestDispatcherLifeCycle(t *testing.T) {
 	// Use a fake client so we intercept all the http ops.
 	client, counter := tq.DryRunQueuerClient()
-	config := cloud.Config{"mlab-testing", "dataset", client, nil, true}
+	config := cloud.Config{Project: "mlab-testing", Dataset: "dataset", Client: client, Options: nil, TestMode: true}
 
 	saver := S{tasks: make(map[string][]state.Task)}
 
