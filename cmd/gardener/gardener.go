@@ -18,6 +18,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/m-lab/etl-gardener/cloud"
+
 	"github.com/m-lab/etl-gardener/dispatch"
 	"github.com/m-lab/etl-gardener/state"
 
@@ -33,6 +35,7 @@ type environment struct {
 	// Vars for newDispatcher
 	Error     error
 	Project   string
+	Dataset   string
 	QueueBase string
 	NumQueues int
 	StartDate time.Time
@@ -90,6 +93,8 @@ func LoadEnv() {
 
 	env.Commit = os.Getenv("GIT_COMMIT")
 	env.Release = os.Getenv("RELEASE_TAG")
+
+	env.Dataset = os.Getenv("DATASET")
 }
 
 func init() {
@@ -118,7 +123,8 @@ func dispatcherFromEnv(client *http.Client) (*dispatch.Dispatcher, error) {
 		return nil, err
 	}
 
-	return dispatch.NewDispatcher(client, env.Project, env.QueueBase, env.NumQueues, env.StartDate, ds)
+	config := cloud.Config{env.Project, env.Dataset, client, nil, false}
+	return dispatch.NewDispatcher(config, env.QueueBase, env.NumQueues, env.StartDate, ds)
 }
 
 // StartDateRFC3339 is the date at which reprocessing will start when it catches

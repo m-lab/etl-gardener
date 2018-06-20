@@ -2,41 +2,26 @@ package tq
 
 import (
 	"errors"
-	"flag"
 	"io"
 	"log"
 	"math/rand"
-	"net/http"
 	"regexp"
 	"time"
 
 	"github.com/m-lab/etl-gardener/api"
+	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/etl-gardener/state"
 	"google.golang.org/api/option"
 	"google.golang.org/appengine/taskqueue"
 )
 
-// Environment provides "global" variables.
-type environment struct {
-	TestMode bool
-}
-
-// env provides environment vars.
-var env environment
-
-func init() {
-	// HACK This allows some modified behavior when running unit tests.
-	if flag.Lookup("test.v") != nil {
-		env.TestMode = true
-	}
-	log.Println(env.TestMode)
-}
-
 // ChannelQueueHandler is an autonomous queue handler running in a go
 // routine, fed by a channel.
 type ChannelQueueHandler struct {
-	*QueueHandler
+	cloud.Config // Package level config options
+
+	*QueueHandler // NOTE: This also contains a Project field.
 	// Handler listens on this channel for prefixes.
 	MsgChan      chan state.Task
 	ResponseChan chan error
@@ -100,10 +85,10 @@ func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 	inactiveStartTime := time.Now() // If the queue is actually empty, this allows timeout.
 	nullTime := time.Time{}
 	for {
-		stats, err := GetTaskqueueStats(qh.HTTPClient, qh.Project, qh.Queue)
+		stats, err := GetTaskqueueStats(qh.HTTPClient, qh.Config.Project, qh.Queue)
 		if err != nil {
 			if err == io.EOF {
-				if !env.TestMode {
+				if !qh.TestMode {
 					log.Println(err, "GetTaskqueueStats returned EOF - test client?")
 				}
 				return
@@ -155,7 +140,7 @@ func (qh *ChannelQueueHandler) processOneRequest(prefix string, bucketOpts ...op
 		return 0, err
 	}
 	bucketName := parts[1]
-	bucket, err := GetBucket(bucketOpts, qh.Project, bucketName, false)
+	bucket, err := GetBucket(bucketOpts, qh.Config.Project, bucketName, false)
 	if err != nil {
 		log.Println(err)
 		metrics.FailCount.WithLabelValues("BucketError").Inc()
@@ -188,7 +173,7 @@ func (qh *ChannelQueueHandler) handleLoop(next api.TaskPipe, bucketOpts ...optio
 			task.SetError(err, "ProcessOneRequest")
 			continue
 		}
-		if env.TestMode {
+		if qh.TestMode {
 			log.Println("test mode")
 			n = 1
 		}
@@ -239,14 +224,14 @@ func (qh *ChannelQueueHandler) StartHandleLoop(next api.TaskPipe, bucketOpts ...
 // from a channel.
 // Returns feeding channel, and done channel, which will return true when
 // feeding channel is closed, and processing is complete.
-func NewChannelQueueHandler(httpClient *http.Client, project, queue string, next api.TaskPipe, bucketOpts ...option.ClientOption) (*ChannelQueueHandler, error) {
-	qh, err := NewQueueHandler(httpClient, project, queue)
+func NewChannelQueueHandler(config cloud.Config, queue string, next api.TaskPipe, bucketOpts ...option.ClientOption) (*ChannelQueueHandler, error) {
+	qh, err := NewQueueHandler(config.Client, config.Project, queue)
 	if err != nil {
 		return nil, err
 	}
 	msg := make(chan state.Task)
 	rsp := make(chan error)
-	cqh := ChannelQueueHandler{qh, msg, rsp}
+	cqh := ChannelQueueHandler{config, qh, msg, rsp}
 
 	cqh.StartHandleLoop(next, bucketOpts...)
 	return &cqh, nil

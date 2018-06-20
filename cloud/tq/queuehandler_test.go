@@ -5,6 +5,7 @@ import (
 	"log"
 	"testing"
 
+	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/state"
 )
@@ -16,7 +17,8 @@ func init() {
 
 func TestChannelQueueHandler(t *testing.T) {
 	client, counter := tq.DryRunQueuerClient()
-	cqh, err := tq.NewChannelQueueHandler(client, "mlab-testing", "test-queue", nil)
+	config := cloud.Config{"mlab-testing", "", client, nil, true}
+	cqh, err := tq.NewChannelQueueHandler(config, "test-queue", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

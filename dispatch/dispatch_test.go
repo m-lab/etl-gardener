@@ -8,6 +8,7 @@ import (
 
 	"google.golang.org/api/option"
 
+	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/dispatch"
 	"github.com/m-lab/etl-gardener/state"
@@ -49,17 +50,16 @@ func xTestSaver(t *testing.T) {
 }
 
 func TestDispatcherLifeCycle(t *testing.T) {
-	os.Setenv("PROJECT", "mlab-testing")
-	os.Setenv("UNIT_TEST_MODE", "true")
 	// Use a fake client so we intercept all the http ops.
 	client, counter := tq.DryRunQueuerClient()
+	config := cloud.Config{"mlab-testing", "dataset", client, nil, true}
 
 	saver := S{tasks: make(map[string][]state.Task)}
 
 	// With time.Now(), this shouldn't send any requests.
 	// Inject fake client for bucket ops, so it doesn't hit the backends at all.
 	// Construction will trigger 4 HTTP calls, one to check that each queue is empty.
-	d, err := dispatch.NewDispatcher(client, "mlab-testing", "test-queue-", 3, time.Now(), &saver, option.WithHTTPClient(client))
+	d, err := dispatch.NewDispatcher(config, "test-queue-", 3, time.Now(), &saver, option.WithHTTPClient(client))
 	if err != nil {
 		t.Fatal(err)
 	}

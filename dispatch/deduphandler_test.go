@@ -2,11 +2,11 @@ package dispatch_test
 
 import (
 	"log"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/m-lab/etl-gardener/api"
+	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/dispatch"
 	"github.com/m-lab/etl-gardener/state"
@@ -23,10 +23,10 @@ func TestDedupHandler(t *testing.T) {
 	// Use a fake client so we intercept all the http ops.
 	client, counter := tq.DryRunQueuerClient()
 
-	os.Setenv("PROJECT", "mlab-testing")
-	os.Setenv("DATASET", "batch")
+	config := cloud.Config{"mlab-testing", "batch", client,
+		[]option.ClientOption{option.WithHTTPClient(client)}, true}
 
-	dedup := dispatch.NewDedupHandler(option.WithHTTPClient(client))
+	dedup := dispatch.NewDedupHandler(config)
 
 	// TODO - also test with inconsistent state.
 	dedup.Sink() <- state.Task{Name: "gs://gfr/sidestream/2001/01/01/", State: state.Stabilizing}

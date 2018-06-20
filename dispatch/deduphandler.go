@@ -3,37 +3,20 @@ package dispatch
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"log"
 	"math/rand"
-	"os"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/bigquery"
+	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/etl-gardener/state"
 	"github.com/m-lab/go/bqext"
-	"google.golang.org/api/option"
 )
-
-// Environment provides "global" variables.
-type environment struct {
-	TestMode bool
-}
-
-// env provides environment vars.
-var env environment
-
-func init() {
-	// HACK This allows some modified behavior when running unit tests.
-	if flag.Lookup("test.v") != nil {
-		env.TestMode = true
-	}
-}
 
 // Dedup related errors.
 var (
@@ -42,8 +25,7 @@ var (
 
 // DedupHandler handles requests to dedup a table.
 type DedupHandler struct {
-	Project      string
-	Dataset      string
+	cloud.Config
 	MsgChan      chan state.Task
 	ResponseChan chan error
 }
@@ -59,9 +41,9 @@ func (dh *DedupHandler) Response() <-chan error {
 }
 
 // WaitForStableTable loops checking until table exists and has no streaming buffer.
-func WaitForStableTable(tt *bigquery.Table) error {
+func WaitForStableTable(config cloud.Config, tt *bigquery.Table) error {
 	errorTimeout := 2 * time.Minute
-	if env.TestMode {
+	if config.TestMode {
 		errorTimeout = time.Second
 	}
 	errorDeadline := time.Now().Add(errorTimeout)
@@ -118,7 +100,7 @@ ErrorTimeout:
 }
 
 // waitAndDedup waits until table is stable, then deduplicates it.
-func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientOpts ...option.ClientOption) error {
+func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task) error {
 	parts, err := tq.ParsePrefix(task.Name)
 	if err != nil {
 		// If there is a parse error, log and skip request.
@@ -132,7 +114,7 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientO
 	// First wait for the source table's streaming buffer to be integrated.
 	// This often takes an hour or more.
 	tt := ds.Table(parts[2] + "_" + strings.Join(strings.Split(parts[3], "/"), ""))
-	err = WaitForStableTable(tt)
+	err = WaitForStableTable(dh.Config, tt)
 	if err != nil {
 		metrics.FailCount.WithLabelValues("WaitForStableTable")
 		task.SetError(err, "WaitForStableTable")
@@ -208,13 +190,13 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task, clientO
 }
 
 // handleLoop processes requests on input channel
-func (dh *DedupHandler) handleLoop(opts ...option.ClientOption) {
+func (dh *DedupHandler) handleLoop() {
 	var last state.Task
 	for task := range dh.MsgChan {
 		//testMode := strings.HasPrefix(task.Queue, "test-queue")
 		last = task
 		log.Println("Deduping", task)
-		ds, err := bqext.NewDataset(dh.Project, dh.Dataset, opts...)
+		ds, err := bqext.NewDataset(dh.Project, dh.Dataset, dh.Options...)
 		if err != nil {
 			task.SetError(err, "NewDataset")
 			metrics.FailCount.WithLabelValues("NewDataset")
@@ -223,7 +205,7 @@ func (dh *DedupHandler) handleLoop(opts ...option.ClientOption) {
 			continue
 		}
 
-		dh.waitAndDedup(&ds, task, opts...)
+		dh.waitAndDedup(&ds, task)
 
 		// TODO - sanity check and copy to final destination.
 
@@ -238,20 +220,12 @@ func (dh *DedupHandler) handleLoop(opts ...option.ClientOption) {
 // from a channel.
 // Returns feeding channel, and done channel, which will return true when
 // feeding channel is closed, and processing is complete.
-func NewDedupHandler(opts ...option.ClientOption) *DedupHandler {
-	project := os.Getenv("PROJECT")
-	dataset := os.Getenv("DATASET")
-	// When running in prod, the task files and queues are in mlab-oti, but the destination
-	// BigQuery tables are in measurement-lab.
-	// However, for sidestream private tables, we leave them in mlab-oti
-	if project == "mlab-oti" && dataset != "private" {
-		project = "measurement-lab" // destination for production tables.
-	}
+func NewDedupHandler(config cloud.Config) *DedupHandler {
 	msg := make(chan state.Task)
 	rsp := make(chan error)
-	dh := DedupHandler{project, dataset, msg, rsp}
+	dh := DedupHandler{config, msg, rsp}
 
-	go dh.handleLoop(opts...)
+	go dh.handleLoop()
 	return &dh
 }
 
