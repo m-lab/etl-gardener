@@ -9,7 +9,6 @@ import (
 	"io"
 	"log"
 	"math/rand"
-	"os"
 	"time"
 
 	"cloud.google.com/go/datastore"
@@ -54,8 +53,8 @@ type DatastoreSaver struct {
 }
 
 // NewDatastoreSaver creates and returns an appropriate saver.
-func NewDatastoreSaver() (*DatastoreSaver, error) {
-	project := os.Getenv("PROJECT")
+// TODO - if this ever needs more context, use cloud.Config
+func NewDatastoreSaver(project string) (*DatastoreSaver, error) {
 	client, err := datastore.NewClient(context.Background(), project)
 	if err != nil {
 		return nil, err
@@ -203,8 +202,8 @@ func (ds *DatastoreSaver) GetStatus(ctx context.Context) ([]Task, error) {
 }
 
 // WriteHTMLStatusTo writes HTML formatted task status.
-func WriteHTMLStatusTo(w io.Writer) error {
-	ds, err := NewDatastoreSaver()
+func WriteHTMLStatusTo(w io.Writer, project string) error {
+	ds, err := NewDatastoreSaver(project)
 	if err != nil {
 		fmt.Fprintln(w, "Error creating Datastore client:", err)
 		return err

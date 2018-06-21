@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"log"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -102,8 +101,7 @@ func CleanupDatastore(ds *state.DatastoreSaver) error {
 }
 
 func TestStatus(t *testing.T) {
-	os.Setenv("PROJECT", "mlab-testing")
-	saver, err := state.NewDatastoreSaver()
+	saver, err := state.NewDatastoreSaver("mlab-testing")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,9 +147,7 @@ func TestStatus(t *testing.T) {
 }
 
 func TestWriteStatus(t *testing.T) {
-	os.Setenv("PROJECT", "mlab-testing")
-
-	saver, err := state.NewDatastoreSaver()
+	saver, err := state.NewDatastoreSaver("mlab-testing")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +162,7 @@ func TestWriteStatus(t *testing.T) {
 	bb := make([]byte, 0, 500)
 	buf := bytes.NewBuffer(bb)
 
-	err = state.WriteHTMLStatusTo(buf)
+	err = state.WriteHTMLStatusTo(buf, "mlab-testing")
 	if err != nil {
 		t.Fatal(err)
 	}

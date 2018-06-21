@@ -2,7 +2,6 @@ package dispatch_test
 
 import (
 	"log"
-	"os"
 	"testing"
 	"time"
 
@@ -33,9 +32,7 @@ func assertSaver() { func(ex state.Saver) {}(&S{}) }
 
 // Remove leading x to manually test DatastoreSaver.
 func xTestSaver(t *testing.T) {
-	os.Setenv("PROJECT", "mlab-testing")
-
-	saver, err := state.NewDatastoreSaver()
+	saver, err := state.NewDatastoreSaver("mlab-testing")
 	if err != nil {
 		t.Fatal(err)
 	}

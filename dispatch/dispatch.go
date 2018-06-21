@@ -41,7 +41,6 @@ var (
 // QueueHandlers.
 // bucketOpts may be used to provide a fake client for bucket operations.
 func NewDispatcher(config cloud.Config, queueBase string, numQueues int,
-	//httpClient *http.Client, project, queueBase string, numQueues int,
 	startDate time.Time, saver state.Saver, bucketOpts ...option.ClientOption) (*Dispatcher, error) {
 	// When running in prod, the task files and queues are in mlab-oti, but the destination
 	// BigQuery tables are in measurement-lab.

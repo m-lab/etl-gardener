@@ -117,7 +117,7 @@ func dispatcherFromEnv(client *http.Client) (*dispatch.Dispatcher, error) {
 		log.Println(env)
 		return nil, env.Error
 	}
-	ds, err := state.NewDatastoreSaver()
+	ds, err := state.NewDatastoreSaver(env.Project)
 	if err != nil {
 		log.Println(err)
 		return nil, err
@@ -168,7 +168,7 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Fprintf(w, "</br></br>\n")
-	state.WriteHTMLStatusTo(w)
+	state.WriteHTMLStatusTo(w, env.Project)
 	fmt.Fprintf(w, "</br>\n")
 
 	env := os.Environ()
