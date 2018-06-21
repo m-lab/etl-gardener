@@ -7,7 +7,6 @@ import (
 
 	"github.com/m-lab/etl-gardener/api"
 	"github.com/m-lab/etl-gardener/cloud"
-	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/dispatch"
 	"github.com/m-lab/etl-gardener/state"
 	"google.golang.org/api/option"
@@ -21,7 +20,7 @@ func assertTaskPipe() {
 // This is much too whitebox.  Can we find better abstractions to improve testing?
 func TestDedupHandler(t *testing.T) {
 	// Use a fake client so we intercept all the http ops.
-	client, counter := tq.DryRunQueuerClient()
+	client, counter := cloud.DryRunClient()
 
 	config := cloud.Config{Project: "mlab-testing", Dataset: "batch", Client: client,
 		Options: []option.ClientOption{option.WithHTTPClient(client)}, TestMode: true}

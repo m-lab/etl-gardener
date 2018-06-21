@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 )
 
@@ -15,8 +16,9 @@ func init() {
 
 func TestPostOneTask(t *testing.T) {
 	os.Setenv("PROJECT", "mlab-testing")
-	client, counter := tq.DryRunQueuerClient()
-	q, err := tq.NewQueueHandler(client, "mlab-testing", "test-queue")
+	client, counter := cloud.DryRunClient()
+	config := cloud.Config{Client: client, Project: "mlab-testing"}
+	q, err := tq.NewQueueHandler(config, "test-queue")
 	if err != nil {
 		t.Fatal(err)
 	}

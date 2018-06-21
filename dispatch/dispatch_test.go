@@ -9,7 +9,6 @@ import (
 	"google.golang.org/api/option"
 
 	"github.com/m-lab/etl-gardener/cloud"
-	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/dispatch"
 	"github.com/m-lab/etl-gardener/state"
 )
@@ -51,7 +50,7 @@ func xTestSaver(t *testing.T) {
 
 func TestDispatcherLifeCycle(t *testing.T) {
 	// Use a fake client so we intercept all the http ops.
-	client, counter := tq.DryRunQueuerClient()
+	client, counter := cloud.DryRunClient()
 	config := cloud.Config{Project: "mlab-testing", Dataset: "dataset", Client: client, Options: nil, TestMode: true}
 
 	saver := S{tasks: make(map[string][]state.Task)}

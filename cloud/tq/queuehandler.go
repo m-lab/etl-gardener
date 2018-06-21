@@ -19,9 +19,7 @@ import (
 // ChannelQueueHandler is an autonomous queue handler running in a go
 // routine, fed by a channel.
 type ChannelQueueHandler struct {
-	cloud.Config // Package level config options
-
-	*QueueHandler // NOTE: This also contains a Project field.
+	*QueueHandler
 	// Handler listens on this channel for prefixes.
 	MsgChan      chan state.Task
 	ResponseChan chan error
@@ -85,7 +83,7 @@ func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 	inactiveStartTime := time.Now() // If the queue is actually empty, this allows timeout.
 	nullTime := time.Time{}
 	for {
-		stats, err := GetTaskqueueStats(qh.HTTPClient, qh.Config.Project, qh.Queue)
+		stats, err := GetTaskqueueStats(qh.Config, qh.Queue)
 		if err != nil {
 			if err == io.EOF {
 				if !qh.TestMode {
@@ -224,14 +222,15 @@ func (qh *ChannelQueueHandler) StartHandleLoop(next api.TaskPipe, bucketOpts ...
 // from a channel.
 // Returns feeding channel, and done channel, which will return true when
 // feeding channel is closed, and processing is complete.
+// Note that config must include a non-nil Client.
 func NewChannelQueueHandler(config cloud.Config, queue string, next api.TaskPipe, bucketOpts ...option.ClientOption) (*ChannelQueueHandler, error) {
-	qh, err := NewQueueHandler(config.Client, config.Project, queue)
+	qh, err := NewQueueHandler(config, queue)
 	if err != nil {
 		return nil, err
 	}
 	msg := make(chan state.Task)
 	rsp := make(chan error)
-	cqh := ChannelQueueHandler{config, qh, msg, rsp}
+	cqh := ChannelQueueHandler{qh, msg, rsp}
 
 	cqh.StartHandleLoop(next, bucketOpts...)
 	return &cqh, nil

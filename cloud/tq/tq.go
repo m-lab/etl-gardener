@@ -2,7 +2,6 @@
 package tq
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,77 +11,14 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/m-lab/etl-gardener/cloud"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"google.golang.org/appengine/taskqueue"
 )
-
-// *******************************************************************
-// DryRunQueuerClient, that just returns status ok and empty body
-// For injection when we want Queuer to do nothing.
-// *******************************************************************
-
-// CountingTransport counts calls, and returns OK and empty body.
-type CountingTransport struct {
-	count int32
-	reqs  []*http.Request
-}
-
-// Count returns the client call count.
-func (ct *CountingTransport) Count() int32 {
-	return atomic.LoadInt32(&ct.count)
-}
-
-// Requests returns the entire req from the last request
-func (ct *CountingTransport) Requests() []*http.Request {
-	return ct.reqs
-}
-
-type nopCloser struct {
-	io.Reader
-}
-
-func (nc *nopCloser) Close() error { return nil }
-
-// RoundTrip implements the RoundTripper interface, logging the
-// request, and the response body, (which may be json).
-func (ct *CountingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	atomic.AddInt32(&ct.count, 1)
-
-	// Create an empty response with StatusOK
-	resp := &http.Response{}
-	resp.StatusCode = http.StatusOK
-	resp.Body = &nopCloser{strings.NewReader("")}
-
-	// Save the request for testing.
-	ct.reqs = append(ct.reqs, req)
-
-	return resp, nil
-}
-
-// DryRunQueuerClient returns a client that just counts calls.
-func DryRunQueuerClient() (*http.Client, *CountingTransport) {
-	client := &http.Client{}
-	tp := &CountingTransport{}
-	client.Transport = tp
-	return client, tp
-}
-
-// This is used to intercept Get requests to the queue_pusher when invoked
-// with -dry_run.
-type dryRunHTTP struct{}
-
-func (dr *dryRunHTTP) Get(url string) (resp *http.Response, err error) {
-	resp = &http.Response{}
-	resp.Body = ioutil.NopCloser(bytes.NewReader([]byte{}))
-	resp.Status = "200 OK"
-	resp.StatusCode = 200
-	return
-}
 
 // *******************************************************************
 // Queuer handles queueing of reprocessing requests
@@ -101,10 +37,8 @@ var (
 //   bucket
 //   strategies for enqueuing.
 type QueueHandler struct {
-	Project string // project containing task queue
-	Queue   string // task queue name
-	// Bucket    *storage.BucketHandle
-	HTTPClient *http.Client // Client to be used for http requests to queue pusher.
+	cloud.Config
+	Queue string // task queue name
 }
 
 // NewQueueHandler creates a QueueHandler struct from provided parameters.  This does network ops.
@@ -112,18 +46,18 @@ type QueueHandler struct {
 //                must be non-null.
 //   project
 //   queue
-func NewQueueHandler(httpClient *http.Client, project, queue string) (*QueueHandler, error) {
-	if httpClient == nil {
+func NewQueueHandler(config cloud.Config, queue string) (*QueueHandler, error) {
+	if config.Client == nil {
 		return nil, ErrNilClient
 	}
 
-	return &QueueHandler{project, queue, httpClient}, nil
+	return &QueueHandler{config, queue}, nil
 }
 
 // IsEmpty checks whether the queue is empty, i.e., all tasks have been successfully
 // processed.
 func (qh *QueueHandler) IsEmpty() error {
-	stats, err := GetTaskqueueStats(qh.HTTPClient, qh.Project, qh.Queue)
+	stats, err := GetTaskqueueStats(qh.Config, qh.Queue)
 	if err != nil {
 		return err
 	}
@@ -134,10 +68,10 @@ func (qh *QueueHandler) IsEmpty() error {
 }
 
 // GetTaskqueueStats gets stats for a single task queue.
-func GetTaskqueueStats(client *http.Client, project string, name string) (stats taskqueue.QueueStatistics, err error) {
+func GetTaskqueueStats(config cloud.Config, name string) (stats taskqueue.QueueStatistics, err error) {
 	// Would prefer to use this, but it does not work from flex![]
 	// stats, err := taskqueue.QueueStats(context.Background(), queueNames)
-	resp, err := client.Get(fmt.Sprintf(`https://queue-pusher-dot-%s.appspot.com/stats?queuename=%s`, project, name))
+	resp, err := config.Client.Get(fmt.Sprintf(`https://queue-pusher-dot-%s.appspot.com/stats?queuename=%s`, config.Project, name))
 	if err != nil {
 		return
 	}
@@ -145,7 +79,7 @@ func GetTaskqueueStats(client *http.Client, project string, name string) (stats 
 	if resp.StatusCode != http.StatusOK {
 		err = errors.New("HTTP request: " + http.StatusText(resp.StatusCode))
 		log.Println(err)
-		log.Printf(`https://queue-pusher-dot-%s.appspot.com/stats?queuename=%s\n`, project, name)
+		log.Printf(`https://queue-pusher-dot-%s.appspot.com/stats?queuename=%s\n`, config.Project, name)
 		return
 	}
 	data := make([]byte, 10000)
@@ -158,7 +92,7 @@ func GetTaskqueueStats(client *http.Client, project string, name string) (stats 
 	err = json.Unmarshal(data[:n], &statsSlice)
 	if err != nil {
 		log.Println(err)
-		log.Printf(`https://queue-pusher-dot-%s.appspot.com/stats?queuename=%s`, project, name)
+		log.Printf(`https://queue-pusher-dot-%s.appspot.com/stats?queuename=%s`, config.Project, name)
 		return
 	}
 	if len(statsSlice) != 1 {
@@ -174,7 +108,7 @@ func GetTaskqueueStats(client *http.Client, project string, name string) (stats 
 func (qh QueueHandler) PostOneTask(bucket, fn string) error {
 	reqStr := fmt.Sprintf("https://queue-pusher-dot-%s.appspot.com/receiver?queue=%s&filename=gs://%s/%s", qh.Project, qh.Queue, bucket, fn)
 
-	resp, err := qh.HTTPClient.Get(reqStr)
+	resp, err := qh.Client.Get(reqStr)
 	if err != nil {
 		log.Println(err)
 		// TODO - we don't see errors here or below when the queue doesn't exist.

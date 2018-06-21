@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"cloud.google.com/go/storage"
+	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"google.golang.org/api/iterator"
 )
@@ -74,7 +75,7 @@ func TestIsEmpty(t *testing.T) {
 // check that the bucket content has not been changed.
 func TestPostDay(t *testing.T) {
 	// Use a fake queue client.
-	client, counter := tq.DryRunQueuerClient()
+	client, counter := cloud.DryRunQueuerClient()
 	q, err := tq.NewQueueHandler(client, "fake-project", "test-queue")
 	if err != nil {
 		t.Fatal(err)
