@@ -15,6 +15,7 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
+// NOTE: This test is just slow because it triggers 10 requests to cloud storage.
 func TestChannelQueueHandler(t *testing.T) {
 	client, counter := cloud.DryRunClient()
 	config := cloud.Config{Project: "mlab-testing", Dataset: "", Client: client, Options: nil, TestMode: true}

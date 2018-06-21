@@ -44,7 +44,6 @@ type QueueHandler struct {
 // NewQueueHandler creates a QueueHandler struct from provided parameters.  This does network ops.
 //   httpClient - client to be used for queue_pusher calls.  Allows injection of fake for testing.
 //                must be non-null.
-//   project
 //   queue
 func NewQueueHandler(config cloud.Config, queue string) (*QueueHandler, error) {
 	if config.Client == nil {
@@ -133,6 +132,9 @@ func (qh QueueHandler) PostOneTask(bucket, fn string) error {
 // if there are recoverable errors.
 func (qh *QueueHandler) postWithRetry(bucket, filepath string) error {
 	backoff := 5 * time.Second
+	if qh.TestMode {
+		backoff = 100 * time.Millisecond
+	}
 	var err error
 	for i := 0; i < 3; i++ {
 		err = qh.PostOneTask(bucket, filepath)

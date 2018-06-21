@@ -21,7 +21,8 @@ func init() {
 }
 
 func TestGetTaskqueueStats(t *testing.T) {
-	stats, err := tq.GetTaskqueueStats(http.DefaultClient, "mlab-sandbox", "test-queue")
+	config := cloud.Config{Client: http.DefaultClient, Project: "mlab-sandbox"}
+	stats, err := tq.GetTaskqueueStats(config, "test-queue")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +62,8 @@ func TestGetBucket(t *testing.T) {
 }
 
 func TestIsEmpty(t *testing.T) {
-	q, err := tq.NewQueueHandler(http.DefaultClient, "mlab-sandbox", "test-queue")
+	config := cloud.Config{Client: http.DefaultClient, Project: "mlab-sandbox"}
+	q, err := tq.NewQueueHandler(config, "test-queue")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,8 +77,9 @@ func TestIsEmpty(t *testing.T) {
 // check that the bucket content has not been changed.
 func TestPostDay(t *testing.T) {
 	// Use a fake queue client.
-	client, counter := cloud.DryRunQueuerClient()
-	q, err := tq.NewQueueHandler(client, "fake-project", "test-queue")
+	client, counter := cloud.DryRunClient()
+	config := cloud.Config{Client: client, Project: "fake-project"}
+	q, err := tq.NewQueueHandler(config, "test-queue")
 	if err != nil {
 		t.Fatal(err)
 	}

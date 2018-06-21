@@ -44,7 +44,7 @@ func (dh *DedupHandler) Response() <-chan error {
 func WaitForStableTable(config cloud.Config, tt *bigquery.Table) error {
 	errorTimeout := 2 * time.Minute
 	if config.TestMode {
-		errorTimeout = time.Second
+		errorTimeout = 100 * time.Millisecond
 	}
 	errorDeadline := time.Now().Add(errorTimeout)
 	log.Println("Wait for table ready", tt.FullyQualifiedName())
