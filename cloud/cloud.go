@@ -15,14 +15,22 @@ import (
 
 // Config provides a generic config suitable for many cloud clients.
 type Config struct {
-	Project   string
-	BQDataset string // TODO - do we want this here?  Only used for bigquery
+	Project string // Project for most cloud ops.
 
 	// client to be used for cloud API calls.  Allows injection of fake for testing.
 	Client  *http.Client
 	Options []option.ClientOption
 
 	TestMode bool
+}
+
+type BQConfig struct {
+	Config
+
+	// In prod, most services are from mlab-oti, but BQ tables may be in measurement-lab.
+	// So we provide a separate BQProject
+	BQProject string // Project for BigQuery tables
+	BQDataset string // Dataset for BigQuery tables
 }
 
 // *******************************************************************

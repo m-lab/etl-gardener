@@ -18,7 +18,7 @@ func init() {
 // NOTE: This test is just slow because it triggers 10 requests to cloud storage.
 func TestChannelQueueHandler(t *testing.T) {
 	client, counter := cloud.DryRunClient()
-	config := cloud.Config{Project: "mlab-testing", BQDataset: "", Client: client, Options: nil, TestMode: true}
+	config := cloud.Config{Project: "mlab-testing", Client: client, Options: nil, TestMode: true}
 	cqh, err := tq.NewChannelQueueHandler(config, "test-queue", nil)
 	if err != nil {
 		t.Fatal(err)

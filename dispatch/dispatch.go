@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"reflect"
 	"sync"
 	"time"
@@ -42,18 +43,25 @@ var (
 // bucketOpts may be used to provide a fake client for bucket operations.
 func NewDispatcher(config cloud.Config, queueBase string, numQueues int,
 	startDate time.Time, saver state.Saver, bucketOpts ...option.ClientOption) (*Dispatcher, error) {
+
+	bqDataset, ok := os.LookupEnv("DATASET")
+	if !ok {
+		log.Println("ERROR: env.DATASET not set")
+	}
+
 	// When running in prod, the task files and queues are in mlab-oti, but the destination
 	// BigQuery tables are in measurement-lab.
 	// However, for sidestream private tables, we leave them in mlab-oti
-	if config.Project == "mlab-oti" && config.BQDataset != "private" {
-		config.Project = "measurement-lab" // destination for production tables.
+	bqProject := config.Project
+	if bqProject == "mlab-oti" && bqDataset != "private" {
+		bqProject = "measurement-lab" // destination for production tables.
 	}
-
+	bqConfig := cloud.BQConfig{Config: config, BQProject: bqProject, BQDataset: bqDataset}
 	handlers := make([]api.TaskPipe, 0, numQueues)
 	for i := 0; i < numQueues; i++ {
 		queue := fmt.Sprintf("%s%d", queueBase, i)
 		// First build the dedup handler.
-		dedup := NewDedupHandler(config)
+		dedup := NewDedupHandler(bqConfig)
 		// Build QueueHandler that chains to dedup handler.
 
 		cqh, err := tq.NewChannelQueueHandler(config,

@@ -47,7 +47,7 @@ func TestSaver(t *testing.T) {
 func TestDispatcherLifeCycle(t *testing.T) {
 	// Use a fake client so we intercept all the http ops.
 	client, counter := cloud.DryRunClient()
-	config := cloud.Config{Project: "mlab-testing", BQDataset: "dataset", Client: client, Options: nil, TestMode: true}
+	config := cloud.Config{Project: "mlab-testing", Client: client, Options: nil, TestMode: true}
 
 	saver := S{tasks: make(map[string][]state.Task)}
 

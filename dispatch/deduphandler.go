@@ -25,7 +25,7 @@ var (
 
 // DedupHandler handles requests to dedup a table.
 type DedupHandler struct {
-	cloud.Config
+	cloud.BQConfig
 	MsgChan      chan state.Task
 	ResponseChan chan error
 }
@@ -41,7 +41,7 @@ func (dh *DedupHandler) Response() <-chan error {
 }
 
 // WaitForStableTable loops checking until table exists and has no streaming buffer.
-func WaitForStableTable(config cloud.Config, tt *bigquery.Table) error {
+func WaitForStableTable(config cloud.BQConfig, tt *bigquery.Table) error {
 	errorTimeout := 2 * time.Minute
 	if config.TestMode {
 		errorTimeout = 100 * time.Millisecond
@@ -114,7 +114,7 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task) error {
 	// First wait for the source table's streaming buffer to be integrated.
 	// This often takes an hour or more.
 	tt := ds.Table(parts[2] + "_" + strings.Join(strings.Split(parts[3], "/"), ""))
-	err = WaitForStableTable(dh.Config, tt)
+	err = WaitForStableTable(dh.BQConfig, tt)
 	if err != nil {
 		metrics.FailCount.WithLabelValues("WaitForStableTable")
 		task.SetError(err, "WaitForStableTable")
@@ -196,7 +196,7 @@ func (dh *DedupHandler) handleLoop() {
 		//testMode := strings.HasPrefix(task.Queue, "test-queue")
 		last = task
 		log.Println("Deduping", task)
-		ds, err := bqext.NewDataset(dh.Project, dh.BQDataset, dh.Options...)
+		ds, err := bqext.NewDataset(dh.BQProject, dh.BQDataset, dh.Options...)
 		if err != nil {
 			task.SetError(err, "NewDataset")
 			metrics.FailCount.WithLabelValues("NewDataset")
@@ -220,7 +220,7 @@ func (dh *DedupHandler) handleLoop() {
 // from a channel.
 // Returns feeding channel, and done channel, which will return true when
 // feeding channel is closed, and processing is complete.
-func NewDedupHandler(config cloud.Config) *DedupHandler {
+func NewDedupHandler(config cloud.BQConfig) *DedupHandler {
 	msg := make(chan state.Task)
 	rsp := make(chan error)
 	dh := DedupHandler{config, msg, rsp}
