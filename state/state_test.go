@@ -123,7 +123,7 @@ func TestStatus(t *testing.T) {
 	// In travis, we use the emulator, which should provide consistency
 	// much more quickly.  So we use a modest number here that usually
 	// is sufficient for running on workstation.
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
@@ -135,6 +135,7 @@ func TestStatus(t *testing.T) {
 		t.Fatal(ctx.Err())
 	}
 	if len(tasks) != 2 {
+		log.Println("See notes in code about consistency.")
 		t.Error("Should be 2 tasks", len(tasks))
 		for _, t := range tasks {
 			log.Println(t)
