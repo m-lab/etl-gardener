@@ -196,7 +196,7 @@ func (dh *DedupHandler) handleLoop() {
 		//testMode := strings.HasPrefix(task.Queue, "test-queue")
 		last = task
 		log.Println("Deduping", task)
-		ds, err := bqext.NewDataset(dh.Project, dh.Dataset, dh.Options...)
+		ds, err := bqext.NewDataset(dh.Project, dh.BQDataset, dh.Options...)
 		if err != nil {
 			task.SetError(err, "NewDataset")
 			metrics.FailCount.WithLabelValues("NewDataset")

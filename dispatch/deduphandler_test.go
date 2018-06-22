@@ -22,7 +22,7 @@ func TestDedupHandler(t *testing.T) {
 	// Use a fake client so we intercept all the http ops.
 	client, counter := cloud.DryRunClient()
 
-	config := cloud.Config{Project: "mlab-testing", Dataset: "batch", Client: client,
+	config := cloud.Config{Project: "mlab-testing", BQDataset: "batch", Client: client,
 		Options: []option.ClientOption{option.WithHTTPClient(client)}, TestMode: true}
 
 	dedup := dispatch.NewDedupHandler(config)

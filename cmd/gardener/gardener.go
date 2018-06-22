@@ -123,7 +123,7 @@ func dispatcherFromEnv(client *http.Client) (*dispatch.Dispatcher, error) {
 		return nil, err
 	}
 
-	config := cloud.Config{Project: env.Project, Dataset: env.Dataset, Client: client, Options: nil, TestMode: false}
+	config := cloud.Config{Project: env.Project, BQDataset: env.Dataset, Client: client, Options: nil, TestMode: false}
 	return dispatch.NewDispatcher(config, env.QueueBase, env.NumQueues, env.StartDate, ds)
 }
 

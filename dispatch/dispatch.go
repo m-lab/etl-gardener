@@ -45,7 +45,7 @@ func NewDispatcher(config cloud.Config, queueBase string, numQueues int,
 	// When running in prod, the task files and queues are in mlab-oti, but the destination
 	// BigQuery tables are in measurement-lab.
 	// However, for sidestream private tables, we leave them in mlab-oti
-	if config.Project == "mlab-oti" && config.Dataset != "private" {
+	if config.Project == "mlab-oti" && config.BQDataset != "private" {
 		config.Project = "measurement-lab" // destination for production tables.
 	}
 

@@ -15,8 +15,8 @@ import (
 
 // Config provides a generic config suitable for many cloud clients.
 type Config struct {
-	Project string
-	Dataset string // TODO - do we want this here?  Only used for bigquery
+	Project   string
+	BQDataset string // TODO - do we want this here?  Only used for bigquery
 
 	// client to be used for cloud API calls.  Allows injection of fake for testing.
 	Client  *http.Client
@@ -31,6 +31,7 @@ type Config struct {
 // *******************************************************************
 
 // CountingTransport counts calls, and returns OK and empty body.
+// `count` field should only be accessed using atomic.Foobar
 type CountingTransport struct {
 	count int32
 	reqs  []*http.Request
