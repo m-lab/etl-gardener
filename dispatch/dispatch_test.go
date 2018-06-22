@@ -30,8 +30,7 @@ func (s *S) DeleteTask(t state.Task) error { return nil }
 
 func assertSaver() { func(ex state.Saver) {}(&S{}) }
 
-// Remove leading x to manually test DatastoreSaver.
-func xTestSaver(t *testing.T) {
+func TestSaver(t *testing.T) {
 	saver, err := state.NewDatastoreSaver("mlab-testing")
 	if err != nil {
 		t.Fatal(err)
