@@ -24,6 +24,7 @@ type Config struct {
 	TestMode bool
 }
 
+// BQConfig provides a generic config suitable for BigQuery clients.
 type BQConfig struct {
 	Config
 
