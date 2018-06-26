@@ -38,8 +38,8 @@ var (
 	ErrTerminating = errors.New("dispatcher is terminating")
 )
 
-// BQConfig creates a BQConfig for use with NewDedupHandler
-func BQConfig(config cloud.Config) cloud.BQConfig {
+// NewBQConfig creates a BQConfig for use with NewDedupHandler
+func NewBQConfig(config cloud.Config) cloud.BQConfig {
 	bqDataset, ok := os.LookupEnv("DATASET")
 	if !ok {
 		log.Println("ERROR: env.DATASET not set")
@@ -65,7 +65,7 @@ func NewDispatcher(config cloud.Config, queueBase string, numQueues int,
 	for i := 0; i < numQueues; i++ {
 		queue := fmt.Sprintf("%s%d", queueBase, i)
 		// First build the dedup handler.
-		dedup := NewDedupHandler(BQConfig(config))
+		dedup := NewDedupHandler(NewBQConfig(config))
 		// Build QueueHandler that chains to dedup handler.
 
 		cqh, err := tq.NewChannelQueueHandler(config,

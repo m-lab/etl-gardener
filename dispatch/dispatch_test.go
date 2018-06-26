@@ -112,7 +112,7 @@ func TestDispatcherLifeCycle(t *testing.T) {
 func TestDispatchBQLogic(t *testing.T) {
 	os.Setenv("DATASET", "bar")
 	config := cloud.Config{Project: "foo"}
-	bq := dispatch.BQConfig(config)
+	bq := dispatch.NewBQConfig(config)
 	if bq.BQProject != config.Project {
 		t.Error("BQ project should be", config.Project)
 	}
@@ -121,7 +121,7 @@ func TestDispatchBQLogic(t *testing.T) {
 	}
 
 	config = cloud.Config{Project: "mlab-oti"}
-	bq = dispatch.BQConfig(config)
+	bq = dispatch.NewBQConfig(config)
 	if bq.BQProject != "measurement-lab" {
 		t.Error("BQ project should be measurement-lab")
 	}
@@ -131,12 +131,11 @@ func TestDispatchBQLogic(t *testing.T) {
 
 	os.Setenv("DATASET", "private")
 	config = cloud.Config{Project: "mlab-oti"}
-	bq = dispatch.BQConfig(config)
+	bq = dispatch.NewBQConfig(config)
 	if bq.BQProject != config.Project {
 		t.Error("BQ project should be", config.Project)
 	}
 	if bq.BQDataset != "private" {
 		t.Error("BQ dataset should be private")
 	}
-
 }
