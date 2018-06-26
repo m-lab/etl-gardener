@@ -202,7 +202,6 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task) error {
 func (dh *DedupHandler) handleLoop() {
 	var last state.Task
 	for task := range dh.MsgChan {
-		//testMode := strings.HasPrefix(task.Queue, "test-queue")
 		last = task
 		log.Println("Deduping", task)
 		ds, err := bqext.NewDataset(dh.BQProject, dh.BQDataset, dh.Options...)

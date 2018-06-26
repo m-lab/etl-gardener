@@ -18,6 +18,7 @@ import (
 )
 
 // testMode is set IFF the test.v flag is defined, as it is in all go testing.T tests.
+// Use with caution!
 var testMode bool
 
 func init() {
@@ -94,9 +95,7 @@ func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 		stats, err := GetTaskqueueStats(qh.Config, qh.Queue)
 		if err != nil {
 			if err == io.EOF {
-				if !testMode {
-					log.Println(err, "GetTaskqueueStats returned EOF - test client?")
-				}
+				log.Println(err, "GetTaskqueueStats returned EOF - test client?")
 				return
 			}
 			// We don't expect errors here, so log and retry,
