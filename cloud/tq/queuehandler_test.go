@@ -3,9 +3,9 @@ package tq_test
 import (
 	"fmt"
 	"log"
-	"os"
 	"testing"
 
+	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/state"
 )
@@ -15,13 +15,13 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
+// NOTE: This test is just slow because it triggers 10 requests to cloud storage.
 func TestChannelQueueHandler(t *testing.T) {
-	err := os.Setenv("UNIT_TEST_MODE", "true")
-	if err != nil {
-		t.Fatal("Unable to setenv")
-	}
-	client, counter := tq.DryRunQueuerClient()
-	cqh, err := tq.NewChannelQueueHandler(client, "mlab-testing", "test-queue", nil)
+	client, counter := cloud.DryRunClient()
+	config := cloud.Config{
+		Project: "mlab-testing",
+		Client:  client}
+	cqh, err := tq.NewChannelQueueHandler(config, "test-queue", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

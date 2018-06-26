@@ -2,12 +2,11 @@ package dispatch_test
 
 import (
 	"log"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/m-lab/etl-gardener/api"
-	"github.com/m-lab/etl-gardener/cloud/tq"
+	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/dispatch"
 	"github.com/m-lab/etl-gardener/state"
 	"google.golang.org/api/option"
@@ -21,12 +20,18 @@ func assertTaskPipe() {
 // This is much too whitebox.  Can we find better abstractions to improve testing?
 func TestDedupHandler(t *testing.T) {
 	// Use a fake client so we intercept all the http ops.
-	client, counter := tq.DryRunQueuerClient()
+	client, counter := cloud.DryRunClient()
 
-	os.Setenv("PROJECT", "mlab-testing")
-	os.Setenv("DATASET", "batch")
+	config := cloud.Config{
+		Project: "mlab-testing",
+		Client:  client,
+		Options: []option.ClientOption{option.WithHTTPClient(client)}}
+	bqConfig := cloud.BQConfig{
+		Config:    config,
+		BQProject: "mlab-testing",
+		BQDataset: "batch"}
 
-	dedup := dispatch.NewDedupHandler(option.WithHTTPClient(client))
+	dedup := dispatch.NewDedupHandler(bqConfig)
 
 	// TODO - also test with inconsistent state.
 	dedup.Sink() <- state.Task{Name: "gs://gfr/sidestream/2001/01/01/", State: state.Stabilizing}

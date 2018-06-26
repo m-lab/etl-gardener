@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/api/option"
 
-	"github.com/m-lab/etl-gardener/cloud/tq"
+	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/dispatch"
 	"github.com/m-lab/etl-gardener/state"
 )
@@ -31,11 +31,8 @@ func (s *S) DeleteTask(t state.Task) error { return nil }
 
 func assertSaver() { func(ex state.Saver) {}(&S{}) }
 
-// Remove leading x to manually test DatastoreSaver.
-func xTestSaver(t *testing.T) {
-	os.Setenv("PROJECT", "mlab-testing")
-
-	saver, err := state.NewDatastoreSaver()
+func TestSaver(t *testing.T) {
+	saver, err := state.NewDatastoreSaver("mlab-testing")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,17 +46,17 @@ func xTestSaver(t *testing.T) {
 }
 
 func TestDispatcherLifeCycle(t *testing.T) {
-	os.Setenv("PROJECT", "mlab-testing")
-	os.Setenv("UNIT_TEST_MODE", "true")
 	// Use a fake client so we intercept all the http ops.
-	client, counter := tq.DryRunQueuerClient()
-
+	client, counter := cloud.DryRunClient()
+	config := cloud.Config{
+		Project: "mlab-testing",
+		Client:  client}
 	saver := S{tasks: make(map[string][]state.Task)}
 
 	// With time.Now(), this shouldn't send any requests.
 	// Inject fake client for bucket ops, so it doesn't hit the backends at all.
 	// Construction will trigger 4 HTTP calls, one to check that each queue is empty.
-	d, err := dispatch.NewDispatcher(client, "mlab-testing", "test-queue-", 3, time.Now(), &saver, option.WithHTTPClient(client))
+	d, err := dispatch.NewDispatcher(config, "test-queue-", 3, time.Now(), &saver, option.WithHTTPClient(client))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,5 +103,40 @@ func TestDispatcherLifeCycle(t *testing.T) {
 
 	if taskStates[5].State != state.Done {
 		t.Errorf("Wrong state %+v\n", taskStates[5])
+	}
+}
+
+// The BQ table logic is currently hacky.  Once we switch
+// to task based architecture, this will be much more sensible.
+// The pipeline architecture also makes this hard to test in-situ,
+// so the logic is broken out into BQConfig() function.
+func TestDispatchBQLogic(t *testing.T) {
+	os.Setenv("DATASET", "bar")
+	config := cloud.Config{Project: "foo"}
+	bq := dispatch.NewBQConfig(config)
+	if bq.BQProject != config.Project {
+		t.Error("BQ project should be", config.Project)
+	}
+	if bq.BQDataset != "bar" {
+		t.Error("BQ dataset should be bar")
+	}
+
+	config = cloud.Config{Project: "mlab-oti"}
+	bq = dispatch.NewBQConfig(config)
+	if bq.BQProject != "measurement-lab" {
+		t.Error("BQ project should be measurement-lab")
+	}
+	if bq.BQDataset != "bar" {
+		t.Error("BQ dataset should be bar")
+	}
+
+	os.Setenv("DATASET", "private")
+	config = cloud.Config{Project: "mlab-oti"}
+	bq = dispatch.NewBQConfig(config)
+	if bq.BQProject != config.Project {
+		t.Error("BQ project should be", config.Project)
+	}
+	if bq.BQDataset != "private" {
+		t.Error("BQ dataset should be private")
 	}
 }

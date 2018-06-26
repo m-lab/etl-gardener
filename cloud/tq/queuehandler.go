@@ -2,20 +2,28 @@ package tq
 
 import (
 	"errors"
+	"flag"
 	"io"
 	"log"
 	"math/rand"
-	"net/http"
-	"os"
 	"regexp"
 	"time"
 
 	"github.com/m-lab/etl-gardener/api"
+	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/etl-gardener/state"
 	"google.golang.org/api/option"
 	"google.golang.org/appengine/taskqueue"
 )
+
+// testMode is set IFF the test.v flag is defined, as it is in all go testing.T tests.
+// Use with caution!
+var testMode bool
+
+func init() {
+	testMode = flag.Lookup("test.v") != nil
+}
 
 // ChannelQueueHandler is an autonomous queue handler running in a go
 // routine, fed by a channel.
@@ -84,12 +92,10 @@ func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 	inactiveStartTime := time.Now() // If the queue is actually empty, this allows timeout.
 	nullTime := time.Time{}
 	for {
-		stats, err := GetTaskqueueStats(qh.HTTPClient, qh.Project, qh.Queue)
+		stats, err := GetTaskqueueStats(qh.Config, qh.Queue)
 		if err != nil {
 			if err == io.EOF {
-				if os.Getenv("UNIT_TEST_MODE") == "" {
-					log.Println(err, "GetTaskqueueStats returned EOF - test client?")
-				}
+				log.Println(err, "GetTaskqueueStats returned EOF - test client?")
 				return
 			}
 			// We don't expect errors here, so log and retry,
@@ -139,7 +145,7 @@ func (qh *ChannelQueueHandler) processOneRequest(prefix string, bucketOpts ...op
 		return 0, err
 	}
 	bucketName := parts[1]
-	bucket, err := GetBucket(bucketOpts, qh.Project, bucketName, false)
+	bucket, err := GetBucket(bucketOpts, qh.Config.Project, bucketName, false)
 	if err != nil {
 		log.Println(err)
 		metrics.FailCount.WithLabelValues("BucketError").Inc()
@@ -156,9 +162,6 @@ func (qh *ChannelQueueHandler) processOneRequest(prefix string, bucketOpts ...op
 
 // handleLoop processes requests on input channel
 func (qh *ChannelQueueHandler) handleLoop(next api.TaskPipe, bucketOpts ...option.ClientOption) {
-	testMode := os.Getenv("UNIT_TEST_MODE") != ""
-	log.Println("testMode", testMode, os.Getenv("UNIT_TEST_MODE"))
-
 	log.Println("Starting handler for", qh.Queue)
 	// TODO - should we purge the queue here?
 	qh.waitForEmptyQueue()
@@ -226,8 +229,9 @@ func (qh *ChannelQueueHandler) StartHandleLoop(next api.TaskPipe, bucketOpts ...
 // from a channel.
 // Returns feeding channel, and done channel, which will return true when
 // feeding channel is closed, and processing is complete.
-func NewChannelQueueHandler(httpClient *http.Client, project, queue string, next api.TaskPipe, bucketOpts ...option.ClientOption) (*ChannelQueueHandler, error) {
-	qh, err := NewQueueHandler(httpClient, project, queue)
+// Note that config must include a non-nil Client.
+func NewChannelQueueHandler(config cloud.Config, queue string, next api.TaskPipe, bucketOpts ...option.ClientOption) (*ChannelQueueHandler, error) {
+	qh, err := NewQueueHandler(config, queue)
 	if err != nil {
 		return nil, err
 	}

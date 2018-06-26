@@ -5,15 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
+	"os"
 	"reflect"
 	"sync"
 	"time"
 
 	"github.com/m-lab/etl-gardener/api"
+	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/state"
-
 	"google.golang.org/api/option"
 )
 
@@ -38,20 +38,37 @@ var (
 	ErrTerminating = errors.New("dispatcher is terminating")
 )
 
+// NewBQConfig creates a BQConfig for use with NewDedupHandler
+func NewBQConfig(config cloud.Config) cloud.BQConfig {
+	bqDataset, ok := os.LookupEnv("DATASET")
+	if !ok {
+		log.Println("ERROR: env.DATASET not set")
+	}
+
+	// When running in prod, the task files and queues are in mlab-oti, but the destination
+	// BigQuery tables are in measurement-lab.
+	// However, for sidestream private tables, we leave them in mlab-oti
+	bqProject := config.Project
+	if bqProject == "mlab-oti" && bqDataset != "private" {
+		bqProject = "measurement-lab" // destination for production tables.
+	}
+	return cloud.BQConfig{Config: config, BQProject: bqProject, BQDataset: bqDataset}
+}
+
 // NewDispatcher creates a dispatcher that will spread requests across multiple
 // QueueHandlers.
 // bucketOpts may be used to provide a fake client for bucket operations.
-func NewDispatcher(httpClient *http.Client, project, queueBase string, numQueues int,
+func NewDispatcher(config cloud.Config, queueBase string, numQueues int,
 	startDate time.Time, saver state.Saver, bucketOpts ...option.ClientOption) (*Dispatcher, error) {
 
 	handlers := make([]api.TaskPipe, 0, numQueues)
 	for i := 0; i < numQueues; i++ {
 		queue := fmt.Sprintf("%s%d", queueBase, i)
 		// First build the dedup handler.
-		dedup := NewDedupHandler()
+		dedup := NewDedupHandler(NewBQConfig(config))
 		// Build QueueHandler that chains to dedup handler.
 
-		cqh, err := tq.NewChannelQueueHandler(httpClient, project,
+		cqh, err := tq.NewChannelQueueHandler(config,
 			queue, dedup, bucketOpts...)
 		if err != nil {
 			return nil, err

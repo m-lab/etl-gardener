@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"log"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -102,8 +101,7 @@ func CleanupDatastore(ds *state.DatastoreSaver) error {
 }
 
 func TestStatus(t *testing.T) {
-	os.Setenv("PROJECT", "mlab-testing")
-	saver, err := state.NewDatastoreSaver()
+	saver, err := state.NewDatastoreSaver("mlab-testing")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +123,7 @@ func TestStatus(t *testing.T) {
 	// In travis, we use the emulator, which should provide consistency
 	// much more quickly.  So we use a modest number here that usually
 	// is sufficient for running on workstation.
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
@@ -137,6 +135,7 @@ func TestStatus(t *testing.T) {
 		t.Fatal(ctx.Err())
 	}
 	if len(tasks) != 2 {
+		log.Println("See notes in code about consistency.")
 		t.Error("Should be 2 tasks", len(tasks))
 		for _, t := range tasks {
 			log.Println(t)
@@ -149,9 +148,7 @@ func TestStatus(t *testing.T) {
 }
 
 func TestWriteStatus(t *testing.T) {
-	os.Setenv("PROJECT", "mlab-testing")
-
-	saver, err := state.NewDatastoreSaver()
+	saver, err := state.NewDatastoreSaver("mlab-testing")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +163,7 @@ func TestWriteStatus(t *testing.T) {
 	bb := make([]byte, 0, 500)
 	buf := bytes.NewBuffer(bb)
 
-	err = state.WriteHTMLStatusTo(buf)
+	err = state.WriteHTMLStatusTo(buf, "mlab-testing")
 	if err != nil {
 		t.Fatal(err)
 	}
