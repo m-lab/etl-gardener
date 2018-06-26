@@ -38,12 +38,8 @@ var (
 	ErrTerminating = errors.New("dispatcher is terminating")
 )
 
-// NewDispatcher creates a dispatcher that will spread requests across multiple
-// QueueHandlers.
-// bucketOpts may be used to provide a fake client for bucket operations.
-func NewDispatcher(config cloud.Config, queueBase string, numQueues int,
-	startDate time.Time, saver state.Saver, bucketOpts ...option.ClientOption) (*Dispatcher, error) {
-
+// BQConfig creates a BQConfig for use with NewDedupHandler
+func BQConfig(config cloud.Config) cloud.BQConfig {
 	bqDataset, ok := os.LookupEnv("DATASET")
 	if !ok {
 		log.Println("ERROR: env.DATASET not set")
@@ -56,12 +52,20 @@ func NewDispatcher(config cloud.Config, queueBase string, numQueues int,
 	if bqProject == "mlab-oti" && bqDataset != "private" {
 		bqProject = "measurement-lab" // destination for production tables.
 	}
-	bqConfig := cloud.BQConfig{Config: config, BQProject: bqProject, BQDataset: bqDataset}
+	return cloud.BQConfig{Config: config, BQProject: bqProject, BQDataset: bqDataset}
+}
+
+// NewDispatcher creates a dispatcher that will spread requests across multiple
+// QueueHandlers.
+// bucketOpts may be used to provide a fake client for bucket operations.
+func NewDispatcher(config cloud.Config, queueBase string, numQueues int,
+	startDate time.Time, saver state.Saver, bucketOpts ...option.ClientOption) (*Dispatcher, error) {
+
 	handlers := make([]api.TaskPipe, 0, numQueues)
 	for i := 0; i < numQueues; i++ {
 		queue := fmt.Sprintf("%s%d", queueBase, i)
 		// First build the dedup handler.
-		dedup := NewDedupHandler(bqConfig)
+		dedup := NewDedupHandler(BQConfig(config))
 		// Build QueueHandler that chains to dedup handler.
 
 		cqh, err := tq.NewChannelQueueHandler(config,

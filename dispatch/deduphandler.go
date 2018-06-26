@@ -41,9 +41,9 @@ func (dh *DedupHandler) Response() <-chan error {
 }
 
 // WaitForStableTable loops checking until table exists and has no streaming buffer.
-func WaitForStableTable(config cloud.BQConfig, tt *bigquery.Table) error {
+func WaitForStableTable(tt *bigquery.Table, testMode bool) error {
 	errorTimeout := 2 * time.Minute
-	if config.TestMode {
+	if testMode {
 		errorTimeout = 100 * time.Millisecond
 	}
 	errorDeadline := time.Now().Add(errorTimeout)
@@ -114,7 +114,7 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task) error {
 	// First wait for the source table's streaming buffer to be integrated.
 	// This often takes an hour or more.
 	tt := ds.Table(parts[2] + "_" + strings.Join(strings.Split(parts[3], "/"), ""))
-	err = WaitForStableTable(dh.BQConfig, tt)
+	err = WaitForStableTable(tt, dh.TestMode)
 	if err != nil {
 		metrics.FailCount.WithLabelValues("WaitForStableTable")
 		task.SetError(err, "WaitForStableTable")
