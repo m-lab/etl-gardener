@@ -3,6 +3,7 @@ package dispatch
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -17,6 +18,14 @@ import (
 	"github.com/m-lab/etl-gardener/state"
 	"github.com/m-lab/go/bqext"
 )
+
+// testMode is set IFF the test.v flag is defined, as it is in all go testing.T tests.
+// Use with caution!
+var testMode bool
+
+func init() {
+	testMode = flag.Lookup("test.v") != nil
+}
 
 // Dedup related errors.
 var (
@@ -41,7 +50,7 @@ func (dh *DedupHandler) Response() <-chan error {
 }
 
 // WaitForStableTable loops checking until table exists and has no streaming buffer.
-func WaitForStableTable(tt *bigquery.Table, testMode bool) error {
+func WaitForStableTable(tt *bigquery.Table) error {
 	errorTimeout := 2 * time.Minute
 	if testMode {
 		errorTimeout = 100 * time.Millisecond
@@ -114,7 +123,7 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task) error {
 	// First wait for the source table's streaming buffer to be integrated.
 	// This often takes an hour or more.
 	tt := ds.Table(parts[2] + "_" + strings.Join(strings.Split(parts[3], "/"), ""))
-	err = WaitForStableTable(tt, dh.TestMode)
+	err = WaitForStableTable(tt)
 	if err != nil {
 		metrics.FailCount.WithLabelValues("WaitForStableTable")
 		task.SetError(err, "WaitForStableTable")

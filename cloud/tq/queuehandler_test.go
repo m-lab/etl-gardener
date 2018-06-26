@@ -19,10 +19,8 @@ func init() {
 func TestChannelQueueHandler(t *testing.T) {
 	client, counter := cloud.DryRunClient()
 	config := cloud.Config{
-		Project:  "mlab-testing",
-		Client:   client,
-		Options:  nil,
-		TestMode: true}
+		Project: "mlab-testing",
+		Client:  client}
 	cqh, err := tq.NewChannelQueueHandler(config, "test-queue", nil)
 	if err != nil {
 		t.Fatal(err)

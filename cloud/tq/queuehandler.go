@@ -2,6 +2,7 @@ package tq
 
 import (
 	"errors"
+	"flag"
 	"io"
 	"log"
 	"math/rand"
@@ -15,6 +16,13 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/appengine/taskqueue"
 )
+
+// testMode is set IFF the test.v flag is defined, as it is in all go testing.T tests.
+var testMode bool
+
+func init() {
+	testMode = flag.Lookup("test.v") != nil
+}
 
 // ChannelQueueHandler is an autonomous queue handler running in a go
 // routine, fed by a channel.
@@ -86,7 +94,7 @@ func (qh *ChannelQueueHandler) waitForEmptyQueue() {
 		stats, err := GetTaskqueueStats(qh.Config, qh.Queue)
 		if err != nil {
 			if err == io.EOF {
-				if !qh.TestMode {
+				if !testMode {
 					log.Println(err, "GetTaskqueueStats returned EOF - test client?")
 				}
 				return
@@ -171,7 +179,7 @@ func (qh *ChannelQueueHandler) handleLoop(next api.TaskPipe, bucketOpts ...optio
 			task.SetError(err, "ProcessOneRequest")
 			continue
 		}
-		if qh.TestMode {
+		if testMode {
 			log.Println("test mode")
 			n = 1
 		}

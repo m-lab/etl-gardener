@@ -49,10 +49,8 @@ func TestDispatcherLifeCycle(t *testing.T) {
 	// Use a fake client so we intercept all the http ops.
 	client, counter := cloud.DryRunClient()
 	config := cloud.Config{
-		Project:  "mlab-testing",
-		Client:   client,
-		Options:  nil,
-		TestMode: true}
+		Project: "mlab-testing",
+		Client:  client}
 	saver := S{tasks: make(map[string][]state.Task)}
 
 	// With time.Now(), this shouldn't send any requests.

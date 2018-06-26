@@ -20,8 +20,6 @@ type Config struct {
 	// client to be used for cloud API calls.  Allows injection of fake for testing.
 	Client  *http.Client
 	Options []option.ClientOption
-
-	TestMode bool
 }
 
 // BQConfig provides a generic config suitable for BigQuery clients.

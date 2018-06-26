@@ -23,10 +23,9 @@ func TestDedupHandler(t *testing.T) {
 	client, counter := cloud.DryRunClient()
 
 	config := cloud.Config{
-		Project:  "mlab-testing",
-		Client:   client,
-		Options:  []option.ClientOption{option.WithHTTPClient(client)},
-		TestMode: true}
+		Project: "mlab-testing",
+		Client:  client,
+		Options: []option.ClientOption{option.WithHTTPClient(client)}}
 	bqConfig := cloud.BQConfig{
 		Config:    config,
 		BQProject: "mlab-testing",
