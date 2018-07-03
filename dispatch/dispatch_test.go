@@ -101,7 +101,7 @@ func TestDispatcherLifeCycle(t *testing.T) {
 		for _, ts := range taskStates {
 			log.Println(ts)
 		}
-		t.Errorf("Wrong state %+v\n", taskStates[5])
+		t.Errorf("Wrong state %+v\n", taskStates[6])
 	}
 }
 
