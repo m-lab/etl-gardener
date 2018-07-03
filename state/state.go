@@ -31,6 +31,7 @@ const (
 
 // StateNames maps from State to string, for use in String()
 var StateNames = map[State]string{
+	Invalid:       "Invalid",
 	Initializing:  "Initializing",
 	Queuing:       "Queuing",
 	Processing:    "Processing",
@@ -38,6 +39,22 @@ var StateNames = map[State]string{
 	Deduplicating: "Deduplicating",
 	Finishing:     "Finishing",
 	Done:          "Done",
+}
+
+// Task Errors
+var (
+	ErrInvalidQueue  = errors.New("invalid queue")
+	ErrTaskSuspended = errors.New("task suspended")
+)
+
+// Executor describes an object that can do all the required steps to execute a Task.
+// Used for mocking.
+// Interface must update the task in place, so that state changes are all visible.
+type Executor interface {
+	// Advance to the next state.
+	AdvanceState(task *Task)
+	// Advance to the next state.
+	DoAction(task *Task, terminate <-chan struct{})
 }
 
 // Saver provides API for saving Task state.
@@ -102,7 +119,7 @@ type Task struct {
 	ErrMsg      string // Task handling error, if any
 	ErrInfo     string // More context about any error, if any
 
-	UpdateTime time.Time `datastore:",noindex"`
+	UpdateTime time.Time
 
 	saver Saver // Saver is used for Save operations. Stored locally, but not persisted.
 }
@@ -161,6 +178,7 @@ func (t *Task) SetSaver(saver Saver) {
 type Terminator interface {
 	GetNotifyChannel() <-chan struct{}
 	Terminate()
+	// This is also the sync.WaitGroup API
 	Add(n int)
 	Done()
 	Wait()

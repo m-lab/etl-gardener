@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"cloud.google.com/go/datastore"
 	"github.com/m-lab/etl-gardener/state"
 )
 
@@ -81,25 +80,6 @@ func TestTaskBasics(t *testing.T) {
 	}
 }
 
-func CleanupDatastore(ds *state.DatastoreSaver) error {
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	q := datastore.NewQuery("").Namespace(ds.Namespace)
-	keys, err := ds.Client.GetAll(ctx, q.KeysOnly(), nil)
-	if err != nil {
-		return err
-	}
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	err = ds.Client.DeleteMulti(ctx, keys)
-	if err != nil {
-		return err
-	}
-	return ctx.Err()
-}
-
 func TestStatus(t *testing.T) {
 	saver, err := state.NewDatastoreSaver("mlab-testing")
 	if err != nil {
@@ -134,14 +114,14 @@ func TestStatus(t *testing.T) {
 	if ctx.Err() != nil {
 		t.Fatal(ctx.Err())
 	}
-	if len(tasks) != 2 {
+	if len(tasks) != 3 {
 		log.Println("See notes in code about consistency.")
-		t.Error("Should be 2 tasks", len(tasks))
+		t.Error("Should be 3 tasks", len(tasks))
 		for _, t := range tasks {
 			log.Println(t)
 		}
 	}
-	err = CleanupDatastore(saver)
+	err = task.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +154,7 @@ func TestWriteStatus(t *testing.T) {
 		t.Error("Missing task2")
 	}
 
-	err = CleanupDatastore(saver)
+	err = task.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
