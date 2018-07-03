@@ -199,8 +199,8 @@ func (qh *ChannelQueueHandler) handleLoop(next api.TaskPipe, bucketOpts ...optio
 				next.Sink() <- task
 			} else {
 				// TODO - or error?
-				task.Queue = ""
 				task.Update(state.Done)
+				task.Delete()
 			}
 		} else {
 			log.Println("No task files")
