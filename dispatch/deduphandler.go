@@ -122,6 +122,7 @@ func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task) error {
 
 	// First wait for the source table's streaming buffer to be integrated.
 	// This often takes an hour or more.
+	task.Update(state.Stabilizing)
 	tt := ds.Table(parts[2] + "_" + strings.Join(strings.Split(parts[3], "/"), ""))
 	err = WaitForStableTable(tt)
 	if err != nil {

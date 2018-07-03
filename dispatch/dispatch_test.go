@@ -84,24 +84,23 @@ func TestDispatcherLifeCycle(t *testing.T) {
 	if !ok {
 		t.Fatal("Task not saved")
 	}
-	// For now, state should have progressed to Stabilizing.
-	if len(taskStates) != 6 {
+
+	if len(taskStates) != 7 {
 		t.Fatal("Wrong number of states:", len(taskStates))
 	}
-
 	if taskStates[1].State != state.Queuing {
 		t.Errorf("Wrong state %+v\n", taskStates[1])
 	}
-
 	if taskStates[2].State != state.Processing {
 		t.Errorf("Wrong state %+v\n", taskStates[2])
 	}
-
 	if taskStates[3].State != state.Stabilizing {
 		t.Errorf("Wrong state %+v\n", taskStates[3])
 	}
-
-	if taskStates[5].State != state.Done {
+	if taskStates[6].State != state.Done {
+		for _, ts := range taskStates {
+			log.Println(ts)
+		}
 		t.Errorf("Wrong state %+v\n", taskStates[5])
 	}
 }
