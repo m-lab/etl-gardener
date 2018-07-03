@@ -1,13 +1,9 @@
 package state_test
 
 import (
-	"bytes"
-	"context"
 	"errors"
 	"log"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/m-lab/etl-gardener/state"
 )
@@ -77,85 +73,5 @@ func TestTaskBasics(t *testing.T) {
 	_, ok = saver.delete["foobar"]
 	if !ok {
 		t.Fatal("Should have called delete")
-	}
-}
-
-func TestStatus(t *testing.T) {
-	saver, err := state.NewDatastoreSaver("mlab-testing")
-	if err != nil {
-		t.Fatal(err)
-	}
-	task := state.Task{Name: "task1", Queue: "Q1", State: state.Initializing}
-	task.SetSaver(saver)
-	log.Println("saving")
-	err = task.Save()
-	if err != nil {
-		t.Fatal(err)
-	}
-	task.Name = "task2"
-	task.Queue = "Q2"
-	err = task.Update(state.Queuing)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Real datastore takes about 100 msec or more before consistency.
-	// In travis, we use the emulator, which should provide consistency
-	// much more quickly.  So we use a modest number here that usually
-	// is sufficient for running on workstation.
-	time.Sleep(500 * time.Millisecond)
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	tasks, err := saver.GetStatus(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ctx.Err() != nil {
-		t.Fatal(ctx.Err())
-	}
-	if len(tasks) != 3 {
-		log.Println("See notes in code about consistency.")
-		t.Error("Should be 3 tasks", len(tasks))
-		for _, t := range tasks {
-			log.Println(t)
-		}
-	}
-	err = task.Delete()
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestWriteStatus(t *testing.T) {
-	saver, err := state.NewDatastoreSaver("mlab-testing")
-	if err != nil {
-		t.Fatal(err)
-	}
-	task := state.Task{Name: "task1", Queue: "Q1", State: state.Initializing}
-	task.SetSaver(saver)
-	task.Save()
-	task.Name = "task2"
-	task.Queue = "Q2"
-	task.Update(state.Queuing)
-	time.Sleep(200 * time.Millisecond)
-
-	bb := make([]byte, 0, 500)
-	buf := bytes.NewBuffer(bb)
-
-	err = state.WriteHTMLStatusTo(buf, "mlab-testing")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(buf.String(), "task1") {
-		t.Error("Missing task1")
-	}
-	if !strings.Contains(buf.String(), "task2") {
-		t.Error("Missing task2")
-	}
-
-	err = task.Delete()
-	if err != nil {
-		t.Fatal(err)
 	}
 }
