@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"math/rand"
+	"regexp"
 	"time"
 
 	"cloud.google.com/go/datastore"
@@ -111,17 +112,56 @@ func (ds *DatastoreSaver) DeleteTask(t Task) error {
 // Task contains the state of a single Task.
 // These will be stored and retrieved from DataStore
 type Task struct {
-	Name        string // e.g. gs://archive-mlab-oti/ndt/2017/06/01/
-	TableSuffix string // e.g. 20170601
-	State       State
-	Queue       string // The queue the task files are submitted to, or "".
-	JobID       string // BigQuery JobID, when the state is Deduplicating
-	ErrMsg      string // Task handling error, if any
-	ErrInfo     string // More context about any error, if any
+	Name    string // e.g. gs://archive-mlab-oti/ndt/2017/06/01/
+	Date    time.Time
+	State   State
+	Queue   string // The queue the task files are submitted to, or "".
+	JobID   string // BigQuery JobID, when the state is Deduplicating
+	ErrMsg  string // Task handling error, if any
+	ErrInfo string // More context about any error, if any
 
 	UpdateTime time.Time
 
 	saver Saver // Saver is used for Save operations. Stored locally, but not persisted.
+}
+
+// NewTask properly initializes a new task, complete with saver.
+func NewTask(name string, queue string, saver Saver) (*Task, error) {
+	t := Task{Name: name, State: Initializing, Queue: queue, saver: saver}
+	parts, err := t.ParsePrefix()
+	if err != nil {
+		return nil, err
+	}
+	date, err := time.Parse("2006/01/02", parts[3])
+	if err != nil {
+		return nil, err
+	}
+	t.Date = date
+	return &t, nil
+}
+
+// HACK - remove from tq package?
+const start = `^gs://(?P<bucket>.*)/(?P<exp>[^/]*)/`
+const datePath = `(?P<datepath>\d{4}/[01]\d/[0123]\d)/`
+
+// These are here to facilitate use across queue-pusher and parsing components.
+var (
+	// This matches any valid test file name, and some invalid ones.
+	prefixPattern = regexp.MustCompile(start + // #1 #2
+		datePath) // #3 - YYYY/MM/DD
+)
+
+// ParsePrefix Parses prefix, returning {bucket, experiment, date string}, error
+func (t *Task) ParsePrefix() ([]string, error) {
+	fields := prefixPattern.FindStringSubmatch(t.Name)
+
+	if fields == nil {
+		return nil, errors.New("Invalid test path: " + t.Name)
+	}
+	if len(fields) < 4 {
+		return nil, errors.New("Path does not include all fields: " + t.Name)
+	}
+	return fields, nil
 }
 
 func (t Task) String() string {
