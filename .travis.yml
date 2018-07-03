@@ -64,7 +64,7 @@ before_script:
 
 script:
 # To start, run all the non-integration tests.
-- MODULES="dedup dispatch cloud/tq cmd/gardener reproc state"
+- MODULES="cloud/tq cmd/gardener dedup dispatch reproc rex state"
 - for module in $MODULES; do
     COVER_PKGS=${COVER_PKGS}./$module/..., ;
   done
