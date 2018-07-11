@@ -100,7 +100,12 @@ func TestWithTaskQueue(t *testing.T) {
 	// Start tracker with one queue.
 	exec := Exec{}
 	th := reproc.NewTaskHandler(&exec, []string{"queue-1"}, nil)
+<<<<<<< HEAD
 	th.AddTask("gs://fake/ndt/2017/09/22/")
+=======
+
+	th.AddTask("a")
+>>>>>>> d8db4de... Test basic rex sequencing
 
 	go th.AddTask("gs://fake/ndt/2017/09/24/")
 	go th.AddTask("gs://fake/ndt/2017/09/26/")

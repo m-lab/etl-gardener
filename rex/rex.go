@@ -50,6 +50,8 @@ type ReprocessingExecutor struct {
 // AdvanceState advances task to the next state.
 func (rex *ReprocessingExecutor) AdvanceState(t *state.Task) {
 	switch t.State {
+	case state.Invalid:
+		t.Update(state.Initializing)
 	case state.Initializing:
 		t.Update(state.Queuing)
 	case state.Queuing:
@@ -64,7 +66,10 @@ func (rex *ReprocessingExecutor) AdvanceState(t *state.Task) {
 	case state.Finishing:
 		t.JobID = ""
 		t.Update(state.Done)
+		t.Delete()
 	case state.Done:
+	default:
+		panic("Unknown state")
 	}
 }
 
@@ -112,7 +117,6 @@ func (rex *ReprocessingExecutor) DoAction(t *state.Task, terminate <-chan struct
 	case state.Finishing:
 		rex.finish(t, terminate)
 	case state.Done:
-		t.Delete()
 	}
 }
 
