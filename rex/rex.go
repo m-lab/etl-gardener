@@ -117,6 +117,8 @@ func (rex *ReprocessingExecutor) DoAction(t *state.Task, terminate <-chan struct
 }
 
 // TODO should these take Task instead of *Task?
+// TODO - this replaces the wait part of dispatch.waitAndDedup.  Remove obsolete code
+// when this is deployed.
 func (rex *ReprocessingExecutor) waitForParsing(t *state.Task, terminate <-chan struct{}) {
 	// Wait for the queue to drain.
 	// Don't want to accept a date until we can actually queue it.
@@ -153,6 +155,8 @@ func (rex *ReprocessingExecutor) waitForParsing(t *state.Task, terminate <-chan 
 	}
 }
 
+// TODO - this replaces ChannelQueueHandler.processOneRequest.  Should delete that
+// code after transition.
 func (rex *ReprocessingExecutor) queue(t *state.Task, terminate <-chan struct{}) {
 	// Submit all files from the bucket that match the prefix.
 	// Where do we get the bucket?
@@ -193,6 +197,8 @@ func (rex *ReprocessingExecutor) queue(t *state.Task, terminate <-chan struct{})
 	log.Println("Added ", n, t.Name, " tasks to ", qh.Queue)
 }
 
+// TODO - this replaces part of the code in dispatch.waitAndDedup.  Should migrate
+// Dedup() here, and delete obsolete code.
 func (rex *ReprocessingExecutor) dedup(t *state.Task, terminate <-chan struct{}) {
 	// Launch the dedup request, and save the JobID
 	ds, err := rex.GetDS()
@@ -263,6 +269,8 @@ func waitForJob(ctx context.Context, job *bigquery.Job, maxBackoff time.Duration
 	return nil
 }
 
+// TODO - this replaces the latter part of dispatch.waitAndDedup().  Remove obsolete code
+// after deployment.
 func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}) {
 	// TODO use a simple client instead of creating dataset?
 	ds, err := bqext.NewDataset(rex.Project, rex.BQDataset, rex.Options...)
