@@ -14,6 +14,7 @@ import (
 	"io"
 	"log"
 	"math/rand"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -252,13 +253,20 @@ func waitForJob(ctx context.Context, job *bigquery.Job, maxBackoff time.Duration
 		}
 		status, err := job.Status(ctx)
 		if err != nil {
+			log.Println(err)
 			continue
 		}
 		if status.Err() != nil {
+			log.Println(job.ID(), status.Err())
+			if strings.Contains(status.Err().Error(), "Not found: Table") {
+				return state.ErrTableNotFound
+			}
 			continue
 		}
 		if status.Done() {
 			break
+		} else {
+			log.Println(status.State)
 		}
 		if backoff+previous < maxBackoff {
 			tmp := previous
@@ -297,6 +305,12 @@ func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}
 	}
 	// TODO - should loop, and check terminate channel
 	err = waitForJob(context.Background(), job, 10*time.Second, terminate)
+	if err != nil {
+		log.Println(err, src.FullyQualifiedName())
+		metrics.FailCount.WithLabelValues("JobTableNotFound")
+		t.SetError(err, "JobTableNotFound")
+		return
+	}
 	status, err := job.Wait(context.Background())
 	if err != nil {
 		if err != state.ErrTaskSuspended {
