@@ -48,32 +48,6 @@ type ReprocessingExecutor struct {
 	BucketOpts []option.ClientOption
 }
 
-// AdvanceState advances task to the next state.
-func (rex *ReprocessingExecutor) AdvanceState(t *state.Task) {
-	switch t.State {
-	case state.Invalid:
-		t.Update(state.Initializing)
-	case state.Initializing:
-		t.Update(state.Queuing)
-	case state.Queuing:
-		t.Update(state.Processing)
-	case state.Processing:
-		t.Queue = "" // No longer need to keep the queue.
-		t.Update(state.Stabilizing)
-	case state.Stabilizing:
-		t.Update(state.Deduplicating)
-	case state.Deduplicating:
-		t.Update(state.Finishing)
-	case state.Finishing:
-		t.JobID = ""
-		t.Update(state.Done)
-		t.Delete()
-	case state.Done:
-	default:
-		panic("Unknown state")
-	}
-}
-
 // GetDS constructs an appropriate Dataset for BQ operations.
 func (rex *ReprocessingExecutor) GetDS() (bqext.Dataset, error) {
 	return bqext.NewDataset(rex.BQProject, rex.BQDataset, rex.Options...)
@@ -82,20 +56,32 @@ func (rex *ReprocessingExecutor) GetDS() (bqext.Dataset, error) {
 // ErrNoSaver is returned when saver has not been set.
 var ErrNoSaver = errors.New("Task.saver is nil")
 
-// DoAction executes the currently specified action and update Err/ErrInfo
+// Next executes the currently specified action, updates Err/ErrInfo, and advances
+// the state.
 // It may terminate prematurely if terminate is closed prior to completion.
 // TODO - consider returning any error to caller.
-func (rex *ReprocessingExecutor) DoAction(t *state.Task, terminate <-chan struct{}) {
+func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) {
 	// Note that only the state in state.Task is maintained between actions.
 	switch t.State {
+	case state.Invalid:
+		log.Println("Should not call Next on Invalid state!")
+		t.SetError(errors.New("called Next on invalid state"), "Invalid")
+
 	case state.Initializing:
 		// TODO - should check that _suffix table doesn't already exist, or delete it
 		// if it does?  Also check if it has a streaming buffer?
 		// Nothing to do.
+		t.Update(state.Queuing)
+
 	case state.Queuing:
 		rex.queue(t, terminate)
+		t.Update(state.Processing)
+
 	case state.Processing: // TODO should this be Parsing?
 		rex.waitForParsing(t, terminate)
+		t.Queue = "" // No longer need to keep the queue.
+		t.Update(state.Stabilizing)
+
 	case state.Stabilizing:
 		// Wait for the streaming buffer to be nil.
 		ds, err := rex.GetDS()
@@ -113,11 +99,26 @@ func (rex *ReprocessingExecutor) DoAction(t *state.Task, terminate <-chan struct
 			t.SetError(err, "WaitForStableTable")
 			return
 		}
+
+		t.Update(state.Deduplicating)
+
 	case state.Deduplicating:
 		rex.dedup(t, terminate)
+		t.Update(state.Finishing)
+
 	case state.Finishing:
+		log.Println("Finishing")
 		rex.finish(t, terminate)
+		t.JobID = ""
+		t.Update(state.Done)
+		t.Delete()
+
 	case state.Done:
+		log.Println("Unexpected call to Next when Done")
+
+	default:
+		log.Println("Unknown state")
+		t.SetError(errors.New("Unknown state"), "Next")
 	}
 }
 
@@ -142,6 +143,7 @@ func (rex *ReprocessingExecutor) waitForParsing(t *state.Task, terminate <-chan 
 		default:
 		}
 		if err == tq.ErrMoreTasks {
+			log.Println(err)
 			// Wait 5-15 seconds before checking again.
 			time.Sleep(time.Duration(5+rand.Intn(10)) * time.Second)
 		} else if err != nil {

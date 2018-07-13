@@ -37,12 +37,14 @@ func TestRealBucket(t *testing.T) {
 	// We wait for all three tasks to show up in the saver.
 	for counter.Count() < 3 {
 		time.Sleep(100 * time.Millisecond)
+		log.Println("Count", counter)
 	}
 
 	// Then wait for all three tasks to be deleted.
 	// TODO - when task error handling is completed, the tasks won't be deleted,
 	// to this will start hanging here.
 	for len(saver.GetDeletes()) < 3 {
+		log.Println(saver.GetDeletes())
 		time.Sleep(100 * time.Millisecond)
 	}
 
