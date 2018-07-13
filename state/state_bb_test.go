@@ -28,7 +28,7 @@ func TestStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	task.Name = "task2"
+	task.Name = "gs://foo/bar/2000/01/01/task2"
 	task.Queue = "Q2"
 	err = task.Update(state.Queuing)
 	if err != nil {
