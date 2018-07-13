@@ -10,6 +10,7 @@ package reproc
 
 import (
 	"errors"
+	"log"
 	"sync"
 
 	"github.com/m-lab/etl-gardener/state"
@@ -61,25 +62,42 @@ func NewTerminator() *Terminator {
 // It is responsible for starting tasks, recycling queues, and handling the
 // termination signal.
 type TaskHandler struct {
-	taskQueues chan string // Channel through which queues recycled.
+	exec       state.Executor // Executor passed to new tasks
+	taskQueues chan string    // Channel through which queues recycled.
+	saver      state.Saver    // The Saver used to save task states.
 
 	// For managing termination.
 	*Terminator
 }
 
 // NewTaskHandler creates a new TaskHandler.
-func NewTaskHandler(queues []string) *TaskHandler {
+func NewTaskHandler(exec state.Executor, queues []string, saver state.Saver) *TaskHandler {
 	// Create taskQueue channel, and preload with queues.
 	taskQueues := make(chan string, len(queues))
 	for _, q := range queues {
 		taskQueues <- q
 	}
 
-	return &TaskHandler{taskQueues, NewTerminator()}
+	return &TaskHandler{exec, taskQueues, saver, NewTerminator()}
 }
 
 // ErrTerminating is returned e.g. by AddTask, when tracker is terminating.
 var ErrTerminating = errors.New("TaskHandler is terminating")
+
+// StartTask starts a single task.  It should be properly initialized except for saver.
+func (th *TaskHandler) StartTask(t state.Task) {
+	t.SetSaver(th.saver)
+
+	// WARNING:  There is a race here when terminating, if a task gets
+	// a queue here and calls Add().  This races with the thread that started
+	// the termination and calls Wait().
+	th.Add(1)
+	// We are passing taskQueues to Process, so that it can recycle
+	// its taskQueue when it is empty.  Since this runs in its own
+	// go routine, we need to avoid closing the taskQueues channel, which
+	// could then cause panics.
+	go t.Process(th.exec, th.taskQueues, th.Terminator)
+}
 
 // AddTask adds a new task, blocking until the task has been accepted.
 // This will typically be repeated called by another goroutine responsible
@@ -87,20 +105,17 @@ var ErrTerminating = errors.New("TaskHandler is terminating")
 // May return ErrTerminating, if th has started termination.
 // TODO: Add prometheus metrics.
 func (th *TaskHandler) AddTask(prefix string) error {
+	log.Println("Waiting for a queue")
 	select {
 	// Wait until there is an available task queue.
 	case queue := <-th.taskQueues:
-		t := state.Task{Name: prefix, Queue: queue, State: state.Initializing}
-
-		// WARNING:  There is a race here when terminating, if a task gets
-		// a queue here and calls Add().  This races with the thread that started
-		// the termination and calls Wait().
-		th.Add(1)
-		// We are passing taskQueues to Process, so that it can recycle
-		// its taskQueue when it is empty.  Since this runs in its own
-		// go routine, we need to avoid closing the taskQueues channel, which
-		// could then cause panics.
-		go t.Process(th.taskQueues, th.Terminator)
+		log.Println("Got a queue", queue)
+		t, err := state.NewTask(prefix, queue, nil)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+		th.StartTask(*t)
 		return nil
 
 	// Or until we start termination.

@@ -42,13 +42,46 @@ func TestTerminator(t *testing.T) {
 	trm.Wait()
 }
 
+type Exec struct{}
+
+func (ex *Exec) DoAction(t *state.Task, terminate <-chan struct{}) {
+	log.Println("Do", t)
+	time.Sleep(time.Duration(1+rand.Intn(2)) * time.Millisecond)
+}
+
+func (ex *Exec) AdvanceState(t *state.Task) {
+	switch t.State {
+	case state.Invalid:
+		t.Update(state.Initializing)
+	case state.Initializing:
+		t.Update(state.Queuing)
+	case state.Queuing:
+		t.Update(state.Processing)
+	case state.Processing:
+		t.Queue = "" // No longer need to keep the queue.
+		t.Update(state.Stabilizing)
+	case state.Stabilizing:
+		t.Update(state.Deduplicating)
+	case state.Deduplicating:
+		t.Update(state.Finishing)
+	case state.Finishing:
+		t.Update(state.Done)
+	case state.Done:
+		// Generally shouldn't happen.
+		// Do nothing
+	}
+}
+
+func AssertExecutor() { func(ex state.Executor) {}(&Exec{}) }
+
 // This test exercises the task management, including invoking t.Process().
 //  It does not check any state, but if the termination does not work properly,
 // may fail to complete.  Also, running with -race may detect race
 // conditions.
 func TestBasic(t *testing.T) {
 	// Start tracker with no queues.
-	th := reproc.NewTaskHandler([]string{})
+	exec := Exec{}
+	th := reproc.NewTaskHandler(&exec, []string{}, nil)
 
 	// This will block because there are no queues.
 	go th.AddTask("foobar")
@@ -60,12 +93,13 @@ func TestBasic(t *testing.T) {
 }
 
 // This test exercises the task management, including invoking t.Process().
-//  It does not check any state, but if the termination does not work properly,
+// It does not check any state, but if the termination does not work properly,
 // may fail to complete.  Also, running with -race may detect race
 // conditions.
 func TestWithTaskQueue(t *testing.T) {
-	// Start tracker with no queues.
-	th := reproc.NewTaskHandler([]string{"queue-1"})
+	// Start tracker with one queue.
+	exec := Exec{}
+	th := reproc.NewTaskHandler(&exec, []string{"queue-1"}, nil)
 
 	th.AddTask("a")
 
