@@ -68,7 +68,9 @@ func (ex *Exec) AdvanceState(t *state.Task) {
 		t.Update(state.Done)
 	case state.Done:
 		// Generally shouldn't happen.
-		// Do nothing
+		// In prod, we would ignore this, but for test we log.Fatal to force
+		// a test failure.
+		log.Fatal("Should not call AdvanceState when state is Done")
 	}
 }
 

@@ -92,11 +92,14 @@ func (th *TaskHandler) StartTask(t state.Task) {
 	// a queue here and calls Add().  This races with the thread that started
 	// the termination and calls Wait().
 	th.Add(1)
-	// We are passing taskQueues to Process, so that it can recycle
-	// its taskQueue when it is empty.  Since this runs in its own
+	// We pass a function to Process that it should call when finished
+	// using the queue (when queue has drained.  Since this runs in its own
 	// go routine, we need to avoid closing the taskQueues channel, which
 	// could then cause panics.
-	go t.Process(th.exec, th.taskQueues, th.Terminator)
+	doneWithQueue := func() {
+		th.taskQueues <- t.Queue
+	}
+	go t.Process(th.exec, doneWithQueue, th.Terminator)
 }
 
 // AddTask adds a new task, blocking until the task has been accepted.

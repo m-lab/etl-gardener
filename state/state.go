@@ -248,7 +248,7 @@ type Terminator interface {
 func nop() {}
 
 // Process handles all steps of processing a task.
-func (t Task) Process(ex Executor, tq chan<- string, term Terminator) {
+func (t Task) Process(ex Executor, doneWithQueue func(), term Terminator) {
 	log.Println("Starting:", t.Name)
 loop:
 	for t.State != Done { //&& t.err == nil {
@@ -262,7 +262,7 @@ loop:
 			case Processing:
 				ex.DoAction(&t, term.GetNotifyChannel())
 				log.Println("Returning", t.Queue)
-				tq <- t.Queue // return the queue.
+				doneWithQueue()
 				log.Println("Advancing")
 				ex.AdvanceState(&t)
 			default:
