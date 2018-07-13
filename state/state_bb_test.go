@@ -37,8 +37,8 @@ func TestStatus(t *testing.T) {
 
 	// Real datastore takes about 100 msec or more before consistency.
 	// In travis, we use the emulator, which should provide consistency
-	// much more quickly.  So we use a modest number here that usually
-	// is sufficient for running on workstation.
+	// much more quickly.  We use a modest number here that usually
+	// is sufficient for running on workstation, and rarely fail with emulator.
 	time.Sleep(200 * time.Millisecond)
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -51,7 +51,7 @@ func TestStatus(t *testing.T) {
 		t.Fatal(ctx.Err())
 	}
 	if len(tasks) != 2 {
-		t.Error("Should be 2 tasks (see notes on consistency", len(tasks))
+		t.Errorf("Saw %d tasks instead of 2 (see notes on consistency)", len(tasks))
 		for _, t := range tasks {
 			log.Println(t)
 		}

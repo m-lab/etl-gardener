@@ -44,12 +44,10 @@ func TestTerminator(t *testing.T) {
 
 type Exec struct{}
 
-func (ex *Exec) DoAction(t *state.Task, terminate <-chan struct{}) {
+func (ex *Exec) Next(t *state.Task, terminate <-chan struct{}) {
 	log.Println("Do", t)
 	time.Sleep(time.Duration(1+rand.Intn(2)) * time.Millisecond)
-}
 
-func (ex *Exec) AdvanceState(t *state.Task) {
 	switch t.State {
 	case state.Invalid:
 		t.Update(state.Initializing)
@@ -70,7 +68,7 @@ func (ex *Exec) AdvanceState(t *state.Task) {
 		// Generally shouldn't happen.
 		// In prod, we would ignore this, but for test we log.Fatal to force
 		// a test failure.
-		log.Fatal("Should not call AdvanceState when state is Done")
+		log.Fatal("Should not call Next when state is Done")
 	}
 }
 
@@ -102,11 +100,10 @@ func TestWithTaskQueue(t *testing.T) {
 	// Start tracker with one queue.
 	exec := Exec{}
 	th := reproc.NewTaskHandler(&exec, []string{"queue-1"}, nil)
+	th.AddTask("gs://fake/ndt/2017/09/22/")
 
-	th.AddTask("a")
-
-	go th.AddTask("b")
-	go th.AddTask("c")
+	go th.AddTask("gs://fake/ndt/2017/09/24/")
+	go th.AddTask("gs://fake/ndt/2017/09/26/")
 
 	time.Sleep(15 * time.Millisecond)
 	th.Terminate()

@@ -56,10 +56,7 @@ var (
 // Used for mocking.
 // Interface must update the task in place, so that state changes are all visible.
 type Executor interface {
-	// Advance to the next state.
-	AdvanceState(task *Task)
-	// Advance to the next state.
-	DoAction(task *Task, terminate <-chan struct{})
+	Next(task *Task, terminate <-chan struct{})
 }
 
 // Saver provides API for saving Task state.
@@ -257,18 +254,9 @@ loop:
 			t.SetError(ErrTaskSuspended, "Terminating")
 			break loop
 		default:
-			log.Println("Doing", StateNames[t.State])
-			switch t.State {
-			case Processing:
-				ex.DoAction(&t, term.GetNotifyChannel())
-				log.Println("Returning", t.Queue)
+			ex.Next(&t, term.GetNotifyChannel())
+			if t.State == Stabilizing {
 				doneWithQueue()
-				log.Println("Advancing")
-				ex.AdvanceState(&t)
-			default:
-				ex.DoAction(&t, term.GetNotifyChannel())
-				log.Println("Advancing")
-				ex.AdvanceState(&t)
 			}
 		}
 	}

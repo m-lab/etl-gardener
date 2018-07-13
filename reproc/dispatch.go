@@ -97,6 +97,7 @@ func (th *TaskHandler) StartTask(t state.Task) {
 	// go routine, we need to avoid closing the taskQueues channel, which
 	// could then cause panics.
 	doneWithQueue := func() {
+		log.Println("Returning", t.Queue)
 		th.taskQueues <- t.Queue
 	}
 	go t.Process(th.exec, doneWithQueue, th.Terminator)
