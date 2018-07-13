@@ -39,7 +39,7 @@ func TestStatus(t *testing.T) {
 	// In travis, we use the emulator, which should provide consistency
 	// much more quickly.  We use a modest number here that usually
 	// is sufficient for running on workstation, and rarely fail with emulator.
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
