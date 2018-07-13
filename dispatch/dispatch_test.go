@@ -43,6 +43,8 @@ func TestSaver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	task.Delete() // Cleanup.
 }
 
 func TestDispatcherLifeCycle(t *testing.T) {
