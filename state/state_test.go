@@ -3,9 +3,11 @@ package state_test
 import (
 	"errors"
 	"log"
+	"sync"
 	"testing"
 
 	"github.com/m-lab/etl-gardener/state"
+	"github.com/m-lab/go/bqext"
 )
 
 func init() {
@@ -14,25 +16,42 @@ func init() {
 }
 
 type testSaver struct {
+	lock   sync.Mutex
 	tasks  map[string][]state.Task
 	delete map[string]struct{}
 }
 
 func (s *testSaver) SaveTask(t state.Task) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.tasks[t.Name] = append(s.tasks[t.Name], t)
 	return nil
 }
 
 func (s *testSaver) DeleteTask(t state.Task) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.delete[t.Name] = struct{}{}
 	return nil
+}
+
+func (s *testSaver) GetTasks(t state.Task) map[string][]state.Task {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return s.tasks
+}
+
+func (s *testSaver) GetDeletes(t state.Task) map[string]struct{} {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return s.delete
 }
 
 func assertSaver() { func(ex state.Saver) {}(&testSaver{}) }
 
 func TestTaskBasics(t *testing.T) {
 	task := state.Task{Name: "foobar", State: state.Initializing}
-	saver := testSaver{make(map[string][]state.Task), make(map[string]struct{})}
+	saver := testSaver{tasks: make(map[string][]state.Task), delete: make(map[string]struct{})}
 	task.SetSaver(&saver)
 
 	task.Update(state.Initializing)
@@ -73,5 +92,30 @@ func TestTaskBasics(t *testing.T) {
 	_, ok = saver.delete["foobar"]
 	if !ok {
 		t.Fatal("Should have called delete")
+	}
+}
+
+func TestSourceAndDest(t *testing.T) {
+	task, err := state.NewTask("gs://foo/foobar/2000/01/01/task1", "Q1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dsExt, err := bqext.NewDataset("mlab-testing", "dataset")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	src, dest, err := task.SourceAndDest(&dsExt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Source should be a templated table, ending in _date.
+	if src.FullyQualifiedName() != "mlab-testing:dataset.foobar_20000101" {
+		t.Error(src.FullyQualifiedName())
+	}
+	// Source should be a partition, ending in $date.
+	if dest.FullyQualifiedName() != "mlab-testing:dataset.foobar$20000101" {
+		t.Error(dest.FullyQualifiedName())
 	}
 }

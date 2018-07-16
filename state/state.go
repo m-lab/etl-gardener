@@ -8,11 +8,14 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"regexp"
+	"strings"
 	"time"
 
+	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/datastore"
+	"github.com/m-lab/etl-gardener/metrics"
+	"github.com/m-lab/go/bqext"
 )
 
 // State indicates the state of a single Task in flight.
@@ -46,16 +49,14 @@ var StateNames = map[State]string{
 var (
 	ErrInvalidQueue  = errors.New("invalid queue")
 	ErrTaskSuspended = errors.New("task suspended")
+	ErrTableNotFound = errors.New("Not found: Table")
 )
 
 // Executor describes an object that can do all the required steps to execute a Task.
 // Used for mocking.
 // Interface must update the task in place, so that state changes are all visible.
 type Executor interface {
-	// Advance to the next state.
-	AdvanceState(task *Task)
-	// Advance to the next state.
-	DoAction(task *Task, terminate <-chan struct{})
+	Next(task *Task, terminate <-chan struct{})
 }
 
 // Saver provides API for saving Task state.
@@ -164,6 +165,21 @@ func (t *Task) ParsePrefix() ([]string, error) {
 	return fields, nil
 }
 
+// SourceAndDest creates BQ Table entities for the source templated table, and destination partition.
+func (t *Task) SourceAndDest(ds *bqext.Dataset) (*bigquery.Table, *bigquery.Table, error) {
+	// Launch the dedup request, and save the JobID
+	parts, err := t.ParsePrefix()
+	if err != nil {
+		// If there is a parse error, log and skip request.
+		metrics.FailCount.WithLabelValues("BadDedupPrefix")
+		return nil, nil, err
+	}
+
+	src := ds.Table(parts[2] + "_" + strings.Join(strings.Split(parts[3], "/"), ""))
+	dest := ds.Table(parts[2] + "$" + strings.Join(strings.Split(parts[3], "/"), ""))
+	return src, dest, nil
+}
+
 func (t Task) String() string {
 	return fmt.Sprintf("{%s: %s, Q:%s, J:%s, E:%s (%s)}", t.Name, StateNames[t.State], t.Queue, t.JobID, t.ErrMsg, t.ErrInfo)
 }
@@ -182,11 +198,11 @@ func (t *Task) Save() error {
 
 // Update updates the task state, and saves to the "saver".
 func (t *Task) Update(st State) error {
+	t.State = st
+	t.UpdateTime = time.Now()
 	if t.saver == nil {
 		return ErrNoSaver
 	}
-	t.State = st
-	t.UpdateTime = time.Now()
 	return t.saver.SaveTask(*t)
 }
 
@@ -229,20 +245,20 @@ type Terminator interface {
 func nop() {}
 
 // Process handles all steps of processing a task.
-// TODO: Real implementation. This is a dummy implementation, to support testing TaskHandler.
-func (t *Task) Process(tq chan<- string, term Terminator) {
-	select {
-	case <-time.After(time.Duration(1+rand.Intn(10)) * time.Millisecond):
-		tq <- t.Queue
-		// Wait until one of these...
+func (t Task) Process(ex Executor, doneWithQueue func(), term Terminator) {
+	log.Println("Starting:", t.Name)
+loop:
+	for t.State != Done { //&& t.err == nil {
 		select {
-		case <-time.After(time.Duration(1+rand.Intn(10)) * time.Millisecond):
-			nop()
 		case <-term.GetNotifyChannel():
-			nop()
+			t.SetError(ErrTaskSuspended, "Terminating")
+			break loop
+		default:
+			ex.Next(&t, term.GetNotifyChannel())
+			if t.State == Stabilizing {
+				doneWithQueue()
+			}
 		}
-	case <-term.GetNotifyChannel():
-		nop()
 	}
 	term.Done()
 }
