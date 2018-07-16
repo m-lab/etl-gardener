@@ -74,6 +74,7 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 		t.Update(state.Queuing)
 
 	case state.Queuing:
+		// TODO - handle zero task case.
 		rex.queue(t, terminate)
 		t.Update(state.Processing)
 
@@ -87,17 +88,23 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 		ds, err := rex.GetDS()
 		if err != nil {
 			t.SetError(err, "GetDS")
+			t.Update(state.Deduplicating)
 			return
 		}
 		s, _, err := t.SourceAndDest(&ds)
 		if err != nil {
 			t.SetError(err, "SourceAndDest")
+			t.Update(state.Deduplicating)
 			return
 		}
 		err = dispatch.WaitForStableTable(s)
 		if err != nil {
-			t.SetError(err, "WaitForStableTable")
-			return
+			// When testing, we expect to get ErrTableNotFound here.
+			if !env.TestMode || err != dispatch.ErrTableNotFound {
+				t.SetError(err, "WaitForStableTable")
+				t.Update(state.Deduplicating)
+				return
+			}
 		}
 
 		t.Update(state.Deduplicating)
@@ -164,7 +171,7 @@ func (rex *ReprocessingExecutor) waitForParsing(t *state.Task, terminate <-chan 
 
 // TODO - this replaces ChannelQueueHandler.processOneRequest.  Should delete that
 // code after transition.
-func (rex *ReprocessingExecutor) queue(t *state.Task, terminate <-chan struct{}) {
+func (rex *ReprocessingExecutor) queue(t *state.Task, terminate <-chan struct{}) int {
 	// Submit all files from the bucket that match the prefix.
 	// Where do we get the bucket?
 	//func (qh *ChannelQueueHandler) handleLoop(next api.BasicPipe, bucketOpts ...option.ClientOption) {
@@ -172,7 +179,7 @@ func (rex *ReprocessingExecutor) queue(t *state.Task, terminate <-chan struct{})
 	if err != nil {
 		metrics.FailCount.WithLabelValues("NewQueueHandler")
 		t.SetError(err, "NewQueueHandler")
-		return
+		return 0
 	}
 	parts, err := t.ParsePrefix()
 	if err != nil {
@@ -180,18 +187,20 @@ func (rex *ReprocessingExecutor) queue(t *state.Task, terminate <-chan struct{})
 		log.Println(err)
 		metrics.FailCount.WithLabelValues("BadPrefix").Inc()
 		t.SetError(err, "BadPrefix")
-		return
+		return 0
 	}
 	bucketName := parts[1]
 	bucket, err := tq.GetBucket(rex.BucketOpts, rex.Project, bucketName, false)
 	if err != nil {
 		if err == io.EOF && env.TestMode {
-			log.Println("Using fake client, so can't get real bucket")
+			log.Println("Using fake client, ignoring EOF error")
+			return 1
+		} else {
+			log.Println(err)
+			metrics.FailCount.WithLabelValues("BucketError").Inc()
+			t.SetError(err, "BucketError")
+			return 0
 		}
-		log.Println(err)
-		metrics.FailCount.WithLabelValues("BucketError").Inc()
-		t.SetError(err, "BucketError")
-		return
 	}
 	// TODO maybe check terminate while queuing?
 	n, err := qh.PostDay(bucket, bucketName, parts[2]+"/"+parts[3]+"/")
@@ -199,9 +208,10 @@ func (rex *ReprocessingExecutor) queue(t *state.Task, terminate <-chan struct{})
 		log.Println(err)
 		metrics.FailCount.WithLabelValues("PostDayError").Inc()
 		t.SetError(err, "PostDayError")
-		return
+		return n
 	}
 	log.Println("Added ", n, t.Name, " tasks to ", qh.Queue)
+	return n
 }
 
 // TODO - this replaces part of the code in dispatch.waitAndDedup.  Should migrate

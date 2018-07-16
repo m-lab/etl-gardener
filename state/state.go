@@ -248,17 +248,20 @@ func nop() {}
 func (t Task) Process(ex Executor, doneWithQueue func(), term Terminator) {
 	log.Println("Starting:", t.Name)
 loop:
-	for t.State != Done && t.ErrMsg == "" {
+	for t.State != Done { //&& t.ErrMsg == "" {
 		select {
 		case <-term.GetNotifyChannel():
 			t.SetError(ErrTaskSuspended, "Terminating")
 			break loop
 		default:
-			log.Println(t.Name, StateNames[t.State])
-			ex.Next(&t, term.GetNotifyChannel())
-			if t.State == Stabilizing {
+			log.Println("Doing ", StateNames[t.State], t.Name)
+			switch t.State {
+			case Processing:
+				ex.Next(&t, term.GetNotifyChannel())
 				log.Printf("returning queue from %s %p\n", t.Name, &t)
 				doneWithQueue()
+			default:
+				ex.Next(&t, term.GetNotifyChannel())
 			}
 		}
 	}
