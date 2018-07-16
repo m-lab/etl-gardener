@@ -248,7 +248,7 @@ func nop() {}
 func (t Task) Process(ex Executor, doneWithQueue func(), term Terminator) {
 	log.Println("Starting:", t.Name)
 loop:
-	for t.State != Done && t.ErrMsg == "" {
+	for t.State != Done { //&& t.ErrMsg == "" {
 		select {
 		case <-term.GetNotifyChannel():
 			t.SetError(ErrTaskSuspended, "Terminating")
