@@ -13,6 +13,33 @@ import (
 	"github.com/m-lab/etl-gardener/state"
 )
 
+func waitForNTasks(t *testing.T, saver *state.DatastoreSaver, expectedTaskCount int) []state.Task {
+	var tasks []state.Task
+	var err error
+	for i := 0; i < 10; i++ {
+		// Real datastore takes about 100 msec or more before consistency.
+		// In travis, we use the emulator, which should provide consistency
+		// much more quickly.  We use a modest number here that usually
+		// is sufficient for running on workstation, and rarely fail with emulator.
+		// Then we retry up to 10 times, before actually failing.
+		time.Sleep(200 * time.Millisecond)
+		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+		tasks, err = saver.GetStatus(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ctx.Err() != nil {
+			t.Fatal(ctx.Err())
+		}
+		if len(tasks) == expectedTaskCount {
+			break
+		}
+	}
+	return tasks
+}
+
 func TestStatus(t *testing.T) {
 	saver, err := state.NewDatastoreSaver("mlab-testing")
 	if err != nil {
@@ -35,23 +62,10 @@ func TestStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Real datastore takes about 100 msec or more before consistency.
-	// In travis, we use the emulator, which should provide consistency
-	// much more quickly.  We use a modest number here that usually
-	// is sufficient for running on workstation, and rarely fail with emulator.
-	time.Sleep(500 * time.Millisecond)
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	tasks, err := saver.GetStatus(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ctx.Err() != nil {
-		t.Fatal(ctx.Err())
-	}
-	if len(tasks) != 2 {
-		t.Errorf("Saw %d tasks instead of 2 (see notes on consistency)", len(tasks))
+	ExpectedTasks := 2
+	tasks := waitForNTasks(t, saver, ExpectedTasks)
+	if len(tasks) != ExpectedTasks {
+		t.Errorf("Saw %d tasks instead of %d (see notes on consistency)", len(tasks), ExpectedTasks)
 		for _, t := range tasks {
 			log.Println(t)
 		}
@@ -80,7 +94,9 @@ func TestWriteStatus(t *testing.T) {
 	task.Queue = "Q2"
 	task.Update(state.Queuing)
 	t2 := task
-	time.Sleep(200 * time.Millisecond)
+
+	ExpectedTasks := 2
+	waitForNTasks(t, saver, ExpectedTasks)
 
 	bb := make([]byte, 0, 500)
 	buf := bytes.NewBuffer(bb)

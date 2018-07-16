@@ -44,7 +44,8 @@ func TestSaver(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	task.Delete() // Cleanup.
+	// Cleanup.
+	task.Delete()
 }
 
 func TestDispatcherLifeCycle(t *testing.T) {
