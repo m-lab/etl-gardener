@@ -1,4 +1,5 @@
-// Package rex ...
+// Package rex provides ReprocessingExecutor, which implements the state.Executor interface.
+// It provides all the implementation detail for reprocessing data through the etl pipeline.
 package rex
 
 // TODO - work out how to manage queues and new tasks.
@@ -63,10 +64,6 @@ var ErrNoSaver = errors.New("Task.saver is nil")
 func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) {
 	// Note that only the state in state.Task is maintained between actions.
 	switch t.State {
-	case state.Invalid:
-		log.Println("Should not call Next on Invalid state!")
-		t.SetError(errors.New("called Next on invalid state"), "Invalid")
-
 	case state.Initializing:
 		// TODO - should check that _suffix table doesn't already exist, or delete it
 		// if it does?  Also check if it has a streaming buffer?
@@ -75,7 +72,7 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 
 	case state.Queuing:
 		// TODO - handle zero task case.
-		rex.queue(t, terminate)
+		rex.queue(t)
 		t.Update(state.Processing)
 
 	case state.Processing: // TODO should this be Parsing?
@@ -110,7 +107,7 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 		t.Update(state.Deduplicating)
 
 	case state.Deduplicating:
-		rex.dedup(t, terminate)
+		rex.dedup(t)
 		t.Update(state.Finishing)
 
 	case state.Finishing:
@@ -122,6 +119,10 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 
 	case state.Done:
 		log.Println("Unexpected call to Next when Done")
+
+	case state.Invalid:
+		log.Println("Should not call Next on Invalid state!")
+		t.SetError(errors.New("called Next on invalid state"), "Invalid")
 
 	default:
 		log.Println("Unknown state")
@@ -171,7 +172,7 @@ func (rex *ReprocessingExecutor) waitForParsing(t *state.Task, terminate <-chan 
 
 // TODO - this replaces ChannelQueueHandler.processOneRequest.  Should delete that
 // code after transition.
-func (rex *ReprocessingExecutor) queue(t *state.Task, terminate <-chan struct{}) int {
+func (rex *ReprocessingExecutor) queue(t *state.Task) int {
 	// Submit all files from the bucket that match the prefix.
 	// Where do we get the bucket?
 	//func (qh *ChannelQueueHandler) handleLoop(next api.BasicPipe, bucketOpts ...option.ClientOption) {
@@ -189,21 +190,21 @@ func (rex *ReprocessingExecutor) queue(t *state.Task, terminate <-chan struct{})
 		t.SetError(err, "BadPrefix")
 		return 0
 	}
-	bucketName := parts[1]
+	bucketName := parts[0]
 	bucket, err := tq.GetBucket(rex.BucketOpts, rex.Project, bucketName, false)
 	if err != nil {
 		if err == io.EOF && env.TestMode {
 			log.Println("Using fake client, ignoring EOF error")
 			return 1
-		} else {
-			log.Println(err)
-			metrics.FailCount.WithLabelValues("BucketError").Inc()
-			t.SetError(err, "BucketError")
-			return 0
 		}
+		log.Println(err)
+		metrics.FailCount.WithLabelValues("BucketError").Inc()
+		t.SetError(err, "BucketError")
+		return 0
 	}
-	// TODO maybe check terminate while queuing?
-	n, err := qh.PostDay(bucket, bucketName, parts[2]+"/"+parts[3]+"/")
+	// NOTE: This does not check the terminate channel, so once started, it will
+	// complete the queuing.
+	n, err := qh.PostDay(bucket, bucketName, parts[1]+"/"+parts[2]+"/")
 	if err != nil {
 		log.Println(err)
 		metrics.FailCount.WithLabelValues("PostDayError").Inc()
@@ -216,7 +217,7 @@ func (rex *ReprocessingExecutor) queue(t *state.Task, terminate <-chan struct{})
 
 // TODO - this replaces part of the code in dispatch.waitAndDedup.  Should migrate
 // Dedup() here, and delete obsolete code.
-func (rex *ReprocessingExecutor) dedup(t *state.Task, terminate <-chan struct{}) {
+func (rex *ReprocessingExecutor) dedup(t *state.Task) {
 	// Launch the dedup request, and save the JobID
 	ds, err := rex.GetDS()
 	if err != nil {
@@ -340,16 +341,10 @@ func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}
 	defer cf()
 	err = src.Delete(ctx)
 	if err != nil {
-		metrics.FailCount.WithLabelValues("TableDeleteErr")
 		log.Println(err)
-	}
-	if ctx.Err() != nil {
-		if ctx.Err() != context.DeadlineExceeded {
-			metrics.FailCount.WithLabelValues("TableDeleteTimeout")
-			t.SetError(err, "TableDeleteTimeout")
-			log.Println(ctx.Err())
-			return
-		}
+		metrics.FailCount.WithLabelValues("TableDeleteErr")
+		t.SetError(err, "TableDeleteErr")
+		return
 	}
 
 	// TODO - Copy to base_tables.
