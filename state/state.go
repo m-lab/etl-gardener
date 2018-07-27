@@ -133,7 +133,7 @@ func NewTask(name string, queue string, saver Saver) (*Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	date, err := time.Parse("2006/01/02", parts[3])
+	date, err := time.Parse("2006/01/02", parts[2])
 	if err != nil {
 		return nil, err
 	}
@@ -153,16 +153,17 @@ var (
 )
 
 // ParsePrefix Parses prefix, returning {bucket, experiment, date string}, error
+// Unless it returns error, the result will be exactly length 3.
 func (t *Task) ParsePrefix() ([]string, error) {
 	fields := prefixPattern.FindStringSubmatch(t.Name)
 
 	if fields == nil {
 		return nil, errors.New("Invalid test path: " + t.Name)
 	}
-	if len(fields) < 4 {
+	if len(fields) != 4 {
 		return nil, errors.New("Path does not include all fields: " + t.Name)
 	}
-	return fields, nil
+	return fields[1:], nil
 }
 
 // SourceAndDest creates BQ Table entities for the source templated table, and destination partition.
@@ -175,8 +176,8 @@ func (t *Task) SourceAndDest(ds *bqext.Dataset) (*bigquery.Table, *bigquery.Tabl
 		return nil, nil, err
 	}
 
-	src := ds.Table(parts[2] + "_" + strings.Join(strings.Split(parts[3], "/"), ""))
-	dest := ds.Table(parts[2] + "$" + strings.Join(strings.Split(parts[3], "/"), ""))
+	src := ds.Table(parts[1] + "_" + strings.Join(strings.Split(parts[2], "/"), ""))
+	dest := ds.Table(parts[1] + "$" + strings.Join(strings.Split(parts[2], "/"), ""))
 	return src, dest, nil
 }
 
@@ -248,15 +249,20 @@ func nop() {}
 func (t Task) Process(ex Executor, doneWithQueue func(), term Terminator) {
 	log.Println("Starting:", t.Name)
 loop:
-	for t.State != Done { //&& t.err == nil {
+	for t.State != Done { //&& t.ErrMsg == "" {
 		select {
 		case <-term.GetNotifyChannel():
 			t.SetError(ErrTaskSuspended, "Terminating")
 			break loop
 		default:
-			ex.Next(&t, term.GetNotifyChannel())
-			if t.State == Stabilizing {
+			log.Println("Doing ", StateNames[t.State], t.Name)
+			switch t.State {
+			case Processing:
+				ex.Next(&t, term.GetNotifyChannel())
+				log.Printf("returning queue from %s %p\n", t.Name, &t)
 				doneWithQueue()
+			default:
+				ex.Next(&t, term.GetNotifyChannel())
 			}
 		}
 	}
