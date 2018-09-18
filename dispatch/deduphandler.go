@@ -12,10 +12,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
-	"github.com/m-lab/etl-gardener/cloud"
-	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/metrics"
-	"github.com/m-lab/etl-gardener/state"
 	"github.com/m-lab/go/bqext"
 )
 
@@ -31,23 +28,6 @@ func init() {
 var (
 	ErrTableNotFound = errors.New("Table not found")
 )
-
-// DedupHandler handles requests to dedup a table.
-type DedupHandler struct {
-	cloud.BQConfig
-	MsgChan      chan state.Task
-	ResponseChan chan error
-}
-
-// Sink returns the sink channel, for use by the sender.
-func (dh *DedupHandler) Sink() chan<- state.Task {
-	return dh.MsgChan
-}
-
-// Response returns the response channel, that closes when all processing is complete.
-func (dh *DedupHandler) Response() <-chan error {
-	return dh.ResponseChan
-}
 
 // WaitForStableTable loops checking until table exists and has no streaming buffer.
 func WaitForStableTable(tt *bigquery.Table) error {
@@ -106,136 +86,6 @@ ErrorTimeout:
 	log.Println(err, tt.FullyQualifiedName())
 	metrics.FailCount.WithLabelValues("TableMetaErr")
 	return err
-}
-
-// waitAndDedup waits until table is stable, then deduplicates it.
-func (dh *DedupHandler) waitAndDedup(ds *bqext.Dataset, task state.Task) error {
-	parts, err := tq.ParsePrefix(task.Name)
-	if err != nil {
-		// If there is a parse error, log and skip request.
-		log.Println(err)
-		// TODO update metric
-		metrics.FailCount.WithLabelValues("BadDedupPrefix")
-		task.SetError(err, "BadDedupPrefix")
-		return err
-	}
-
-	// First wait for the source table's streaming buffer to be integrated.
-	// This often takes an hour or more.
-	task.Update(state.Stabilizing)
-	tt := ds.Table(parts[2] + "_" + strings.Join(strings.Split(parts[3], "/"), ""))
-	err = WaitForStableTable(tt)
-	if err != nil {
-		metrics.FailCount.WithLabelValues("WaitForStableTable")
-		task.SetError(err, "WaitForStableTable")
-		return err
-	}
-
-	task.Update(state.Deduplicating)
-
-	// Now deduplicate the table.  NOTE that this will overwrite the destination partition
-	// if it still exists.
-	dest := ds.Table(parts[2] + "$" + strings.Join(strings.Split(parts[3], "/"), ""))
-	log.Println("Dedupping", tt.FullyQualifiedName())
-	job, err := Dedup(ds, tt.TableID, dest)
-	if err != nil {
-		if err == io.EOF {
-			// TODO - improve on this testing hack.
-			// It would be nice to use a fake Job, but that seems impossible.
-			// Could instead return our own Job interface object??
-			log.Println("EOF error - is this a test client?")
-			task.JobID = "fake jobID"
-			task.Save()
-		} else {
-			log.Println(err, tt.FullyQualifiedName())
-			metrics.FailCount.WithLabelValues("DedupJobError")
-			task.SetError(err, "DedupJobError")
-			return err
-		}
-	} else {
-		task.JobID = job.ID()
-		task.Save()
-		status, err := job.Wait(context.Background())
-		if err != nil {
-			log.Println(status.Err(), tt.FullyQualifiedName())
-			metrics.FailCount.WithLabelValues("DedupError")
-			task.SetError(err, "DedupError1")
-			return err
-		}
-		if status.Err() != nil {
-			log.Println(status.Err(), tt.FullyQualifiedName())
-			metrics.FailCount.WithLabelValues("DedupError")
-			task.SetError(status.Err(), "DedupError2")
-			return status.Err()
-		}
-	}
-
-	task.JobID = ""
-	task.Update(state.Finishing)
-
-	log.Println("Completed deduplication, deleting", tt.FullyQualifiedName())
-	// If deduplication was successful, we should delete the source table.
-	ctx, cf := context.WithTimeout(context.Background(), time.Minute)
-	defer cf()
-	err = tt.Delete(ctx)
-	if err != nil {
-		metrics.FailCount.WithLabelValues("TableDeleteErr")
-		task.SetError(err, "TableDeleteErr")
-		log.Println(err)
-	}
-	if ctx.Err() != nil {
-		if ctx.Err() != context.DeadlineExceeded {
-			metrics.FailCount.WithLabelValues("TableDeleteTimeout")
-			log.Println(ctx.Err())
-			task.SetError(ctx.Err(), "TableDeleteTimeout")
-			return err
-		}
-	}
-
-	log.Println("Deleted", tt.FullyQualifiedName())
-
-	task.JobID = ""
-	task.Save()
-	return nil
-}
-
-// handleLoop processes requests on input channel
-func (dh *DedupHandler) handleLoop() {
-	var last state.Task
-	for task := range dh.MsgChan {
-		last = task
-		log.Println("Deduping", task)
-		ds, err := bqext.NewDataset(dh.BQProject, dh.BQDataset, dh.Options...)
-		if err != nil {
-			task.SetError(err, "NewDataset")
-			metrics.FailCount.WithLabelValues("NewDataset")
-			log.Println(err)
-			// TODO do we want to do any recovery here?
-			continue
-		}
-
-		dh.waitAndDedup(&ds, task)
-
-		// TODO - sanity check and copy to final destination.
-
-		task.Update(state.Done)
-		task.Delete()
-	}
-	log.Println("Exiting handler after", last)
-	close(dh.ResponseChan)
-}
-
-// NewDedupHandler creates a new QueueHandler, sets up a go routine to feed it
-// from a channel.
-// Returns feeding channel, and done channel, which will return true when
-// feeding channel is closed, and processing is complete.
-func NewDedupHandler(config cloud.BQConfig) *DedupHandler {
-	msg := make(chan state.Task)
-	rsp := make(chan error)
-	dh := DedupHandler{config, msg, rsp}
-
-	go dh.handleLoop()
-	return &dh
 }
 
 // This template expects to be executed on a table containing a single day's data, such
