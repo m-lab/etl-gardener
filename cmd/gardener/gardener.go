@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -19,6 +20,9 @@ import (
 	"time"
 
 	"github.com/m-lab/etl-gardener/cloud"
+	"github.com/m-lab/etl-gardener/reproc"
+	"github.com/m-lab/etl-gardener/rex"
+	"google.golang.org/api/option"
 
 	"github.com/m-lab/etl-gardener/dispatch"
 	"github.com/m-lab/etl-gardener/state"
@@ -111,22 +115,62 @@ func init() {
 
 // dispatcherFromEnv creates a Dispatcher struct initialized from environment variables.
 // It uses PROJECT, QUEUE_BASE, and NUM_QUEUES.
-func dispatcherFromEnv(client *http.Client) (*dispatch.Dispatcher, error) {
+func taskHandlerFromEnv(client *http.Client) (*reproc.TaskHandler, error) {
 	if env.Error != nil {
 		log.Println(env.Error)
 		log.Println(env)
 		return nil, env.Error
 	}
-	ds, err := state.NewDatastoreSaver(env.Project)
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
 
 	config := cloud.Config{
 		Project: env.Project,
 		Client:  client}
-	return dispatch.NewDispatcher(config, env.QueueBase, env.NumQueues, env.StartDate, ds)
+
+	bqConfig := dispatch.NewBQConfig(config)
+	exec := rex.ReprocessingExecutor{BQConfig: bqConfig, BucketOpts: []option.ClientOption{}}
+	queues := make([]string, env.NumQueues)
+	for i := 0; i < env.NumQueues; i++ {
+		queues[i] = fmt.Sprintf("%s%d", env.QueueBase, i)
+	}
+
+	// TODO move DatastoreSaver to another package?
+	saver, err := state.NewDatastoreSaver(env.Project)
+	if err != nil {
+		return nil, err
+	}
+	return reproc.NewTaskHandler(&exec, queues, saver), nil
+}
+
+// doDispatchLoop just sequences through archives in date order.
+// It will generally be blocked on the queues.
+// It will start processing at startDate, and when it catches up to "now" it will restart at restartDate.
+func doDispatchLoop(handler *reproc.TaskHandler, startDate time.Time, restartDate time.Time, bucket string, experiments []string) {
+	log.Println("(Re)starting at", startDate)
+	next := startDate
+
+	for {
+		for _, e := range experiments {
+			prefix := next.Format(fmt.Sprintf("gs://%s/%s/2006/01/02/", bucket, e))
+
+			// Note that this blocks until a queue is available.
+			err := handler.AddTask(prefix)
+			if err != nil {
+				// Only error expected here is ErrTerminating
+				log.Println(err)
+				return
+			}
+		}
+
+		next = next.AddDate(0, 0, 1)
+
+		// If gardener has processed all dates up to two days ago,
+		// start over.
+		if next.Add(48 * time.Hour).After(time.Now()) {
+			// TODO - load this from DataStore
+			log.Println("Starting over at", restartDate)
+			next = restartDate
+		}
+	}
 }
 
 // StartDateRFC3339 is the date at which reprocessing will start when it catches
@@ -208,12 +252,14 @@ func runService() {
 	http.HandleFunc("/alive", healthCheck)
 	http.HandleFunc("/ready", healthCheck)
 
-	disp, err := dispatcherFromEnv(http.DefaultClient)
+	handler, err := taskHandlerFromEnv(http.DefaultClient)
 	if err != nil {
 		log.Println(err)
 		// leaving healthy = false should eventually lead to rollback.
 	} else {
 		// TODO - add termination channel.
+		// TODO - is this where startDate should come from?
+		startDate := env.StartDate
 		bucket := os.Getenv("TASKFILE_BUCKET")
 		expString := os.Getenv("EXPERIMENTS")
 		if bucket == "" {
@@ -225,7 +271,33 @@ func runService() {
 			for i := range experiments {
 				experiments[i] = strings.TrimSpace(experiments[i])
 			}
-			go disp.DoDispatchLoop(bucket, experiments)
+
+			// TODO - also need to restart all tasks from DataStore.
+			ds, err := state.NewDatastoreSaver(env.Project)
+			if err != nil {
+				log.Println(err)
+			} else {
+				ctx := context.Background()
+				ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+				tasks, err := ds.GetStatus(ctx)
+				cancel()
+				if err != nil {
+					log.Println(err)
+				} else {
+					maxDate, err := handler.RestartTasks(tasks)
+					if err != nil {
+						log.Println(err)
+					} else {
+						if maxDate.After(startDate) {
+							startDate = maxDate.AddDate(0, 0, 1)
+						}
+
+					}
+				}
+			}
+
+			log.Println("Using start date of", startDate)
+			go doDispatchLoop(handler, startDate, env.StartDate, bucket, experiments)
 			healthy = true
 		}
 	}

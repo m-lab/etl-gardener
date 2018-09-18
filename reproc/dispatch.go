@@ -129,7 +129,7 @@ func (th *TaskHandler) AddTask(prefix string) error {
 	}
 }
 
-// RestartTasks queries the status, and restarts all the tasks.
+// RestartTasks restarts all the tasks, allocating queues as needed.
 // SHOULD ONLY be called at startup.
 // Returns date of next jobs to process.
 func (th *TaskHandler) RestartTasks(tasks []state.Task) (time.Time, error) {
