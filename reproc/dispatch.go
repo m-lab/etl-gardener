@@ -119,6 +119,7 @@ func (th *TaskHandler) AddTask(prefix string) error {
 			log.Println(err)
 			return err
 		}
+		log.Println("Adding:", t.Name)
 		th.StartTask(*t)
 		return nil
 
@@ -150,23 +151,31 @@ queueLoop:
 	maxDate := time.Time{}
 	for i := range tasks {
 		t := tasks[i]
-		log.Println("Restarting", t.Name, t.State)
+		if t.ErrInfo != "" || t.ErrMsg != "" {
+			// TODO - add metric
+			log.Println("Skipping:", t.Name, t.ErrMsg, t.ErrInfo)
+			continue
+		}
 		if t.Queue != "" {
 			_, ok := queues[t.Queue]
 			if ok {
 				delete(queues, t.Queue)
+				log.Println("Restarting", t)
 				th.StartTask(t)
 			} else {
-				log.Println("Queue", t.Queue, "already in use.  Skipping", t.Name)
+				// TODO - add metric
+				log.Println("Queue", t.Queue, "already in use.  Skipping", t)
 			}
 		} else {
 			// No queue, just restart...
+			log.Println("Restarting", t)
 			th.StartTask(t)
 		}
 		if t.Date.After(maxDate) {
 			maxDate = t.Date
 		}
 	}
+	log.Println("Max date found:", maxDate)
 
 	// Return the unused queues to the pool.
 	for q := range queues {
