@@ -24,7 +24,6 @@ import (
 	"github.com/m-lab/etl-gardener/rex"
 	"google.golang.org/api/option"
 
-	"github.com/m-lab/etl-gardener/dispatch"
 	"github.com/m-lab/etl-gardener/state"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -113,6 +112,23 @@ func init() {
 //  Batch processing task scheduling and support code
 // ###############################################################################
 
+// NewBQConfig creates a BQConfig for use with NewDedupHandler
+func NewBQConfig(config cloud.Config) cloud.BQConfig {
+	bqDataset, ok := os.LookupEnv("DATASET")
+	if !ok {
+		log.Println("ERROR: env.DATASET not set")
+	}
+
+	// When running in prod, the task files and queues are in mlab-oti, but the destination
+	// BigQuery tables are in measurement-lab.
+	// However, for sidestream private tables, we leave them in mlab-oti
+	bqProject := config.Project
+	if bqProject == "mlab-oti" && bqDataset != "private" {
+		bqProject = "measurement-lab" // destination for production tables.
+	}
+	return cloud.BQConfig{Config: config, BQProject: bqProject, BQDataset: bqDataset}
+}
+
 // dispatcherFromEnv creates a Dispatcher struct initialized from environment variables.
 // It uses PROJECT, QUEUE_BASE, and NUM_QUEUES.
 func taskHandlerFromEnv(client *http.Client) (*reproc.TaskHandler, error) {
@@ -126,7 +142,7 @@ func taskHandlerFromEnv(client *http.Client) (*reproc.TaskHandler, error) {
 		Project: env.Project,
 		Client:  client}
 
-	bqConfig := dispatch.NewBQConfig(config)
+	bqConfig := NewBQConfig(config)
 	exec := rex.ReprocessingExecutor{BQConfig: bqConfig, BucketOpts: []option.ClientOption{}}
 	queues := make([]string, env.NumQueues)
 	for i := 0; i < env.NumQueues; i++ {

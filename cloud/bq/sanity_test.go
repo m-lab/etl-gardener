@@ -1,4 +1,4 @@
-package dedup
+package bq
 
 import (
 	"log"

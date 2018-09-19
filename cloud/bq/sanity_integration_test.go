@@ -1,14 +1,13 @@
 // +build integration
 
-package dedup_test
+package bq_test
 
 import (
 	"context"
 	"log"
 	"testing"
-	"time"
 
-	"github.com/m-lab/etl-gardener/dedup"
+	"github.com/m-lab/etl-gardener/cloud/bq"
 	"github.com/m-lab/go/bqext"
 )
 
@@ -24,7 +23,7 @@ func TestGetTableDetail(t *testing.T) {
 	}
 
 	// Check that it handles empty partitions
-	detail, err := dedup.GetTableDetail(&destDS, destDS.Table("DedupTest$20001229"))
+	detail, err := bq.GetTableDetail(&destDS, destDS.Table("DedupTest$20001229"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +33,7 @@ func TestGetTableDetail(t *testing.T) {
 
 	// Check that it handles single partitions.
 	// TODO - update to create its own test table.
-	detail, err = dedup.GetTableDetail(&destDS, destDS.Table("DedupTest$19990101"))
+	detail, err = bq.GetTableDetail(&destDS, destDS.Table("DedupTest$19990101"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +48,7 @@ func TestGetTableDetail(t *testing.T) {
 
 	// Check that it handles full table.
 	// TODO - update to create its own test table.
-	detail, err = dedup.GetTableDetail(&srcDS, srcDS.Table("DedupTest_19990101"))
+	detail, err = bq.GetTableDetail(&srcDS, srcDS.Table("DedupTest_19990101"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +65,7 @@ func TestAnnotationTableMeta(t *testing.T) {
 	}
 
 	tbl := dsExt.Table("DedupTest")
-	at := dedup.NewAnnotatedTable(tbl, &dsExt)
+	at := bq.NewAnnotatedTable(tbl, &dsExt)
 	meta, err := at.CachedMeta(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -79,9 +78,9 @@ func TestAnnotationTableMeta(t *testing.T) {
 	}
 
 	tbl = dsExt.Table("XYZ")
-	at = dedup.NewAnnotatedTable(tbl, &dsExt)
+	at = bq.NewAnnotatedTable(tbl, &dsExt)
 	meta, err = at.CachedMeta(nil)
-	if err != dedup.ErrNilContext {
+	if err != bq.ErrNilContext {
 		t.Fatal("Should be an error when no context provided")
 	}
 	meta, err = at.CachedMeta(context.Background())
@@ -97,7 +96,7 @@ func TestAnnotationDetail(t *testing.T) {
 	}
 
 	tbl := dsExt.Table("DedupTest")
-	at := dedup.NewAnnotatedTable(tbl, &dsExt)
+	at := bq.NewAnnotatedTable(tbl, &dsExt)
 	_, err = at.CachedDetail(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -110,7 +109,7 @@ func TestGetTablesMatching(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	atList, err := dedup.GetTablesMatching(context.Background(), &dsExt, "Test")
+	atList, err := bq.GetTablesMatching(context.Background(), &dsExt, "Test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +125,7 @@ func TestAnnotatedTableGetPartitionInfo(t *testing.T) {
 	}
 
 	tbl := dsExt.Table("DedupTest$19990101")
-	at := dedup.NewAnnotatedTable(tbl, &dsExt)
+	at := bq.NewAnnotatedTable(tbl, &dsExt)
 	info, err := at.GetPartitionInfo(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -137,7 +136,7 @@ func TestAnnotatedTableGetPartitionInfo(t *testing.T) {
 
 	// Check behavior for missing partition
 	tbl = dsExt.Table("DedupTest$17760101")
-	at = dedup.NewAnnotatedTable(tbl, &dsExt)
+	at = bq.NewAnnotatedTable(tbl, &dsExt)
 	info, err = at.GetPartitionInfo(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -145,45 +144,4 @@ func TestAnnotatedTableGetPartitionInfo(t *testing.T) {
 	if info.PartitionID != "" {
 		t.Error("Non-existent partition should return empty PartitionID")
 	}
-}
-
-// TODO - should check some failure cases.
-func TestCheckAndDedup(t *testing.T) {
-	dsExt, err := bqext.NewDataset("mlab-testing", "src")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	atList, err := dedup.GetTablesMatching(context.Background(), &dsExt, "DedupTest_19990101")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(atList) != 1 {
-		t.Fatal("No info for pattern.")
-	}
-
-	destTable := dsExt.BqClient.DatasetInProject(dsExt.ProjectID, "etl").Table("DedupTest$19990101")
-	// TODO - clean up pointer vs non-pointer args everywhere.
-	job := dedup.NewJob(&dsExt, &atList[0], dedup.NewAnnotatedTable(destTable, &dsExt))
-	err = job.CheckAndDedup(context.Background(), dedup.Options{time.Minute, false, false, false})
-	if err != nil {
-		log.Println(err)
-	}
-	err = job.CheckAndDedup(context.Background(), dedup.Options{time.Minute, true, false, false})
-	if err != nil {
-		t.Error(err)
-	}
-}
-
-func TestProcess(t *testing.T) {
-	dsExt, err := bqext.NewDataset("mlab-testing", "src")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = dedup.ProcessTablesMatching(&dsExt, "DedupTest_", "etl", dedup.Options{1 * time.Minute, false, false, false})
-	if err != nil && err != dedup.ErrSrcOlderThanDest {
-		t.Error(err)
-	}
-	// TODO - actually check something interesting.
 }

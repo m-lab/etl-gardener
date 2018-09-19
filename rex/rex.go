@@ -20,8 +20,8 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	"github.com/m-lab/etl-gardener/cloud"
+	"github.com/m-lab/etl-gardener/cloud/bq"
 	"github.com/m-lab/etl-gardener/cloud/tq"
-	"github.com/m-lab/etl-gardener/dispatch"
 	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/etl-gardener/state"
 	"github.com/m-lab/go/bqext"
@@ -94,10 +94,10 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 			t.Update(state.Deduplicating)
 			return
 		}
-		err = dispatch.WaitForStableTable(s)
+		err = bq.WaitForStableTable(s)
 		if err != nil {
 			// When testing, we expect to get ErrTableNotFound here.
-			if !env.TestMode || err != dispatch.ErrTableNotFound {
+			if !env.TestMode || err != state.ErrTableNotFound {
 				t.SetError(err, "WaitForStableTable")
 				t.Update(state.Deduplicating)
 				return
@@ -214,8 +214,6 @@ func (rex *ReprocessingExecutor) queue(t *state.Task) int {
 	return n
 }
 
-// TODO - this replaces part of the code in dispatch.waitAndDedup.  Should migrate
-// Dedup() here, and delete obsolete code.
 func (rex *ReprocessingExecutor) dedup(t *state.Task) {
 	// Launch the dedup request, and save the JobID
 	ds, err := rex.GetDS()
@@ -233,7 +231,7 @@ func (rex *ReprocessingExecutor) dedup(t *state.Task) {
 
 	log.Println("Dedupping", src.FullyQualifiedName())
 	// TODO move Dedup??
-	job, err := dispatch.Dedup(&ds, src.TableID, dest)
+	job, err := bq.Dedup(&ds, src.TableID, dest)
 	if err != nil {
 		if err == io.EOF {
 			if env.TestMode {
@@ -291,8 +289,6 @@ func waitForJob(ctx context.Context, job *bigquery.Job, maxBackoff time.Duration
 	return nil
 }
 
-// TODO - this replaces the latter part of dispatch.waitAndDedup().  Remove obsolete code
-// after deployment.
 func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}) {
 	// TODO use a simple client instead of creating dataset?
 	ds, err := bqext.NewDataset(rex.Project, rex.BQDataset, rex.Options...)
