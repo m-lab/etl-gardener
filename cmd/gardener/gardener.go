@@ -258,7 +258,6 @@ func runService() {
 		// leaving healthy = false should eventually lead to rollback.
 	} else {
 		// TODO - add termination channel.
-		// TODO - is this where startDate should come from?
 		startDate := env.StartDate
 		bucket := os.Getenv("TASKFILE_BUCKET")
 		expString := os.Getenv("EXPERIMENTS")
@@ -272,10 +271,10 @@ func runService() {
 				experiments[i] = strings.TrimSpace(experiments[i])
 			}
 
-			// TODO - also need to restart all tasks from DataStore.
 			ds, err := state.NewDatastoreSaver(env.Project)
 			if err != nil {
 				log.Println(err)
+				// We just leave healthy = false, and kubernetes should restart.
 			} else {
 				ctx := context.Background()
 				ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -291,14 +290,12 @@ func runService() {
 						if maxDate.After(startDate) {
 							startDate = maxDate.AddDate(0, 0, 1)
 						}
-
 					}
 				}
+				log.Println("Using start date of", startDate)
+				go doDispatchLoop(handler, startDate, env.StartDate, bucket, experiments)
+				healthy = true
 			}
-
-			log.Println("Using start date of", startDate)
-			go doDispatchLoop(handler, startDate, env.StartDate, bucket, experiments)
-			healthy = true
 		}
 	}
 
