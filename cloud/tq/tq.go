@@ -131,10 +131,7 @@ func (qh QueueHandler) PostOneTask(bucket, fn string) error {
 // postWithRetry posts a single task to a task queue.  It will make up to 3 attempts
 // if there are recoverable errors.
 func (qh *QueueHandler) postWithRetry(bucket, filepath string) error {
-	backoff := 5 * time.Second
-	if testMode {
-		backoff = 100 * time.Millisecond
-	}
+	backoff := 50 * time.Second
 	var err error
 	for i := 0; i < 3; i++ {
 		err = qh.PostOneTask(bucket, filepath)
