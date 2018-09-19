@@ -2,11 +2,9 @@
 // It provides all the implementation detail for reprocessing data through the etl pipeline.
 package rex
 
-// TODO - work out how to manage queues and new tasks.
-// Some simplificaitons:
-// 1. available queues should come from config, not state.
-// 2. Tasks contain all info about queues in use.
-// 3. Don't need to list the tasks in the persistent state, as they are available from DS
+// Design Notes:
+// 1. Tasks contain all info about queues in use.
+// 2. Tasks in flight are not cached locally, as they are available from Datastore.
 
 import (
 	"context"
@@ -131,8 +129,6 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 }
 
 // TODO should these take Task instead of *Task?
-// TODO - this replaces the wait part of dispatch.waitAndDedup.  Remove obsolete code
-// when this is deployed.
 func (rex *ReprocessingExecutor) waitForParsing(t *state.Task, terminate <-chan struct{}) {
 	// Wait for the queue to drain.
 	// Don't want to accept a date until we can actually queue it.
@@ -169,8 +165,6 @@ func (rex *ReprocessingExecutor) waitForParsing(t *state.Task, terminate <-chan 
 	}
 }
 
-// TODO - this replaces ChannelQueueHandler.processOneRequest.  Should delete that
-// code after transition.
 func (rex *ReprocessingExecutor) queue(t *state.Task) int {
 	// Submit all files from the bucket that match the prefix.
 	// Where do we get the bucket?
