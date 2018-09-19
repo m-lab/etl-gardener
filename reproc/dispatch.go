@@ -133,7 +133,7 @@ func (th *TaskHandler) AddTask(prefix string) error {
 // SHOULD ONLY be called at startup.
 // Returns date of next jobs to process.
 func (th *TaskHandler) RestartTasks(tasks []state.Task) (time.Time, error) {
-	// Get all the queues.
+	// Retrieve all task queues from the pool.
 	queues := make(map[string]struct{}, 20)
 queueLoop:
 	for {
@@ -145,6 +145,8 @@ queueLoop:
 		}
 	}
 
+	// Restart all tasks, allocating original queue as required.
+	// Keep track of latest date seen.
 	maxDate := time.Time{}
 	for i := range tasks {
 		t := tasks[i]
@@ -166,7 +168,7 @@ queueLoop:
 		}
 	}
 
-	// Return the unused queues.
+	// Return the unused queues to the pool.
 	for q := range queues {
 		th.taskQueues <- q
 	}
