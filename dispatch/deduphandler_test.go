@@ -46,18 +46,30 @@ func TestDedupHandler(t *testing.T) {
 
 	reqs := counter.Requests()
 	// First request should be table metadata call.
-	if counter.Count() > 0 && !strings.Contains(reqs[0].URL.String(), "mlab-testing/datasets/batch/tables/sidestream_20010101") {
-		log.Printf("%+v\n", *reqs[0])
-		t.Error("Did not see expected request")
+	if counter.Count() > 0 {
+		if !strings.Contains(reqs[0].URL.String(), "mlab-testing/datasets/batch/tables/sidestream_20010101") {
+			log.Printf("%+v\n", *reqs[0])
+			t.Error("Did not see expected request")
+		}
+	} else {
+		t.Fatal("No requests received")
 	}
 	// Second request should be a deduplication request.
-	if counter.Count() > 1 && reqs[1].URL.String() != "https://www.googleapis.com/bigquery/v2/projects/mlab-testing/jobs?alt=json" {
-		log.Printf("%+v\n", *reqs[1])
-		t.Error("Did not see expected request")
+	if counter.Count() > 1 {
+		if !strings.Contains(reqs[1].URL.String(), "https://www.googleapis.com/bigquery/v2/projects/mlab-testing/jobs?alt=json") {
+			log.Printf("%+v\n", *reqs[1])
+			t.Error("Did not see expected request")
+		}
+	} else {
+		t.Fatal("Too few requests received")
 	}
 	// Third request should delete the source table.
-	if counter.Count() > 2 && reqs[2].Method != "DELETE" {
-		log.Printf("%+v\n", *reqs[2])
-		t.Error("Did not see expected request")
+	if counter.Count() > 2 {
+		if reqs[2].Method != "DELETE" {
+			log.Printf("%+v\n", *reqs[2])
+			t.Error("Did not see expected request")
+		}
+	} else {
+		t.Fatal("Too few requests received")
 	}
 }
