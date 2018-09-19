@@ -277,8 +277,6 @@ func waitForJob(ctx context.Context, job *bigquery.Job, maxBackoff time.Duration
 		}
 		if status.Done() {
 			break
-		} else {
-			log.Println(status.State)
 		}
 		if backoff+previous < maxBackoff {
 			tmp := previous

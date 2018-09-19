@@ -141,7 +141,6 @@ func NewTask(name string, queue string, saver Saver) (*Task, error) {
 	return &t, nil
 }
 
-// HACK - remove from tq package?
 const start = `^gs://(?P<bucket>.*)/(?P<exp>[^/]*)/`
 const datePath = `(?P<datepath>\d{4}/[01]\d/[0123]\d)/`
 
@@ -248,7 +247,6 @@ func nop() {}
 
 // Process handles all steps of processing a task.
 func (t Task) Process(ex Executor, doneWithQueue func(), term Terminator) {
-	log.Println("Starting:", t.Name)
 loop:
 	for t.State != Done { //&& t.ErrMsg == "" {
 		select {
@@ -256,7 +254,6 @@ loop:
 			t.SetError(ErrTaskSuspended, "Terminating")
 			break loop
 		default:
-			log.Println("Doing ", StateNames[t.State], t.Name)
 			switch t.State {
 			case Processing:
 				ex.Next(&t, term.GetNotifyChannel())
