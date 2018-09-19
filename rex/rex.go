@@ -151,7 +151,6 @@ func (rex *ReprocessingExecutor) waitForParsing(t *state.Task, terminate <-chan 
 		default:
 		}
 		if err == tq.ErrMoreTasks {
-			log.Println(err)
 			// Wait 5-15 seconds before checking again.
 			time.Sleep(time.Duration(5+rand.Intn(10)) * time.Second)
 		} else if err != nil {
@@ -278,8 +277,6 @@ func waitForJob(ctx context.Context, job *bigquery.Job, maxBackoff time.Duration
 		}
 		if status.Done() {
 			break
-		} else {
-			log.Println(status.State)
 		}
 		if backoff+previous < maxBackoff {
 			tmp := previous
