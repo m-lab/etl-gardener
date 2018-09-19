@@ -12,6 +12,7 @@ import (
 	"errors"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/m-lab/etl-gardener/state"
 )
@@ -113,8 +114,7 @@ func (th *TaskHandler) AddTask(prefix string) error {
 	select {
 	// Wait until there is an available task queue.
 	case queue := <-th.taskQueues:
-		log.Println("Got a queue", queue)
-		t, err := state.NewTask(prefix, queue, nil)
+		t, err := state.NewTask(prefix, queue, th.saver)
 		if err != nil {
 			log.Println(err)
 			return err
@@ -127,4 +127,51 @@ func (th *TaskHandler) AddTask(prefix string) error {
 		// If we are terminating, do nothing.
 		return ErrTerminating
 	}
+}
+
+// RestartTasks queries the status, and restarts all the tasks.
+// SHOULD ONLY be called at startup.
+// Returns date of next jobs to process.
+func (th *TaskHandler) RestartTasks(tasks []state.Task) (time.Time, error) {
+	// Retrieve all task queues from the pool.
+	queues := make(map[string]struct{}, 20)
+queueLoop:
+	for {
+		select {
+		case q := <-th.taskQueues:
+			queues[q] = struct{}{}
+		default:
+			break queueLoop
+		}
+	}
+
+	// Restart all tasks, allocating original queue as required.
+	// Keep track of latest date seen.
+	maxDate := time.Time{}
+	for i := range tasks {
+		t := tasks[i]
+		log.Println("Restarting", t.Name, t.State)
+		if t.Queue != "" {
+			_, ok := queues[t.Queue]
+			if ok {
+				delete(queues, t.Queue)
+				th.StartTask(t)
+			} else {
+				log.Println("Queue", t.Queue, "already in use.  Skipping", t.Name)
+			}
+		} else {
+			// No queue, just restart...
+			th.StartTask(t)
+		}
+		if t.Date.After(maxDate) {
+			maxDate = t.Date
+		}
+	}
+
+	// Return the unused queues to the pool.
+	for q := range queues {
+		th.taskQueues <- q
+	}
+
+	return maxDate, nil
 }

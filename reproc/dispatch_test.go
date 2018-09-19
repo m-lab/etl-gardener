@@ -3,6 +3,7 @@ package reproc_test
 import (
 	"log"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
@@ -41,6 +42,35 @@ func TestTerminator(t *testing.T) {
 	trm.Terminate()
 	trm.Wait()
 }
+
+//===================================================
+type testSaver struct {
+	tasks  map[string][]state.Task
+	delete map[string]struct{}
+	lock   sync.Mutex
+}
+
+func NewTestSaver() *testSaver {
+	return &testSaver{make(map[string][]state.Task, 20), make(map[string]struct{}, 20), sync.Mutex{}}
+}
+
+func (s *testSaver) SaveTask(t state.Task) error {
+	//log.Println(t)
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.tasks[t.Name] = append(s.tasks[t.Name], t)
+	return nil
+}
+
+func (s *testSaver) DeleteTask(t state.Task) error {
+	//log.Println("Delete:", t)
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.delete[t.Name] = struct{}{}
+	return nil
+}
+
+func assertSaver() { func(ex state.Saver) {}(&testSaver{}) }
 
 type Exec struct{}
 
@@ -81,7 +111,8 @@ func AssertExecutor() { func(ex state.Executor) {}(&Exec{}) }
 func TestBasic(t *testing.T) {
 	// Start tracker with no queues.
 	exec := Exec{}
-	th := reproc.NewTaskHandler(&exec, []string{}, nil)
+	saver := NewTestSaver()
+	th := reproc.NewTaskHandler(&exec, []string{}, saver)
 
 	// This will block because there are no queues.
 	go th.AddTask("foobar")
@@ -99,7 +130,9 @@ func TestBasic(t *testing.T) {
 func TestWithTaskQueue(t *testing.T) {
 	// Start tracker with one queue.
 	exec := Exec{}
-	th := reproc.NewTaskHandler(&exec, []string{"queue-1"}, nil)
+	saver := NewTestSaver()
+	th := reproc.NewTaskHandler(&exec, []string{"queue-1"}, saver)
+
 	th.AddTask("gs://fake/ndt/2017/09/22/")
 
 	go th.AddTask("gs://fake/ndt/2017/09/24/")
@@ -108,4 +141,22 @@ func TestWithTaskQueue(t *testing.T) {
 	time.Sleep(15 * time.Millisecond)
 	th.Terminate()
 	th.Wait()
+}
+
+func TestRestart(t *testing.T) {
+	exec := Exec{}
+	saver := NewTestSaver()
+	th := reproc.NewTaskHandler(&exec, []string{"queue-1", "queue-2"}, saver)
+
+	taskName := "gs://foobar/exp/2001/02/03/"
+	t1, err := state.NewTask(taskName, "queue-1", nil)
+	t1.State = state.Processing
+	if err != nil {
+		t.Fatal(err)
+	}
+	tasks := []state.Task{*t1}
+	th.RestartTasks(tasks)
+
+	time.Sleep(5 * time.Second)
+	log.Println(saver.tasks[taskName])
 }

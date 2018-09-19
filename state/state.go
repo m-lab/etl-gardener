@@ -182,7 +182,8 @@ func (t *Task) SourceAndDest(ds *bqext.Dataset) (*bigquery.Table, *bigquery.Tabl
 }
 
 func (t Task) String() string {
-	return fmt.Sprintf("{%s: %s, Q:%s, J:%s, E:%s (%s)}", t.Name, StateNames[t.State], t.Queue, t.JobID, t.ErrMsg, t.ErrInfo)
+	return fmt.Sprintf("{%s: %s, %s, Q:%s, J:%s, E:%s (%s)}", t.Name, StateNames[t.State],
+		t.UpdateTime.Format("Mon15:04:05.0"), t.Queue, t.JobID, t.ErrMsg, t.ErrInfo)
 }
 
 // ErrNoSaver is returned when saver has not been set.
