@@ -135,7 +135,7 @@ func (rex *ReprocessingExecutor) waitForParsing(t *state.Task, terminate <-chan 
 	qh, err := tq.NewQueueHandler(rex.Config, t.Queue)
 	if err != nil {
 		metrics.FailCount.WithLabelValues("NewQueueHandler")
-		t.SetError(err, "NewQueueHandler")
+		t.SetError(err, "NewQueueHandler: "+t.Name)
 		return
 	}
 	log.Println("Wait for empty queue ", qh.Queue)
