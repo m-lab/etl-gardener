@@ -64,7 +64,7 @@ before_script:
 
 script:
 # To start, run all the non-integration tests.
-- MODULES="cloud/tq cmd/gardener dedup dispatch reproc rex state"
+- MODULES="cloud/bq cloud/tq cmd/gardener reproc rex state"
 - for module in $MODULES; do
     COVER_PKGS=${COVER_PKGS}./$module/..., ;
   done
@@ -86,7 +86,8 @@ script:
 # Note: we do not run integration tests from forked PRs b/c the SA is unavailable.
 # Note that for modules in subdirectories, this replaces separating slashes with _.
 - if [[ -n "$SERVICE_ACCOUNT_mlab_testing" ]] ; then
-  for module in dedup dispatch cloud/tq cmd/gardener reproc state; do
+  MODULES="cloud/bq cloud/tq cmd/gardener reproc rex state" ;
+  for module in $MODULES; do
     go test -v -coverpkg=$COVER_PKGS -coverprofile=${module//\//_}.cov github.com/m-lab/etl-gardener/$module -tags=integration ;
     EC=$[ $EC || $? ] ;
   done ;

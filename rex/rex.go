@@ -2,11 +2,9 @@
 // It provides all the implementation detail for reprocessing data through the etl pipeline.
 package rex
 
-// TODO - work out how to manage queues and new tasks.
-// Some simplificaitons:
-// 1. available queues should come from config, not state.
-// 2. Tasks contain all info about queues in use.
-// 3. Don't need to list the tasks in the persistent state, as they are available from DS
+// Design Notes:
+// 1. Tasks contain all info about queues in use.
+// 2. Tasks in flight are not cached locally, as they are available from Datastore.
 
 import (
 	"context"
@@ -20,8 +18,8 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	"github.com/m-lab/etl-gardener/cloud"
+	"github.com/m-lab/etl-gardener/cloud/bq"
 	"github.com/m-lab/etl-gardener/cloud/tq"
-	"github.com/m-lab/etl-gardener/dispatch"
 	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/etl-gardener/state"
 	"github.com/m-lab/go/bqext"
@@ -94,10 +92,10 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 			t.Update(state.Deduplicating)
 			return
 		}
-		err = dispatch.WaitForStableTable(s)
+		err = bq.WaitForStableTable(s)
 		if err != nil {
 			// When testing, we expect to get ErrTableNotFound here.
-			if !env.TestMode || err != dispatch.ErrTableNotFound {
+			if !env.TestMode || err != state.ErrTableNotFound {
 				t.SetError(err, "WaitForStableTable")
 				t.Update(state.Deduplicating)
 				return
@@ -131,8 +129,6 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 }
 
 // TODO should these take Task instead of *Task?
-// TODO - this replaces the wait part of dispatch.waitAndDedup.  Remove obsolete code
-// when this is deployed.
 func (rex *ReprocessingExecutor) waitForParsing(t *state.Task, terminate <-chan struct{}) {
 	// Wait for the queue to drain.
 	// Don't want to accept a date until we can actually queue it.
@@ -169,8 +165,6 @@ func (rex *ReprocessingExecutor) waitForParsing(t *state.Task, terminate <-chan 
 	}
 }
 
-// TODO - this replaces ChannelQueueHandler.processOneRequest.  Should delete that
-// code after transition.
 func (rex *ReprocessingExecutor) queue(t *state.Task) int {
 	// Submit all files from the bucket that match the prefix.
 	// Where do we get the bucket?
@@ -214,8 +208,6 @@ func (rex *ReprocessingExecutor) queue(t *state.Task) int {
 	return n
 }
 
-// TODO - this replaces part of the code in dispatch.waitAndDedup.  Should migrate
-// Dedup() here, and delete obsolete code.
 func (rex *ReprocessingExecutor) dedup(t *state.Task) {
 	// Launch the dedup request, and save the JobID
 	ds, err := rex.GetDS()
@@ -233,7 +225,7 @@ func (rex *ReprocessingExecutor) dedup(t *state.Task) {
 
 	log.Println("Dedupping", src.FullyQualifiedName())
 	// TODO move Dedup??
-	job, err := dispatch.Dedup(&ds, src.TableID, dest)
+	job, err := bq.Dedup(&ds, src.TableID, dest)
 	if err != nil {
 		if err == io.EOF {
 			if env.TestMode {
@@ -291,8 +283,6 @@ func waitForJob(ctx context.Context, job *bigquery.Job, maxBackoff time.Duration
 	return nil
 }
 
-// TODO - this replaces the latter part of dispatch.waitAndDedup().  Remove obsolete code
-// after deployment.
 func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}) {
 	// TODO use a simple client instead of creating dataset?
 	ds, err := bqext.NewDataset(rex.Project, rex.BQDataset, rex.Options...)
