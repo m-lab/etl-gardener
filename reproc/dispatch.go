@@ -11,8 +11,11 @@ package reproc
 import (
 	"errors"
 	"log"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/m-lab/etl-gardener/metrics"
 
 	"github.com/m-lab/etl-gardener/state"
 )
@@ -93,6 +96,7 @@ func (th *TaskHandler) StartTask(t state.Task) {
 	// a queue here and calls Add().  This races with the thread that started
 	// the termination and calls Wait().
 	th.Add(1)
+
 	// We pass a function to Process that it should call when finished
 	// using the queue (when queue has drained.  Since this runs in its own
 	// go routine, we need to avoid closing the taskQueues channel, which
@@ -152,11 +156,16 @@ queueLoop:
 	for i := range tasks {
 		t := tasks[i]
 		if t.ErrInfo != "" || t.ErrMsg != "" {
-			// TODO - add metric
 			log.Println("Skipping:", t.Name, t.ErrMsg, t.ErrInfo)
+			metrics.FailCount.WithLabelValues("skipping task with error").Inc()
 			continue
 		}
 		if t.Queue != "" {
+			if strings.TrimSpace(t.Queue) != t.Queue {
+				log.Println("invalid queue name", t)
+				metrics.FailCount.WithLabelValues("bad queue name").Inc()
+				continue
+			}
 			_, ok := queues[t.Queue]
 			if ok {
 				delete(queues, t.Queue)

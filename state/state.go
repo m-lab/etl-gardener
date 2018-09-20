@@ -243,6 +243,8 @@ type Terminator interface {
 
 // Process handles all steps of processing a task.
 func (t Task) Process(ex Executor, doneWithQueue func(), term Terminator) {
+	metrics.TasksInFlight.Inc()
+	defer metrics.TasksInFlight.Dec()
 loop:
 	for t.State != Done { //&& t.ErrMsg == "" {
 		select {

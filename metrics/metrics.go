@@ -18,7 +18,7 @@ var (
 	// metrics.FailCount.WithLabelValues("BadTableName").Inc()
 	FailCount = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "gardener_fail_count",
+			Name: "gardener_fail_total",
 			Help: "Number of processing failures.",
 		},
 		[]string{"status"},
@@ -32,9 +32,22 @@ var (
 	// metrics.WarningCount.WithLabelValues("funny xyz").Inc()
 	WarningCount = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "gardener_warning_count",
+			Name: "gardener_warning_total",
 			Help: "Number of processing warnings.",
 		},
 		[]string{"status"},
+	)
+
+	// TasksInFlight maintains a count of the number of tasks in flight.
+	//
+	// Provides metrics:
+	//   gardener_tasks_in_flight
+	// Example usage:
+	// metrics.TasksInFlight.Inc()
+	TasksInFlight = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "gardener_tasks_in_flight",
+			Help: "Number of tasks in flight",
+		},
 	)
 )
