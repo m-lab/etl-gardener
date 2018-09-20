@@ -291,11 +291,14 @@ func WriteHTMLStatusTo(w io.Writer, project string) error {
 	defer cancel()
 	tasks, err := ds.GetStatus(ctx)
 	if err != nil {
-		log.Println(err)
+		fmt.Fprintln(w, "Error executing Datastore query:", err)
+		fmt.Fprintln(w, "Project:", project)
+		log.Println(project, err)
 		return err
 	}
 
 	if ctx.Err() != nil {
+		fmt.Fprintln(w, "Context error executing Datastore query:", err)
 		return err
 	}
 	fmt.Fprintf(w, "<div>\nTask State</br>\n")
