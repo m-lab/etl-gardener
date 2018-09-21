@@ -199,6 +199,8 @@ func (t *Task) Save() error {
 
 // Update updates the task state, and saves to the "saver".
 func (t *Task) Update(st State) error {
+	duration := t.UpdateTime.Sub(time.Now())
+	metrics.StateTimeSummary.WithLabelValues(StateNames[t.State]).Observe(duration.Seconds())
 	t.State = st
 	t.UpdateTime = time.Now()
 	if t.saver == nil {

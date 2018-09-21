@@ -9,6 +9,7 @@ func init() {
 	prometheus.MustRegister(TasksInFlight)
 	prometheus.MustRegister(StartedCount)
 	prometheus.MustRegister(CompletedCount)
+	prometheus.MustRegister(StateTimeSummary)
 }
 
 var (
@@ -82,4 +83,14 @@ var (
 			Help: "Number of tasks in flight",
 		},
 	)
+
+	// StateTimeSummary measures the time spent in different task states.
+	// Provides metrics:
+	//    gardener_state_time_summary
+	// Example usage:
+	//    metrics.StateTimeSummary.WithLabelValues("Queuing").observe(float64)
+	StateTimeSummary = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+		Name: "gardener_state_time_summary",
+		Help: "The time spent in each state.",
+	}, []string{"state"})
 )
