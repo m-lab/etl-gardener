@@ -129,6 +129,7 @@ type Task struct {
 // NewTask properly initializes a new task, complete with saver.
 func NewTask(name string, queue string, saver Saver) (*Task, error) {
 	t := Task{Name: name, State: Initializing, Queue: queue, saver: saver}
+	t.UpdateTime = time.Now()
 	parts, err := t.ParsePrefix()
 	if err != nil {
 		return nil, err

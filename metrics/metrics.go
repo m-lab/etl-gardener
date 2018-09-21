@@ -90,7 +90,9 @@ var (
 	// Example usage:
 	//    metrics.StateTimeSummary.WithLabelValues("Queuing").observe(float64)
 	StateTimeSummary = prometheus.NewSummaryVec(prometheus.SummaryOpts{
-		Name: "gardener_state_time_summary",
-		Help: "The time spent in each state.",
-	}, []string{"state"})
+		Name:       "gardener_state_time_summary",
+		Help:       "The time spent in each state.",
+		Objectives: map[float64]float64{0.01: 0.001, 0.1: 0.01, 0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
+	}, []string{"state"},
+	)
 )
