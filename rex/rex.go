@@ -67,6 +67,7 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 		// if it does?  Also check if it has a streaming buffer?
 		// Nothing to do.
 		t.Update(state.Queuing)
+		metrics.StartedCount.WithLabelValues("sidestream").Inc()
 
 	case state.Queuing:
 		// TODO - handle zero task case.
@@ -113,6 +114,7 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 		rex.finish(t, terminate)
 		t.JobID = ""
 		t.Update(state.Done)
+		metrics.CompletedCount.WithLabelValues("sidestream").Inc()
 		t.Delete()
 
 	case state.Done:
