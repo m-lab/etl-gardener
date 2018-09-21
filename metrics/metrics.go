@@ -6,6 +6,7 @@ func init() {
 	// Register the metrics defined with Prometheus's default registry.
 	prometheus.MustRegister(FailCount)
 	prometheus.MustRegister(WarningCount)
+	prometheus.MustRegister(TasksInFlight)
 }
 
 var (
