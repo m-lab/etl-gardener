@@ -26,8 +26,9 @@ import (
 
 // Errors associated with Queuing
 var (
-	ErrNilClient = errors.New("nil http client not allowed")
-	ErrMoreTasks = errors.New("queue has tasks pending")
+	ErrNilClient        = errors.New("nil http client not allowed")
+	ErrMoreTasks        = errors.New("queue has tasks pending")
+	ErrInvalidQueueName = errors.New("invalid queue name")
 )
 
 // QueueHandler is much like tq.Queuer, but for a single queue.  We want
@@ -50,6 +51,9 @@ func NewQueueHandler(config cloud.Config, queue string) (*QueueHandler, error) {
 		return nil, ErrNilClient
 	}
 
+	if strings.TrimSpace(queue) != queue {
+		return nil, ErrInvalidQueueName
+	}
 	return &QueueHandler{config, queue}, nil
 }
 

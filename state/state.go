@@ -129,6 +129,7 @@ type Task struct {
 // NewTask properly initializes a new task, complete with saver.
 func NewTask(name string, queue string, saver Saver) (*Task, error) {
 	t := Task{Name: name, State: Initializing, Queue: queue, saver: saver}
+	t.UpdateTime = time.Now()
 	parts, err := t.ParsePrefix()
 	if err != nil {
 		return nil, err
@@ -199,6 +200,8 @@ func (t *Task) Save() error {
 
 // Update updates the task state, and saves to the "saver".
 func (t *Task) Update(st State) error {
+	duration := t.UpdateTime.Sub(time.Now())
+	metrics.StateTimeSummary.WithLabelValues(StateNames[t.State]).Observe(duration.Seconds())
 	t.State = st
 	t.UpdateTime = time.Now()
 	if t.saver == nil {
@@ -243,6 +246,8 @@ type Terminator interface {
 
 // Process handles all steps of processing a task.
 func (t Task) Process(ex Executor, doneWithQueue func(), term Terminator) {
+	metrics.TasksInFlight.Inc()
+	defer metrics.TasksInFlight.Dec()
 loop:
 	for t.State != Done { //&& t.ErrMsg == "" {
 		select {

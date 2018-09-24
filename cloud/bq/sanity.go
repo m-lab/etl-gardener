@@ -1,4 +1,4 @@
-// Package sanity provides facilities for sanity checking and
+// Package bq provides facilities for sanity checking and
 // copying final table into a destination partition.
 // It is currently somewhat NDT specific:
 //  1. It expects tables to have task_filename field.
