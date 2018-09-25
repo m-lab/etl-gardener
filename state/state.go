@@ -56,7 +56,7 @@ var (
 // Used for mocking.
 // Interface must update the task in place, so that state changes are all visible.
 type Executor interface {
-	Next(task *Task, terminate <-chan struct{})
+	Next(task *Task, terminate <-chan struct{}) error
 }
 
 // Saver provides API for saving Task state.
@@ -255,6 +255,7 @@ loop:
 			t.SetError(ErrTaskSuspended, "Terminating")
 			break loop
 		default:
+
 			switch t.State {
 			case Processing:
 				ex.Next(&t, term.GetNotifyChannel())
