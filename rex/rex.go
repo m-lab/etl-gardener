@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
+	"cloud.google.com/go/storage"
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/cloud/bq"
 	"github.com/m-lab/etl-gardener/cloud/tq"
@@ -211,7 +212,18 @@ func (rex *ReprocessingExecutor) queue(t *state.Task) (int, error) {
 		return 0, err
 	}
 	bucketName := parts[0]
-	bucket, err := tq.GetBucket(rex.BucketOpts, rex.Project, bucketName, false)
+
+	// Use a real storage bucket.
+	// TODO - add a persistent storageClient to the rex object?
+	storageClient, err := storage.NewClient(context.Background(), rex.BucketOpts...)
+	if err != nil {
+		log.Println(err)
+		metrics.FailCount.WithLabelValues("StorageClientError").Inc()
+		t.SetError(err, "StorageClientError")
+		return 0, err
+	}
+	defer storageClient.Close()
+	bucket, err := tq.GetBucket(storageClient, rex.Project, bucketName, false)
 	if err != nil {
 		if err == io.EOF && env.TestMode {
 			log.Println("Using fake client, ignoring EOF error")

@@ -3,6 +3,7 @@ package reproc_test
 import (
 	"log"
 	"math/rand"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -110,6 +111,7 @@ func AssertExecutor() { func(ex state.Executor) {}(&Exec{}) }
 // may fail to complete.  Also, running with -race may detect race
 // conditions.
 func TestBasic(t *testing.T) {
+	log.Println("Goroutines:", runtime.NumGoroutine())
 	// Start tracker with no queues.
 	exec := Exec{}
 	saver := NewTestSaver()
@@ -122,6 +124,7 @@ func TestBasic(t *testing.T) {
 
 	th.Terminate()
 	th.Wait() // Race
+	log.Println("Goroutines:", runtime.NumGoroutine())
 }
 
 // This test exercises the task management, including invoking t.Process().
@@ -129,6 +132,7 @@ func TestBasic(t *testing.T) {
 // may fail to complete.  Also, running with -race may detect race
 // conditions.
 func TestWithTaskQueue(t *testing.T) {
+	log.Println("Goroutines:", runtime.NumGoroutine())
 	// Start tracker with one queue.
 	exec := Exec{}
 	saver := NewTestSaver()
@@ -142,9 +146,11 @@ func TestWithTaskQueue(t *testing.T) {
 	time.Sleep(15 * time.Millisecond)
 	th.Terminate()
 	th.Wait()
+	log.Println("Goroutines:", runtime.NumGoroutine())
 }
 
 func TestRestart(t *testing.T) {
+	log.Println("Goroutines:", runtime.NumGoroutine())
 	exec := Exec{}
 	saver := NewTestSaver()
 	th := reproc.NewTaskHandler(&exec, []string{"queue-1", "queue-2"}, saver)
@@ -160,4 +166,5 @@ func TestRestart(t *testing.T) {
 
 	time.Sleep(5 * time.Second)
 	log.Println(saver.tasks[taskName])
+	log.Println("Goroutines:", runtime.NumGoroutine())
 }

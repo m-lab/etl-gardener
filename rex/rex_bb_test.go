@@ -4,6 +4,7 @@ package rex_test
 
 import (
 	"log"
+	"runtime"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 // conditions.
 // TODO - Consider creating fake BQ tables, so that the dedup phase completes.
 func TestRealBucket(t *testing.T) {
+	log.Println("Goroutines", runtime.NumGoroutine())
 	client, counter := cloud.DryRunClient()
 	config := cloud.Config{Project: "mlab-testing", Client: client}
 	bqConfig := cloud.BQConfig{Config: config, BQProject: "mlab-testing", BQDataset: "batch"}
@@ -43,10 +45,10 @@ func TestRealBucket(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// Wait for all tasks to terminate.
+	// Wait for all tasks to terminate.  The tasks will each use queue-1, and terminate
+	// with an error when they reach Stabilizing state.
 	th.Wait()
 
-	// At that point, each task should have terminated, with error in Stabilizing state.
 	for _, tk := range saver.GetTasks() {
 		log.Println(len(tk), tk[len(tk)-1])
 		if len(tk) != 4 {
@@ -61,4 +63,5 @@ func TestRealBucket(t *testing.T) {
 		log.Println(req.URL)
 	}
 
+	log.Println("Goroutines", runtime.NumGoroutine())
 }

@@ -2,6 +2,7 @@ package rex_test
 
 import (
 	"log"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -60,6 +61,7 @@ func (s *testSaver) GetDeletes() map[string]struct{} {
 // conditions.
 // TODO - use a fake bigtable, so that tasks can get beyond Stabilizing.
 func TestWithTaskQueue(t *testing.T) {
+	log.Println("Goroutines", runtime.NumGoroutine())
 	client, counter := cloud.DryRunClient()
 	config := cloud.Config{Project: "mlab-testing", Client: client}
 	bqConfig := cloud.BQConfig{Config: config, BQProject: "bqproject", BQDataset: "dataset"}
@@ -81,4 +83,6 @@ func TestWithTaskQueue(t *testing.T) {
 	log.Println(counter.Count())
 	log.Println("Deletes:", len(saver.GetDeletes()))
 	log.Println("Tasks:", len(saver.GetTasks()))
+
+	log.Println("Goroutines", runtime.NumGoroutine())
 }

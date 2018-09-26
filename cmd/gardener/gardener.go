@@ -312,6 +312,7 @@ func runService() {
 				go doDispatchLoop(handler, startDate, env.StartDate, bucket, experiments)
 				healthy = true
 			}
+			ds.Client.Close()
 		}
 	}
 
