@@ -258,11 +258,15 @@ loop:
 
 			switch t.State {
 			case Processing:
-				ex.Next(&t, term.GetNotifyChannel())
+				if err := ex.Next(&t, term.GetNotifyChannel()); err != nil {
+					break loop
+				}
 				log.Printf("returning queue from %s %p\n", t.Name, &t)
 				doneWithQueue()
 			default:
-				ex.Next(&t, term.GetNotifyChannel())
+				if err := ex.Next(&t, term.GetNotifyChannel()); err != nil {
+					break loop
+				}
 			}
 		}
 	}
