@@ -72,12 +72,16 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 	case state.Queuing:
 		// TODO - handle zero task case.
 		if _, err := rex.queue(t); err != nil {
+			// SetError also pushes to datastore, like Update()
+			t.SetError(err, "rex.queue")
 			return err
 		}
 		t.Update(state.Processing)
 
 	case state.Processing: // TODO should this be Parsing?
 		if err := rex.waitForParsing(t, terminate); err != nil {
+			// SetError also pushes to datastore, like Update()
+			t.SetError(err, "rex.waitForParsing")
 			return err
 		}
 		t.Queue = "" // No longer need to keep the queue.
@@ -88,21 +92,21 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 		ds, err := rex.GetDS()
 		if err != nil {
 			// SetError also pushes to datastore, like Update()
-			t.SetError(err, "GetDS")
+			t.SetError(err, "rex.GetDS")
 			return err
 		}
 		s, _, err := t.SourceAndDest(&ds)
 		if err != nil {
 			// SetError also pushes to datastore, like Update()
-			t.SetError(err, "SourceAndDest")
+			t.SetError(err, "task.SourceAndDest")
 			return err
 		}
 		err = bq.WaitForStableTable(s)
 		if err != nil {
 			// When testing, we expect to get ErrTableNotFound here.
 			if !env.TestMode || err != state.ErrTableNotFound {
-				t.SetError(err, "WaitForStableTable")
 				// SetError also pushes to datastore, like Update()
+				t.SetError(err, "bq.WaitForStableTable")
 				return err
 			}
 		}
@@ -111,6 +115,8 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 
 	case state.Deduplicating:
 		if err := rex.dedup(t); err != nil {
+			// SetError also pushes to datastore, like Update()
+			t.SetError(err, "rex.Dedup")
 			return err
 		}
 		t.Update(state.Finishing)
@@ -118,6 +124,8 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 	case state.Finishing:
 		log.Println("Finishing")
 		if err := rex.finish(t, terminate); err != nil {
+			// SetError also pushes to datastore, like Update()
+			t.SetError(err, "rex.finish")
 			return err
 		}
 		t.JobID = ""
@@ -132,14 +140,14 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 		log.Println("Should not call Next on Invalid state!")
 		err := errors.New("called Next on invalid state")
 		// SetError also pushes to datastore, like Update()
-		t.SetError(err, "Invalid")
+		t.SetError(err, "Invalid state")
 		return err
 
 	default:
 		log.Println("Unknown state")
-		// SetError also pushes to datastore, like Update()
 		err := errors.New("Unknown state")
-		t.SetError(err, "Next")
+		// SetError also pushes to datastore, like Update()
+		t.SetError(err, "Unknown state")
 		return err
 	}
 
