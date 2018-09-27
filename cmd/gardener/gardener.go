@@ -294,7 +294,7 @@ func runService() {
 			} else {
 				ctx := context.Background()
 				ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-				tasks, err := ds.GetStatus(ctx)
+				tasks, err := ds.GetStatus(ctx, expString)
 				cancel()
 				if err != nil {
 					log.Println(err)

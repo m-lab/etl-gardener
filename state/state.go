@@ -283,8 +283,9 @@ loop:
 	term.Done()
 }
 
-// GetStatus fetches all Task state from Datastore.
-func (ds *DatastoreSaver) GetStatus(ctx context.Context) ([]Task, error) {
+// GetStatus fetches all Task state of request experiment from Datastore.
+// If expt is empty string, return all tasks.
+func (ds *DatastoreSaver) GetStatus(ctx context.Context, expt string) ([]Task, error) {
 	q := datastore.NewQuery("task").Namespace(ds.Namespace)
 	tasks := make([]Task, 0, 100)
 	_, err := ds.Client.GetAll(ctx, q, &tasks)
@@ -292,7 +293,17 @@ func (ds *DatastoreSaver) GetStatus(ctx context.Context) ([]Task, error) {
 		return nil, err
 		// Handle error.
 	}
-	return tasks, nil
+	if expt == "" {
+		return tasks, nil
+	}
+	// Select the task with requested experiment
+	selected_tasks := make([]Task, 0, 100)
+	for _, task := range tasks {
+		if task.Experiment == expt {
+			selected_tasks = append(selected_tasks, task)
+		}
+	}
+	return selected_tasks, nil
 }
 
 // WriteHTMLStatusTo writes HTML formatted task status.
@@ -305,7 +316,7 @@ func WriteHTMLStatusTo(w io.Writer, project string) error {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tasks, err := ds.GetStatus(ctx)
+	tasks, err := ds.GetStatus(ctx, "")
 	if err != nil {
 		fmt.Fprintln(w, "Error executing Datastore query:", err)
 		fmt.Fprintln(w, "Project:", project)
