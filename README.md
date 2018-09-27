@@ -39,9 +39,10 @@ using the following command line:
 gcloud --project=mlab-sandbox container node-pools create gardener-pool \
   --cluster=data-processing-cluster \
   --num-nodes=3 \
-  --scopes "https://www.googleapis.com/auth/cloud-platform" \
+  --scopes=bigquery,taskqueue,compute-rw,storage-ro,service-control,service-management,datastore \
   --node-labels=gardener-node=true \
   --enable-autorepair \
   --enable-autoupgrade \
+  --image-type=cos \
   --machine-type=n1-standard-8
 ```
