@@ -127,7 +127,7 @@ type Task struct {
 	saver Saver // Saver is used for Save operations. Stored locally, but not persisted.
 }
 
-// GetExperiment Parse the input string like "gs://archive-mlab-oti/ndt/2017/06/01/"
+// GetExperiment parses the input string like "gs://archive-mlab-oti/ndt/2017/06/01/"
 // and return "ndt"
 func GetExperiment(name string) (string, error) {
 	split := strings.Split(name, "/")
