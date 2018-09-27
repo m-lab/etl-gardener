@@ -4,7 +4,6 @@ package rex_test
 
 import (
 	"log"
-	"runtime"
 	"testing"
 	"time"
 
@@ -19,7 +18,6 @@ import (
 // conditions.
 // TODO - Consider creating fake BQ tables, so that the dedup phase completes.
 func TestRealBucket(t *testing.T) {
-	log.Println("Goroutines", runtime.NumGoroutine())
 	client, counter := cloud.DryRunClient()
 	config := cloud.Config{Project: "mlab-testing", Client: client}
 	bqConfig := cloud.BQConfig{Config: config, BQProject: "mlab-testing", BQDataset: "batch"}
@@ -63,5 +61,4 @@ func TestRealBucket(t *testing.T) {
 		log.Println(req.URL)
 	}
 
-	log.Println("Goroutines", runtime.NumGoroutine())
 }

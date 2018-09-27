@@ -6,7 +6,6 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -22,34 +21,29 @@ func init() {
 }
 
 func TestGetTaskqueueStats(t *testing.T) {
-	log.Println("Goroutines", runtime.NumGoroutine())
 	config := cloud.Config{Client: http.DefaultClient, Project: "mlab-sandbox"}
 	stats, err := tq.GetTaskqueueStats(config, "test-queue")
 	if err != nil {
 		t.Fatal(err)
 	}
 	log.Println(stats)
-	log.Println("Goroutines", runtime.NumGoroutine())
 }
 
 // NOTE: this test depends on actual bucket content.  If it starts failing,
 // check that the bucket content has not been changed.
 // TODO - this currently leaks goroutines.
 func TestGetBucket(t *testing.T) {
-	log.Println("Goroutines", runtime.NumGoroutine())
 
 	storageClient, err := storage.NewClient(context.Background())
 	if err != nil {
 		t.Error(err)
 	}
-	log.Println("Goroutines", runtime.NumGoroutine())
 
 	bucketName := "archive-mlab-testing"
 	bucket, err := tq.GetBucket(storageClient, "mlab-testing", bucketName, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	log.Println("Goroutines", runtime.NumGoroutine())
 
 	prefix := "ndt/2017/09/24/"
 	qry := storage.Query{
@@ -75,7 +69,6 @@ func TestGetBucket(t *testing.T) {
 	}
 
 	storageClient.Close()
-	log.Println("Goroutines", runtime.NumGoroutine())
 }
 
 func TestIsEmpty(t *testing.T) {
@@ -93,7 +86,6 @@ func TestIsEmpty(t *testing.T) {
 // NOTE: this test depends on actual bucket content.  If it starts failing,
 // check that the bucket content has not been changed.
 func TestPostDay(t *testing.T) {
-	log.Println("Goroutines", runtime.NumGoroutine())
 	// Use a fake queue client.
 	client, counter := cloud.DryRunClient()
 	config := cloud.Config{Client: client, Project: "fake-project"}
@@ -107,7 +99,6 @@ func TestPostDay(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	log.Println("Goroutines", runtime.NumGoroutine())
 	bucketName := "archive-mlab-testing"
 	bucket, err := tq.GetBucket(storageClient, "mlab-testing", bucketName, false)
 	if err != nil {
@@ -131,5 +122,4 @@ func TestPostDay(t *testing.T) {
 		t.Error("Should have made 48 http requests:", counter.Count())
 	}
 	storageClient.Close()
-	log.Println("Goroutines", runtime.NumGoroutine())
 }

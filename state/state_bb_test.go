@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"log"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -81,7 +80,6 @@ func TestStatus(t *testing.T) {
 }
 
 func TestWriteStatus(t *testing.T) {
-	log.Println("Goroutines", runtime.NumGoroutine())
 	saver, err := state.NewDatastoreSaver("mlab-testing")
 	if err != nil {
 		t.Fatal(err)
@@ -122,5 +120,4 @@ func TestWriteStatus(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	log.Println("Goroutines", runtime.NumGoroutine())
 }
