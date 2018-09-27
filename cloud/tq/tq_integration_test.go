@@ -33,14 +33,15 @@ func TestGetTaskqueueStats(t *testing.T) {
 // check that the bucket content has not been changed.
 // TODO - this currently leaks goroutines.
 func TestGetBucket(t *testing.T) {
+	ctx := context.Background()
 
 	storageClient, err := storage.NewClient(context.Background())
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
 	bucketName := "archive-mlab-testing"
-	bucket, err := tq.GetBucket(storageClient, "mlab-testing", bucketName, false)
+	bucket, err := tq.GetBucket(ctx, storageClient, "mlab-testing", bucketName, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +89,8 @@ func TestIsEmpty(t *testing.T) {
 func TestPostDay(t *testing.T) {
 	// Use a fake queue client.
 	client, counter := cloud.DryRunClient()
-	config := cloud.Config{Client: client, Project: "fake-project"}
+	ctx := context.Background()
+	config := cloud.Config{Context: ctx, Client: client, Project: "fake-project"}
 	q, err := tq.NewQueueHandler(config, "test-queue")
 	if err != nil {
 		t.Fatal(err)
@@ -100,7 +102,7 @@ func TestPostDay(t *testing.T) {
 		t.Error(err)
 	}
 	bucketName := "archive-mlab-testing"
-	bucket, err := tq.GetBucket(storageClient, "mlab-testing", bucketName, false)
+	bucket, err := tq.GetBucket(config.Context, storageClient, "mlab-testing", bucketName, false)
 	if err != nil {
 		t.Fatal(err)
 	}

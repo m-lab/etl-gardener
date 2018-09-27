@@ -1,6 +1,7 @@
 package rex_test
 
 import (
+	"context"
 	"log"
 	"sync"
 	"testing"
@@ -60,8 +61,9 @@ func (s *testSaver) GetDeletes() map[string]struct{} {
 // conditions.
 // TODO - use a fake bigtable, so that tasks can get beyond Stabilizing.
 func TestWithTaskQueue(t *testing.T) {
+	ctx := context.Background()
 	client, counter := cloud.DryRunClient()
-	config := cloud.Config{Project: "mlab-testing", Client: client}
+	config := cloud.Config{Context: ctx, Project: "mlab-testing", Client: client}
 	bqConfig := cloud.BQConfig{Config: config, BQProject: "bqproject", BQBatchDataset: "dataset"}
 	bucketOpts := []option.ClientOption{option.WithHTTPClient(client)}
 	exec := rex.ReprocessingExecutor{BQConfig: bqConfig, BucketOpts: bucketOpts}

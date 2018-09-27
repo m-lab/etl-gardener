@@ -118,7 +118,7 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 			t.SetError(err, "task.SourceAndDest")
 			return err
 		}
-		err = bq.WaitForStableTable(s)
+		err = bq.WaitForStableTable(rex.Context, s)
 		if err != nil {
 			// When testing, we expect to get ErrTableNotFound here.
 			if !env.TestMode || err != state.ErrTableNotFound {
@@ -232,8 +232,9 @@ func (rex *ReprocessingExecutor) queue(t *state.Task) (int, error) {
 		t.SetError(err, "StorageClientError")
 		return 0, err
 	}
+	// TODO - try cancelling the context instead?
 	defer storageClient.Close()
-	bucket, err := tq.GetBucket(storageClient, rex.Project, bucketName, false)
+	bucket, err := tq.GetBucket(rex.Context, storageClient, rex.Project, bucketName, false)
 	if err != nil {
 		if err == io.EOF && env.TestMode {
 			log.Println("Using fake client, ignoring EOF error")
@@ -270,7 +271,7 @@ func (rex *ReprocessingExecutor) dedup(t *state.Task) error {
 
 	log.Println("Dedupping", src.FullyQualifiedName())
 	// TODO move Dedup??
-	job, err := bq.Dedup(&ds, src.TableID, dest)
+	job, err := bq.Dedup(rex.Context, &ds, src.TableID, dest)
 	if err != nil {
 		if err == io.EOF {
 			if env.TestMode {
@@ -342,19 +343,20 @@ func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}
 		t.SetError(err, "SourceAndDest")
 		return err
 	}
-	job, err := srcDs.BqClient.JobFromID(context.Background(), t.JobID)
+	job, err := srcDs.BqClient.JobFromID(rex.Context, t.JobID)
 	if err != nil {
 		t.SetError(err, "JobFromID")
 		return err
 	}
 	// TODO - should loop, and check terminate channel
-	err = waitForJob(context.Background(), job, 60*time.Second, terminate)
+	err = waitForJob(rex.Context, job, 60*time.Second, terminate)
 	if err != nil {
 		log.Println(err, src.FullyQualifiedName())
 		t.SetError(err, "waitForJob")
 		return err
 	}
-	status, err := job.Wait(context.Background())
+	// TODO - should this context have a deadline?
+	status, err := job.Wait(rex.Context)
 	if err != nil {
 		if err != state.ErrTaskSuspended {
 			log.Println(status.Err(), src.FullyQualifiedName())
@@ -368,7 +370,7 @@ func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}
 	// Wait for JobID to complete, then delete the template table.
 	log.Println("Completed deduplication, deleting source", src.FullyQualifiedName())
 	// If deduplication was successful, we should delete the source table.
-	ctx, cf := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cf := context.WithTimeout(rex.Context, time.Minute)
 	defer cf()
 	err = src.Delete(ctx)
 	if err != nil {
@@ -400,7 +402,7 @@ func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}
 		copy.FullyQualifiedName(), dest.FullyQualifiedName())
 
 	// TODO: how long can this actually take???
-	ctx, cf = context.WithTimeout(context.Background(), 30*time.Minute)
+	ctx, cf = context.WithTimeout(rex, Context, 30*time.Minute)
 	defer cf()
 
 	srcAt := bq.NewAnnotatedTable(copy, &srcDs)

@@ -3,6 +3,7 @@
 package rex_test
 
 import (
+	"context"
 	"log"
 	"testing"
 	"time"
@@ -18,8 +19,9 @@ import (
 // conditions.
 // TODO - Consider creating fake BQ tables, so that the dedup phase completes.
 func TestRealBucket(t *testing.T) {
+	ctx := context.Background()
 	client, counter := cloud.DryRunClient()
-	config := cloud.Config{Project: "mlab-testing", Client: client}
+	config := cloud.Config{Context: ctx, Project: "mlab-testing", Client: client}
 	bqConfig := cloud.BQConfig{Config: config, BQProject: "mlab-testing", BQBatchDataset: "batch"}
 	exec := rex.ReprocessingExecutor{BQConfig: bqConfig}
 	saver := newTestSaver()

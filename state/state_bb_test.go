@@ -41,7 +41,8 @@ func waitForNTasks(t *testing.T, saver *state.DatastoreSaver, expectedTaskCount 
 }
 
 func TestStatus(t *testing.T) {
-	saver, err := state.NewDatastoreSaver("mlab-testing")
+	ctx := context.Background()
+	saver, err := state.NewDatastoreSaver(ctx, "mlab-testing")
 	if err != nil {
 		log.Println(saver)
 		t.Fatal(err)
@@ -80,7 +81,8 @@ func TestStatus(t *testing.T) {
 }
 
 func TestWriteStatus(t *testing.T) {
-	saver, err := state.NewDatastoreSaver("mlab-testing")
+	ctx := context.Background()
+	saver, err := state.NewDatastoreSaver(ctx, "mlab-testing")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +104,7 @@ func TestWriteStatus(t *testing.T) {
 	bb := make([]byte, 0, 500)
 	buf := bytes.NewBuffer(bb)
 
-	err = state.WriteHTMLStatusTo(buf, "mlab-testing", "bar")
+	err = state.WriteHTMLStatusTo(ctx, buf, "mlab-testing", "bar")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -68,18 +68,19 @@ type Saver interface {
 
 // DatastoreSaver will implement a Saver that stores Task state in Datastore.
 type DatastoreSaver struct {
+	Context   context.Context
 	Client    *datastore.Client
 	Namespace string
 }
 
 // NewDatastoreSaver creates and returns an appropriate saver.
 // TODO - if this ever needs more context, use cloud.Config
-func NewDatastoreSaver(project string) (*DatastoreSaver, error) {
-	client, err := datastore.NewClient(context.Background(), project)
+func NewDatastoreSaver(ctx context.Context, project string) (*DatastoreSaver, error) {
+	client, err := datastore.NewClient(ctx, project)
 	if err != nil {
 		return nil, err
 	}
-	return &DatastoreSaver{client, "gardener"}, nil
+	return &DatastoreSaver{ctx, client, "gardener"}, nil
 }
 
 // SaveTask implements Saver.SaveTask using Datastore.
@@ -87,8 +88,7 @@ func NewDatastoreSaver(project string) (*DatastoreSaver, error) {
 func (ds *DatastoreSaver) SaveTask(t Task) error {
 	k := datastore.NameKey("task", t.Name, nil)
 	k.Namespace = ds.Namespace
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	ctx, cancel := context.WithTimeout(ds.Context, 2*time.Second)
 	defer cancel()
 	_, err := ds.Client.Put(ctx, k, &t)
 	if err != nil {
@@ -101,8 +101,7 @@ func (ds *DatastoreSaver) SaveTask(t Task) error {
 func (ds *DatastoreSaver) DeleteTask(t Task) error {
 	k := datastore.NameKey("task", t.Name, nil)
 	k.Namespace = ds.Namespace
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	ctx, cancel := context.WithTimeout(ds.Context, 2*time.Second)
 	defer cancel()
 	err := ds.Client.Delete(ctx, k)
 	if err != nil {
@@ -302,14 +301,13 @@ func (ds *DatastoreSaver) GetStatus(ctx context.Context, expt string) ([]Task, e
 }
 
 // WriteHTMLStatusTo writes HTML formatted task status.
-func WriteHTMLStatusTo(w io.Writer, project string, expt string) error {
-	ds, err := NewDatastoreSaver(project)
+func WriteHTMLStatusTo(ctx context.Context, w io.Writer, project string, expt string) error {
+	ds, err := NewDatastoreSaver(ctx, project)
 	defer ds.Client.Close()
 	if err != nil {
 		fmt.Fprintln(w, "Error creating Datastore client:", err)
 		return err
 	}
-	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	tasks, err := ds.GetStatus(ctx, expt)

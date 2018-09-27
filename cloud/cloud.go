@@ -4,6 +4,7 @@ package cloud
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -15,7 +16,8 @@ import (
 
 // Config provides a generic config suitable for many cloud clients.
 type Config struct {
-	Project string // Project for most cloud ops.
+	Context context.Context // Master context.
+	Project string          // Project for most cloud ops.
 
 	// client to be used for cloud API calls.  Allows injection of fake for testing.
 	Client  *http.Client

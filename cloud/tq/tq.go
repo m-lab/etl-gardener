@@ -72,7 +72,7 @@ func (qh *QueueHandler) IsEmpty() error {
 // GetTaskqueueStats gets stats for a single task queue.
 func GetTaskqueueStats(config cloud.Config, name string) (stats taskqueue.QueueStatistics, err error) {
 	// Would prefer to use this, but it does not work from flex![]
-	// stats, err := taskqueue.QueueStats(context.Background(), queueNames)
+	// stats, err := taskqueue.QueueStats(config.Context, queueNames)
 	resp, err := config.Client.Get(fmt.Sprintf(`https://queue-pusher-dot-%s.appspot.com/stats?queuename=%s`, config.Project, name))
 	if err != nil {
 		return
@@ -196,8 +196,9 @@ func (qh *QueueHandler) PostDay(bucket *storage.BucketHandle, bucketName, prefix
 		Delimiter: "/",
 		Prefix:    prefix,
 	}
-	// TODO - can this error?  Or do errors only occur on iterator ops?
-	it := bucket.Objects(context.Background(), &qry)
+	// TODO - handle timeout errors?
+	// TODO - should we add a deadline?
+	it := bucket.Objects(qh.Context, &qry)
 	return qh.PostAll(bucketName, it)
 }
 
@@ -208,13 +209,12 @@ func (qh *QueueHandler) PostDay(bucket *storage.BucketHandle, bucketName, prefix
 
 // GetBucket gets a storage bucket.
 //   opts       - ClientOptions, e.g. credentials, for tests that need to access storage buckets.
-func GetBucket(sClient *storage.Client, project, bucketName string, dryRun bool) (*storage.BucketHandle, error) {
-
+func GetBucket(ctx context.Context, sClient *storage.Client, project, bucketName string, dryRun bool) (*storage.BucketHandle, error) {
 	bucket := sClient.Bucket(bucketName)
 	// Check that the bucket is valid, by fetching it's attributes.
 	// Bypass check if we are running travis tests.
 	if !dryRun {
-		_, err := bucket.Attrs(context.Background())
+		_, err := bucket.Attrs(ctx)
 		if err != nil {
 			return nil, err
 		}

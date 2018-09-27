@@ -145,7 +145,7 @@ func NewBQConfig(config cloud.Config) cloud.BQConfig {
 
 // dispatcherFromEnv creates a Dispatcher struct initialized from environment variables.
 // It uses PROJECT, QUEUE_BASE, and NUM_QUEUES.
-func taskHandlerFromEnv(client *http.Client) (*reproc.TaskHandler, error) {
+func taskHandlerFromEnv(ctx context.Context, client *http.Client) (*reproc.TaskHandler, error) {
 	if env.Error != nil {
 		log.Println(env.Error)
 		log.Println(env)
@@ -153,6 +153,7 @@ func taskHandlerFromEnv(client *http.Client) (*reproc.TaskHandler, error) {
 	}
 
 	config := cloud.Config{
+		Context: ctx,
 		Project: env.Project,
 		Client:  client}
 
@@ -164,7 +165,7 @@ func taskHandlerFromEnv(client *http.Client) (*reproc.TaskHandler, error) {
 	}
 
 	// TODO move DatastoreSaver to another package?
-	saver, err := state.NewDatastoreSaver(env.Project)
+	saver, err := state.NewDatastoreSaver(bqConfig.Context, env.Project)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +245,8 @@ func Status(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Fprintf(w, "</br></br>\n")
 
-	state.WriteHTMLStatusTo(w, env.Project, env.Experiment)
+	// TODO - attach the environment to the context.
+	state.WriteHTMLStatusTo(r.Context(), w, env.Project, env.Experiment)
 	fmt.Fprintf(w, "</br>\n")
 
 	env := os.Environ()
@@ -267,7 +269,7 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 
 // setupService prepares the setting for a service.
 // The configuration info comes from environment variables.
-func setupService() error {
+func setupService(ctx context.Context) error {
 	// Enable block profiling
 	runtime.SetBlockProfileRate(1000000) // One event per msec.
 
@@ -282,7 +284,7 @@ func setupService() error {
 	http.HandleFunc("/alive", healthCheck)
 	http.HandleFunc("/ready", healthCheck)
 
-	handler, err := taskHandlerFromEnv(http.DefaultClient)
+	handler, err := taskHandlerFromEnv(ctx, http.DefaultClient)
 
 	if err != nil {
 		log.Println(err)
@@ -291,16 +293,17 @@ func setupService() error {
 
 	startDate := env.StartDate
 
-	ds, err := state.NewDatastoreSaver(env.Project)
+	ds, err := state.NewDatastoreSaver(ctx, env.Project)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 
-	tasks, err := ds.GetStatus(ctx, env.Experiment)
+	// Move the timeout into GetStatus?
+	taskCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	tasks, err := ds.GetStatus(taskCtx, env.Experiment)
 	cancel()
+
 	if err != nil {
 		log.Println(err)
 		return err
@@ -309,10 +312,10 @@ func setupService() error {
 	if err != nil {
 		log.Println(err)
 		return err
-	} else {
-		if maxDate.After(startDate) {
-			startDate = maxDate.AddDate(0, 0, 1)
-		}
+	}
+
+	if maxDate.After(startDate) {
+		startDate = maxDate.AddDate(0, 0, 1)
 	}
 
 	log.Println("Using start date of", startDate)
@@ -331,12 +334,16 @@ func init() {
 }
 
 func main() {
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	// Check if invoked as a service.
 	isService, _ := strconv.ParseBool(os.Getenv("GARDENER_SERVICE"))
 	if isService {
 		// If setupService() returns an err instead of nil, healthy will be
 		// set as false and eventually it will cause kubernetes to roll back.
-		err := setupService()
+		err := setupService(ctx)
 		if err != nil {
 			healthy = false
 			log.Println("Running as unhealthy service")
