@@ -1,14 +1,14 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: etl-gardener-server
+  name: etl-gardener-sidestream
   namespace: default
 spec:
   replicas: 1
   selector:
     matchLabels:
       # Used to match pre-existing pods that may be affected during updates.
-      run: etl-gardener-server
+      run: etl-gardener-sidestream
   strategy:
     rollingUpdate:
       maxSurge: 1
@@ -20,7 +20,7 @@ spec:
       labels:
         # Note: run=etl-gardener-server should match a service config with a
         # public IP and port so that it is publicly accessible.
-        run: etl-gardener-server
+        run: etl-gardener-sidestream
       annotations:
         # Tell prometheus service discovery to collect metrics from the containers.
         prometheus.io/scrape: 'true'
@@ -54,7 +54,7 @@ spec:
         - name: FINAL_DATASET
           value: ""  # e.g. base_tables
         - name: QUEUE_BASE
-          value: etl-ndt-batch-
+          value: etl-sidestream-batch-
         - name: NUM_QUEUES
           value: "16"
         ports:
@@ -79,16 +79,6 @@ spec:
           limits:
             memory: "3Gi"
             cpu: "1"
-        volumeMounts:
-        - mountPath: /etl-gardener
-          name: etl-gardener-storage
 
       nodeSelector:
-        scopes: gardener
-
-      # Disks created manually, can be named here explicitly using
-      # gcePersistentDisk instead of the persistentVolumeClaim.
-      volumes:
-      - name: etl-gardener-storage
-        persistentVolumeClaim:
-          claimName: auto-etl-gardener-disk0
+        gardener-node: true
