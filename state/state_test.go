@@ -121,8 +121,8 @@ func TestSourceAndDest(t *testing.T) {
 }
 
 func TestGetExperiment(t *testing.T) {
-	testType, err := state.GetExperiment("gs://archive-mlab-oti/ndt/2017/06/01/")
-	if testType != "ndt" || err != nil {
+	expt, err := state.GetExperiment("gs://archive-mlab-oti/ndt/2017/06/01/")
+	if expt != "ndt" || err != nil {
 		t.Error(err)
 	}
 }
