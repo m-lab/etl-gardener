@@ -119,3 +119,10 @@ func TestSourceAndDest(t *testing.T) {
 		t.Error(dest.FullyQualifiedName())
 	}
 }
+
+func TestGetTestType(t *testing.T) {
+	testType, err := state.GetTestType("gs://archive-mlab-oti/ndt/2017/06/01/")
+	if testType != "ndt" || err != nil {
+		t.Error(err)
+	}
+}
