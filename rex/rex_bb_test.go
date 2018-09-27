@@ -16,7 +16,6 @@ import (
 // It does not check any state, but if the termination does not work properly,
 // may fail to complete.  Also, running with -race may detect race
 // conditions.
-// CURRENTLY - the tasks terminate when
 // TODO - Consider creating fake BQ tables, so that the dedup phase completes.
 func TestRealBucket(t *testing.T) {
 	client, counter := cloud.DryRunClient()
