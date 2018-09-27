@@ -120,8 +120,8 @@ func TestSourceAndDest(t *testing.T) {
 	}
 }
 
-func TestGetTestType(t *testing.T) {
-	testType, err := state.GetTestType("gs://archive-mlab-oti/ndt/2017/06/01/")
+func TestGetExperiment(t *testing.T) {
+	testType, err := state.GetExperiment("gs://archive-mlab-oti/ndt/2017/06/01/")
 	if testType != "ndt" || err != nil {
 		t.Error(err)
 	}

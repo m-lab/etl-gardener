@@ -113,23 +113,23 @@ func (ds *DatastoreSaver) DeleteTask(t Task) error {
 // Task contains the state of a single Task.
 // These will be stored and retrieved from DataStore
 type Task struct {
-	Name     string // e.g. gs://archive-mlab-oti/ndt/2017/06/01/
-	TestType string // e.g. ndt, sidestream, etc.
-	Date     time.Time
-	State    State
-	Queue    string // The queue the task files are submitted to, or "".
-	JobID    string // BigQuery JobID, when the state is Deduplicating
-	ErrMsg   string // Task handling error, if any
-	ErrInfo  string // More context about any error, if any
+	Name       string // e.g. gs://archive-mlab-oti/ndt/2017/06/01/
+	Experiment string // e.g. ndt, sidestream, etc.
+	Date       time.Time
+	State      State
+	Queue      string // The queue the task files are submitted to, or "".
+	JobID      string // BigQuery JobID, when the state is Deduplicating
+	ErrMsg     string // Task handling error, if any
+	ErrInfo    string // More context about any error, if any
 
 	UpdateTime time.Time
 
 	saver Saver // Saver is used for Save operations. Stored locally, but not persisted.
 }
 
-// GetTestType Parse the input string like "gs://archive-mlab-oti/ndt/2017/06/01/"
+// GetExperiment Parse the input string like "gs://archive-mlab-oti/ndt/2017/06/01/"
 // and return "ndt"
-func GetTestType(name string) (string, error) {
+func GetExperiment(name string) (string, error) {
 	split := strings.Split(name, "/")
 	if len(split) < 5 {
 		return "", errors.New("Incorrect input name")
@@ -139,11 +139,11 @@ func GetTestType(name string) (string, error) {
 
 // NewTask properly initializes a new task, complete with saver.
 func NewTask(name string, queue string, saver Saver) (*Task, error) {
-	testType, err := GetTestType(name)
+	expt, err := GetExperiment(name)
 	if err != nil {
 		return nil, err
 	}
-	t := Task{Name: name, TestType: testType, State: Initializing, Queue: queue, saver: saver}
+	t := Task{Name: name, Experiment: expt, State: Initializing, Queue: queue, saver: saver}
 	t.UpdateTime = time.Now()
 	parts, err := t.ParsePrefix()
 	if err != nil {
