@@ -334,7 +334,7 @@ func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}
 		return err
 	}
 	// TODO - should loop, and check terminate channel
-	err = waitForJob(context.Background(), job, 10*time.Second, terminate)
+	err = waitForJob(context.Background(), job, 60*time.Second, terminate)
 	if err != nil {
 		log.Println(err, src.FullyQualifiedName())
 		t.SetError(err, "waitForJob")
