@@ -47,9 +47,10 @@ var StateNames = map[State]string{
 
 // Task Errors
 var (
-	ErrInvalidQueue  = errors.New("invalid queue")
-	ErrTaskSuspended = errors.New("task suspended")
-	ErrTableNotFound = errors.New("Not found: Table")
+	ErrInvalidQueue           = errors.New("invalid queue")
+	ErrTaskSuspended          = errors.New("task suspended")
+	ErrTableNotFound          = errors.New("Not found: Table")
+	ErrRowsFromOtherPartition = errors.New("Rows belong to different partition")
 )
 
 // Executor describes an object that can do all the required steps to execute a Task.
@@ -220,6 +221,7 @@ func (t *Task) Delete() error {
 
 // SetError adds error information and saves to the "saver"
 func (t *Task) SetError(err error, info string) error {
+	metrics.FailCount.WithLabelValues(info)
 	if t.saver == nil {
 		return ErrNoSaver
 	}

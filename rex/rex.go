@@ -117,7 +117,7 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 	case state.Deduplicating:
 		if err := rex.dedup(t); err != nil {
 			// SetError also pushes to datastore, like Update()
-			t.SetError(err, "rex.Dedup")
+			t.SetError(err, "rex.dedup")
 			return err
 		}
 		t.Update(state.Finishing)
@@ -161,8 +161,7 @@ func (rex *ReprocessingExecutor) waitForParsing(t *state.Task, terminate <-chan 
 	// Don't want to accept a date until we can actually queue it.
 	qh, err := tq.NewQueueHandler(rex.Config, t.Queue)
 	if err != nil {
-		metrics.FailCount.WithLabelValues("NewQueueHandler")
-		t.SetError(err, "NewQueueHandler: "+t.Name)
+		t.SetError(err, "NewQueueHandler")
 		return err
 	}
 	log.Println("Wait for empty queue ", qh.Queue)
@@ -199,7 +198,6 @@ func (rex *ReprocessingExecutor) queue(t *state.Task) (int, error) {
 	//func (qh *ChannelQueueHandler) handleLoop(next api.BasicPipe, bucketOpts ...option.ClientOption) {
 	qh, err := tq.NewQueueHandler(rex.Config, t.Queue)
 	if err != nil {
-		metrics.FailCount.WithLabelValues("NewQueueHandler")
 		t.SetError(err, "NewQueueHandler")
 		return 0, err
 	}
@@ -207,7 +205,6 @@ func (rex *ReprocessingExecutor) queue(t *state.Task) (int, error) {
 	if err != nil {
 		// If there is a parse error, log and skip request.
 		log.Println(err)
-		metrics.FailCount.WithLabelValues("BadPrefix").Inc()
 		t.SetError(err, "BadPrefix")
 		return 0, err
 	}
@@ -218,7 +215,6 @@ func (rex *ReprocessingExecutor) queue(t *state.Task) (int, error) {
 	storageClient, err := storage.NewClient(context.Background(), rex.BucketOpts...)
 	if err != nil {
 		log.Println(err)
-		metrics.FailCount.WithLabelValues("StorageClientError").Inc()
 		t.SetError(err, "StorageClientError")
 		return 0, err
 	}
@@ -230,7 +226,6 @@ func (rex *ReprocessingExecutor) queue(t *state.Task) (int, error) {
 			return 0, nil
 		}
 		log.Println(err)
-		metrics.FailCount.WithLabelValues("BucketError").Inc()
 		t.SetError(err, "BucketError")
 		return 0, err
 	}
@@ -239,7 +234,6 @@ func (rex *ReprocessingExecutor) queue(t *state.Task) (int, error) {
 	n, err := qh.PostDay(bucket, bucketName, parts[1]+"/"+parts[2]+"/")
 	if err != nil {
 		log.Println(err)
-		metrics.FailCount.WithLabelValues("PostDayError").Inc()
 		t.SetError(err, "PostDayError")
 		return n, nil
 	}
@@ -251,13 +245,11 @@ func (rex *ReprocessingExecutor) dedup(t *state.Task) error {
 	// Launch the dedup request, and save the JobID
 	ds, err := rex.GetDS()
 	if err != nil {
-		metrics.FailCount.WithLabelValues("NewDataset")
 		t.SetError(err, "GetDS")
 		return err
 	}
 	src, dest, err := t.SourceAndDest(&ds)
 	if err != nil {
-		metrics.FailCount.WithLabelValues("SourceAndDest")
 		t.SetError(err, "SourceAndDest")
 		return err
 	}
@@ -273,7 +265,6 @@ func (rex *ReprocessingExecutor) dedup(t *state.Task) error {
 			}
 		} else {
 			log.Println(err, src.FullyQualifiedName())
-			metrics.FailCount.WithLabelValues("DedupFailed")
 			t.SetError(err, "DedupFailed")
 			return err
 		}
@@ -298,16 +289,18 @@ func waitForJob(ctx context.Context, job *bigquery.Job, maxBackoff time.Duration
 		status, err := job.Status(ctx)
 		if err != nil {
 			log.Println(err)
-			continue
-		}
-		if status.Err() != nil {
+		} else if status.Err() != nil {
 			log.Println(job.ID(), status.Err())
 			if strings.Contains(status.Err().Error(), "Not found: Table") {
 				return state.ErrTableNotFound
 			}
-			continue
-		}
-		if status.Done() {
+			if strings.Contains(status.Err().Error(), "rows belong to different partitions") {
+				return state.ErrRowsFromOtherPartition
+			}
+			if backoff == maxBackoff {
+				return status.Err()
+			}
+		} else if status.Done() {
 			break
 		}
 		if backoff+previous < maxBackoff {
@@ -327,19 +320,16 @@ func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}
 	// TODO use a simple client instead of creating dataset?
 	ds, err := bqext.NewDataset(rex.Project, rex.BQDataset, rex.Options...)
 	if err != nil {
-		metrics.FailCount.WithLabelValues("NewDataset")
 		t.SetError(err, "NewDataset")
 		return err
 	}
 	src, _, err := t.SourceAndDest(&ds)
 	if err != nil {
-		metrics.FailCount.WithLabelValues("SourceAndDest")
 		t.SetError(err, "SourceAndDest")
 		return err
 	}
 	job, err := ds.BqClient.JobFromID(context.Background(), t.JobID)
 	if err != nil {
-		metrics.FailCount.WithLabelValues("JobFromID")
 		t.SetError(err, "JobFromID")
 		return err
 	}
@@ -347,16 +337,14 @@ func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}
 	err = waitForJob(context.Background(), job, 10*time.Second, terminate)
 	if err != nil {
 		log.Println(err, src.FullyQualifiedName())
-		metrics.FailCount.WithLabelValues("JobTableNotFound")
-		t.SetError(err, "JobTableNotFound")
+		t.SetError(err, "waitForJob")
 		return err
 	}
 	status, err := job.Wait(context.Background())
 	if err != nil {
 		if err != state.ErrTaskSuspended {
 			log.Println(status.Err(), src.FullyQualifiedName())
-			metrics.FailCount.WithLabelValues("DedupJobWait")
-			t.SetError(err, "DedupJobWait")
+			t.SetError(err, "job.Wait")
 		}
 		return err
 	}
@@ -369,8 +357,7 @@ func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}
 	err = src.Delete(ctx)
 	if err != nil {
 		log.Println(err)
-		metrics.FailCount.WithLabelValues("TableDeleteErr")
-		t.SetError(err, "TableDeleteErr")
+		t.SetError(err, "TableDelete")
 		return err
 	}
 

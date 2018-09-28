@@ -164,6 +164,7 @@ queueLoop:
 			if strings.TrimSpace(t.Queue) != t.Queue {
 				log.Println("invalid queue name", t)
 				metrics.FailCount.WithLabelValues("bad queue name").Inc()
+				// Skip updating task date, as this entry is somehow corrupted.
 				continue
 			}
 			_, ok := queues[t.Queue]
@@ -172,8 +173,9 @@ queueLoop:
 				log.Println("Restarting", t)
 				th.StartTask(t)
 			} else {
-				// TODO - add metric
 				log.Println("Queue", t.Queue, "already in use.  Skipping", t)
+				metrics.FailCount.WithLabelValues("queue not available").Inc()
+				continue
 			}
 		} else {
 			// No queue, just restart...

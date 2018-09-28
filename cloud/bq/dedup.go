@@ -138,8 +138,6 @@ func Dedup(dsExt *bqext.Dataset, src string, destTable *bigquery.Table) (*bigque
 	if !strings.Contains(destTable.TableID, "$") {
 		meta, err := destTable.Metadata(context.Background())
 		if err == nil && meta.TimePartitioning != nil {
-			log.Println(err)
-			metrics.FailCount.WithLabelValues("BadDestTable")
 			return nil, errors.New("Destination table must specify partition")
 		}
 	}
@@ -152,8 +150,8 @@ func Dedup(dsExt *bqext.Dataset, src string, destTable *bigquery.Table) (*bigque
 	case strings.HasPrefix(destTable.TableID, "ndt"):
 		queryString = fmt.Sprintf(dedupTemplateNDT, src)
 	default:
-		metrics.FailCount.WithLabelValues("UnknownTableType")
-		return nil, errors.New("Only handles sidestream, ndt, not " + destTable.TableID)
+		log.Println("Only handles sidestream, ndt, not " + destTable.TableID)
+		return nil, errors.New("Unknown table type")
 	}
 	query := dsExt.DestQuery(queryString, destTable, bigquery.WriteTruncate)
 
