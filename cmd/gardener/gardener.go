@@ -160,21 +160,20 @@ func taskHandlerFromEnv(client *http.Client) (*reproc.TaskHandler, error) {
 // doDispatchLoop just sequences through archives in date order.
 // It will generally be blocked on the queues.
 // It will start processing at startDate, and when it catches up to "now" it will restart at restartDate.
-func doDispatchLoop(handler *reproc.TaskHandler, startDate time.Time, restartDate time.Time, bucket string, experiments []string) {
+func doDispatchLoop(handler *reproc.TaskHandler, startDate time.Time, restartDate time.Time, bucket string, experiment string) {
 	log.Println("(Re)starting at", startDate)
 	next := startDate
 
 	for {
-		for _, e := range experiments {
-			prefix := next.Format(fmt.Sprintf("gs://%s/%s/2006/01/02/", bucket, e))
 
-			// Note that this blocks until a queue is available.
-			err := handler.AddTask(prefix)
-			if err != nil {
-				// Only error expected here is ErrTerminating
-				log.Println(err)
-				return
-			}
+		prefix := next.Format(fmt.Sprintf("gs://%s/%s/2006/01/02/", bucket, experiment))
+
+		// Note that this blocks until a queue is available.
+		err := handler.AddTask(prefix)
+		if err != nil {
+			// Only error expected here is ErrTerminating
+			log.Println(err)
+			return
 		}
 
 		next = next.AddDate(0, 0, 1)
@@ -305,7 +304,8 @@ func runService() {
 		log.Println("Error: EXPERIMENT environment should have only one experiment.")
 		return
 	}
-	tasks, err := ds.GetStatus(ctx, strings.TrimSpace(experiments[0]))
+	expt := strings.TrimSpace(experiments[0])
+	tasks, err := ds.GetStatus(ctx, expt)
 	cancel()
 	if err != nil {
 		log.Println(err)
@@ -321,7 +321,7 @@ func runService() {
 	}
 
 	log.Println("Using start date of", startDate)
-	go doDispatchLoop(handler, startDate, env.StartDate, bucket, experiments)
+	go doDispatchLoop(handler, startDate, env.StartDate, bucket, expt)
 	healthy = true
 
 	// ListenAndServe, and terminate when it returns.
