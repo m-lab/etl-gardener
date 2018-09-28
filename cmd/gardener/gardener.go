@@ -271,6 +271,7 @@ func runService() {
 	handler, err := taskHandlerFromEnv(http.DefaultClient)
 	if err != nil {
 		log.Println(err)
+		return
 		// leaving healthy = false should eventually lead to rollback.
 	} else {
 		// TODO - add termination channel.
@@ -283,10 +284,6 @@ func runService() {
 			log.Println("Error: EXPERIMENTS environment variable not set.")
 		} else {
 			experiments := strings.Split(expString, ",")
-			for i := range experiments {
-				experiments[i] = strings.TrimSpace(experiments[i])
-			}
-
 			ds, err := state.NewDatastoreSaver(env.Project)
 			if err != nil {
 				log.Println(err)
@@ -294,24 +291,29 @@ func runService() {
 			} else {
 				ctx := context.Background()
 				ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-				tasks, err := ds.GetStatus(ctx, expString)
-				cancel()
-				if err != nil {
-					log.Println(err)
-				} else {
-					maxDate, err := handler.RestartTasks(tasks)
+
+				for i := range experiments {
+					experiments[i] = strings.TrimSpace(experiments[i])
+
+					tasks, err := ds.GetStatus(ctx, experiments[i])
+					cancel()
 					if err != nil {
 						log.Println(err)
 					} else {
-						if maxDate.After(startDate) {
-							startDate = maxDate.AddDate(0, 0, 1)
+						maxDate, err := handler.RestartTasks(tasks)
+						if err != nil {
+							log.Println(err)
+						} else {
+							if maxDate.After(startDate) {
+								startDate = maxDate.AddDate(0, 0, 1)
+							}
 						}
 					}
 				}
-				log.Println("Using start date of", startDate)
-				go doDispatchLoop(handler, startDate, env.StartDate, bucket, experiments)
-				healthy = true
 			}
+			log.Println("Using start date of", startDate)
+			go doDispatchLoop(handler, startDate, env.StartDate, bucket, experiments)
+			healthy = true
 		}
 	}
 

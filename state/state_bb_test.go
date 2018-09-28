@@ -13,7 +13,7 @@ import (
 	"github.com/m-lab/etl-gardener/state"
 )
 
-func waitForNTasks(t *testing.T, saver *state.DatastoreSaver, expectedTaskCount int) []state.Task {
+func waitForNTasks(t *testing.T, saver *state.DatastoreSaver, expectedTaskCount int, expt string) []state.Task {
 	var tasks []state.Task
 	var err error
 	for i := 0; i < 10; i++ {
@@ -26,7 +26,7 @@ func waitForNTasks(t *testing.T, saver *state.DatastoreSaver, expectedTaskCount 
 		ctx := context.Background()
 		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		defer cancel()
-		tasks, err = saver.GetStatus(ctx)
+		tasks, err = saver.GetStatus(ctx, expt)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -63,7 +63,7 @@ func TestStatus(t *testing.T) {
 	}
 
 	ExpectedTasks := 2
-	tasks := waitForNTasks(t, saver, ExpectedTasks)
+	tasks := waitForNTasks(t, saver, ExpectedTasks, "bar")
 	if len(tasks) != ExpectedTasks {
 		t.Errorf("Saw %d tasks instead of %d (see notes on consistency)", len(tasks), ExpectedTasks)
 		for _, t := range tasks {
@@ -91,12 +91,13 @@ func TestWriteStatus(t *testing.T) {
 	task.Save()
 	t1 := task
 	task.Name = "task2"
+	task.Experiment = "bar"
 	task.Queue = "Q2"
 	task.Update(state.Queuing)
 	t2 := task
 
 	ExpectedTasks := 2
-	waitForNTasks(t, saver, ExpectedTasks)
+	waitForNTasks(t, saver, ExpectedTasks, "bar")
 
 	bb := make([]byte, 0, 500)
 	buf := bytes.NewBuffer(bb)
