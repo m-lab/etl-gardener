@@ -68,17 +68,31 @@ func TestWithTaskQueue(t *testing.T) {
 	saver := newTestSaver()
 	th := reproc.NewTaskHandler(&exec, []string{"queue-1"}, saver)
 
-	th.AddTask("gs://foo/bar/2001/01/01/foobar-a.gz")
+	th.AddTask("gs://foo/bar/2001/01/01/")
 
-	go th.AddTask("gs://foo/bar/2001/01/01/foobar-b.gz")
-	go th.AddTask("gs://foo/bar/2001/01/01/foobar-c.gz")
+	go th.AddTask("gs://foo/bar/2001/01/02/")
+	go th.AddTask("gs://foo/bar/2001/01/03/")
 
-	for counter.Count() < 3 {
+	start := time.Now()
+	for counter.Count() < 3 && time.Now().Before(start.Add(2*time.Second)) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
 	th.Wait()
-	log.Println(counter.Count())
-	log.Println("Deletes:", len(saver.GetDeletes()))
-	log.Println("Tasks:", len(saver.GetTasks()))
+
+	if counter.Count() != 3 {
+		t.Error("Wrong number of client calls", counter.Count())
+	}
+	if len(saver.GetDeletes()) != 3 {
+		t.Error("Wrong number of task deletes", len(saver.GetDeletes()))
+	}
+
+	tasks := saver.GetTasks()
+	for _, task := range tasks {
+		log.Println(task)
+		if task[len(task)-1].State != state.Done {
+			t.Error("Bad task state:", task)
+		}
+	}
+
 }

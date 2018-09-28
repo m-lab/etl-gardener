@@ -257,21 +257,19 @@ loop:
 			t.SetError(ErrTaskSuspended, "Terminating")
 			break loop
 		default:
-
-			switch t.State {
-			case Processing:
-				if err := ex.Next(&t, term.GetNotifyChannel()); err != nil {
-					break loop
-				}
+			q := t.Queue
+			if err := ex.Next(&t, term.GetNotifyChannel()); err != nil {
+				break loop
+			}
+			if q != "" && t.Queue == "" {
+				// We transitioned to a state that no longer requires the queue.
 				log.Printf("returning queue from %s %p\n", t.Name, &t)
 				doneWithQueue()
-			default:
-				if err := ex.Next(&t, term.GetNotifyChannel()); err != nil {
-					break loop
-				}
 			}
 		}
 	}
+	metrics.CompletedCount.WithLabelValues("todo - add exp type").Inc()
+	t.Delete()
 	term.Done()
 }
 
