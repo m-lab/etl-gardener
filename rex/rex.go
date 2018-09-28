@@ -298,16 +298,12 @@ func waitForJob(ctx context.Context, job *bigquery.Job, maxBackoff time.Duration
 		status, err := job.Status(ctx)
 		if err != nil {
 			log.Println(err)
-			continue
-		}
-		if status.Err() != nil {
+		} else if status.Err() != nil {
 			log.Println(job.ID(), status.Err())
 			if strings.Contains(status.Err().Error(), "Not found: Table") {
 				return state.ErrTableNotFound
 			}
-			continue
-		}
-		if status.Done() {
+		} else if status.Done() {
 			break
 		}
 		if backoff+previous < maxBackoff {
