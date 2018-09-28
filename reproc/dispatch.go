@@ -164,6 +164,7 @@ queueLoop:
 			if strings.TrimSpace(t.Queue) != t.Queue {
 				log.Println("invalid queue name", t)
 				metrics.FailCount.WithLabelValues("bad queue name").Inc()
+				// Skip updating task date, as this entry is somehow corrupted.
 				continue
 			}
 			_, ok := queues[t.Queue]
