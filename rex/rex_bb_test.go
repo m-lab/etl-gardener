@@ -37,20 +37,26 @@ func TestRealBucket(t *testing.T) {
 	// We wait for all three tasks to show up in the saver.
 	for counter.Count() < 3 {
 		time.Sleep(100 * time.Millisecond)
-		log.Println("Count", counter)
 	}
 
-	// Then wait for all three tasks to be deleted.
-	// TODO - when task error handling is completed, the tasks won't be deleted,
-	// to this will start hanging here.
-	for len(saver.GetDeletes()) < 3 {
-		log.Println(saver.GetDeletes())
+	for len(saver.GetTasks()) < 3 {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	th.Terminate()
+	// Wait for all tasks to terminate.  The tasks will each use queue-1, and terminate
+	// with an error when they reach Stabilizing state.
 	th.Wait()
-	log.Println(counter.Count())
+
+	for _, tk := range saver.GetTasks() {
+		log.Println(len(tk), tk[len(tk)-1])
+		if len(tk) != 4 {
+			t.Error("Incorrect number of updates")
+		}
+	}
+
+	if counter.Count() != 9 {
+		t.Error("Expected 9 client calls:", counter.Count())
+	}
 	for _, req := range counter.Requests() {
 		log.Println(req.URL)
 	}

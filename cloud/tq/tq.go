@@ -16,7 +16,6 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/m-lab/etl-gardener/cloud"
 	"google.golang.org/api/iterator"
-	"google.golang.org/api/option"
 	"google.golang.org/appengine/taskqueue"
 )
 
@@ -209,18 +208,13 @@ func (qh *QueueHandler) PostDay(bucket *storage.BucketHandle, bucketName, prefix
 
 // GetBucket gets a storage bucket.
 //   opts       - ClientOptions, e.g. credentials, for tests that need to access storage buckets.
-func GetBucket(opts []option.ClientOption, project, bucketName string, dryRun bool) (*storage.BucketHandle, error) {
-	storageClient, err := storage.NewClient(context.Background(), opts...)
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
+func GetBucket(sClient *storage.Client, project, bucketName string, dryRun bool) (*storage.BucketHandle, error) {
 
-	bucket := storageClient.Bucket(bucketName)
+	bucket := sClient.Bucket(bucketName)
 	// Check that the bucket is valid, by fetching it's attributes.
 	// Bypass check if we are running travis tests.
 	if !dryRun {
-		_, err = bucket.Attrs(context.Background())
+		_, err := bucket.Attrs(context.Background())
 		if err != nil {
 			return nil, err
 		}

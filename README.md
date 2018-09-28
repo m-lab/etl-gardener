@@ -25,4 +25,24 @@ To start the emulator, .travis.yml now includes:
 
 You probably don't want to do this on your local machine, as it will leave
 your local machine configured to use datastore emulation.  So be aware
-that if you do, you'll want to clean up the DATASTORE_ environment variables.
+that if you do, you'll want to clean up the `DATASTORE_` environment variables.
+
+
+## Node Pools
+
+Gardener runs in the GKE data-processing-cluster.
+
+Each cluster includes a node-pool reserved for Gardener deployments, created
+using the following command line:
+
+```
+gcloud --project=mlab-sandbox container node-pools create gardener-pool \
+  --cluster=data-processing-cluster \
+  --num-nodes=3 \
+  --scopes=bigquery,taskqueue,compute-rw,storage-ro,service-control,service-management,datastore \
+  --node-labels=gardener-node=true \
+  --enable-autorepair \
+  --enable-autoupgrade \
+  --image-type=cos \
+  --machine-type=n1-standard-8
+```

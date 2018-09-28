@@ -74,7 +74,7 @@ func assertSaver() { func(ex state.Saver) {}(&testSaver{}) }
 
 type Exec struct{}
 
-func (ex *Exec) Next(t *state.Task, terminate <-chan struct{}) {
+func (ex *Exec) Next(t *state.Task, terminate <-chan struct{}) error {
 	log.Println("Do", t)
 	time.Sleep(time.Duration(1+rand.Intn(2)) * time.Millisecond)
 
@@ -100,6 +100,7 @@ func (ex *Exec) Next(t *state.Task, terminate <-chan struct{}) {
 		// a test failure.
 		log.Fatal("Should not call Next when state is Done")
 	}
+	return nil
 }
 
 func AssertExecutor() { func(ex state.Executor) {}(&Exec{}) }

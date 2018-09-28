@@ -47,16 +47,17 @@ var StateNames = map[State]string{
 
 // Task Errors
 var (
-	ErrInvalidQueue  = errors.New("invalid queue")
-	ErrTaskSuspended = errors.New("task suspended")
-	ErrTableNotFound = errors.New("Not found: Table")
+	ErrInvalidQueue           = errors.New("invalid queue")
+	ErrTaskSuspended          = errors.New("task suspended")
+	ErrTableNotFound          = errors.New("Not found: Table")
+	ErrRowsFromOtherPartition = errors.New("Rows belong to different partition")
 )
 
 // Executor describes an object that can do all the required steps to execute a Task.
 // Used for mocking.
 // Interface must update the task in place, so that state changes are all visible.
 type Executor interface {
-	Next(task *Task, terminate <-chan struct{})
+	Next(task *Task, terminate <-chan struct{}) error
 }
 
 // Saver provides API for saving Task state.
@@ -235,6 +236,7 @@ func (t *Task) Delete() error {
 
 // SetError adds error information and saves to the "saver"
 func (t *Task) SetError(err error, info string) error {
+	metrics.FailCount.WithLabelValues(info)
 	if t.saver == nil {
 		return ErrNoSaver
 	}
@@ -270,13 +272,18 @@ loop:
 			t.SetError(ErrTaskSuspended, "Terminating")
 			break loop
 		default:
+
 			switch t.State {
 			case Processing:
-				ex.Next(&t, term.GetNotifyChannel())
+				if err := ex.Next(&t, term.GetNotifyChannel()); err != nil {
+					break loop
+				}
 				log.Printf("returning queue from %s %p\n", t.Name, &t)
 				doneWithQueue()
 			default:
-				ex.Next(&t, term.GetNotifyChannel())
+				if err := ex.Next(&t, term.GetNotifyChannel()); err != nil {
+					break loop
+				}
 			}
 		}
 	}
@@ -299,6 +306,7 @@ func (ds *DatastoreSaver) GetStatus(ctx context.Context, expt string) ([]Task, e
 // WriteHTMLStatusTo writes HTML formatted task status.
 func WriteHTMLStatusTo(w io.Writer, project string, expt string) error {
 	ds, err := NewDatastoreSaver(project)
+	defer ds.Client.Close()
 	if err != nil {
 		fmt.Fprintln(w, "Error creating Datastore client:", err)
 		return err
