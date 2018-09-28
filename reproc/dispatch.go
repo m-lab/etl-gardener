@@ -172,8 +172,9 @@ queueLoop:
 				log.Println("Restarting", t)
 				th.StartTask(t)
 			} else {
-				// TODO - add metric
 				log.Println("Queue", t.Queue, "already in use.  Skipping", t)
+				metrics.FailCount.WithLabelValues("queue not available").Inc()
+				continue
 			}
 		} else {
 			// No queue, just restart...
