@@ -47,7 +47,7 @@ spec:
           value: "scraper-{{GCLOUD_PROJECT}}"  # NOTE: if we start deleting unembargoed files from scraper, this will no longer work.
         - name: START_DATE
           value: "20170601"
-        - name: EXPERIMENT
+        - name: EXPERIMENTS
           value: "sidestream"  # For example "ndt,sidestream,switch"
         - name: DATASET
           value: private
