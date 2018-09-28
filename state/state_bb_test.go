@@ -102,7 +102,7 @@ func TestWriteStatus(t *testing.T) {
 	bb := make([]byte, 0, 500)
 	buf := bytes.NewBuffer(bb)
 
-	err = state.WriteHTMLStatusTo(buf, "mlab-testing")
+	err = state.WriteHTMLStatusTo(buf, "mlab-testing", "bar")
 	if err != nil {
 		t.Fatal(err)
 	}
