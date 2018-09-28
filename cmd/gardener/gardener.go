@@ -230,10 +230,10 @@ func Status(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Fprintf(w, "</br></br>\n")
 
-	expString := os.Getenv("EXPERIMENTS")
+	expString := os.Getenv("EXPERIMENT")
 	experiments := strings.Split(expString, ",")
-	for _, expt := range experiments {
-		state.WriteHTMLStatusTo(w, env.Project, strings.TrimSpace(expt))
+	if len(experiments) == 1 {
+		state.WriteHTMLStatusTo(w, env.Project, strings.TrimSpace(experiments[0]))
 	}
 	fmt.Fprintf(w, "</br>\n")
 
