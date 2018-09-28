@@ -72,12 +72,19 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 
 	case state.Queuing:
 		// TODO - handle zero task case.
-		if _, err := rex.queue(t); err != nil {
+		n, err := rex.queue(t)
+		if err != nil {
 			// SetError also pushes to datastore, like Update()
 			t.SetError(err, "rex.queue")
 			return err
 		}
-		t.Update(state.Processing)
+		if n < 1 {
+			// If there were no tasks posted, then there is nothing more to do.
+			t.Queue = ""
+			t.Update(state.Done)
+		} else {
+			t.Update(state.Processing)
+		}
 
 	case state.Processing: // TODO should this be Parsing?
 		if err := rex.waitForParsing(t, terminate); err != nil {
@@ -131,8 +138,6 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 		}
 		t.JobID = ""
 		t.Update(state.Done)
-		metrics.CompletedCount.WithLabelValues("sidestream").Inc()
-		t.Delete()
 
 	case state.Done:
 		log.Println("Unexpected call to Next when Done")
