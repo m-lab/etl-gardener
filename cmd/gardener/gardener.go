@@ -274,50 +274,52 @@ func runService() {
 	http.HandleFunc("/ready", healthCheck)
 
 	handler, err := taskHandlerFromEnv(http.DefaultClient)
+	// On error, this returns, leaving healthy = false, which should cause kubernetes to roll back.
 	if err != nil {
 		log.Println(err)
 		return
-		// leaving healthy = false should eventually lead to rollback.
 	}
 	// TODO - add termination channel.
 	startDate := env.StartDate
 	bucket := os.Getenv("TASKFILE_BUCKET")
-	expString := os.Getenv("EXPERIMENTS")
 	if bucket == "" {
 		log.Println("Error: TASKFILE_BUCKET environment variable not set.")
 		return
 	}
+
+	ds, err := state.NewDatastoreSaver(env.Project)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+
+	expString := os.Getenv("EXPERIMENTS")
 	if expString == "" {
 		log.Println("Error: EXPERIMENTS environment variable not set.")
 		return
 	}
 	experiments := strings.Split(expString, ",")
-	ds, err := state.NewDatastoreSaver(env.Project)
+	if len(experiments) != 1 {
+		log.Println("Error: EXPERIMENTS environment should have only one experiment.")
+		return
+	}
+	tasks, err := ds.GetStatus(ctx, strings.TrimSpace(experiments[0]))
+	cancel()
 	if err != nil {
 		log.Println(err)
 		return
-		// We just leave healthy = false, and kubernetes should restart.
 	}
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	for i := range experiments {
-		experiments[i] = strings.TrimSpace(experiments[i])
-
-		tasks, err := ds.GetStatus(ctx, experiments[i])
-		cancel()
-		if err != nil {
-			log.Println(err)
-		} else {
-			maxDate, err := handler.RestartTasks(tasks)
-			if err != nil {
-				log.Println(err)
-			} else {
-				if maxDate.After(startDate) {
-					startDate = maxDate.AddDate(0, 0, 1)
-				}
-			}
+	maxDate, err := handler.RestartTasks(tasks)
+	if err != nil {
+		log.Println(err)
+	} else {
+		if maxDate.After(startDate) {
+			startDate = maxDate.AddDate(0, 0, 1)
 		}
 	}
+
 	log.Println("Using start date of", startDate)
 	go doDispatchLoop(handler, startDate, env.StartDate, bucket, experiments)
 	healthy = true
