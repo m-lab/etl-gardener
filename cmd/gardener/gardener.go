@@ -295,14 +295,14 @@ func runService() {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 
-	expString := os.Getenv("EXPERIMENTS")
+	expString := os.Getenv("EXPERIMENT")
 	if expString == "" {
-		log.Println("Error: EXPERIMENTS environment variable not set.")
+		log.Println("Error: EXPERIMENT environment variable not set.")
 		return
 	}
 	experiments := strings.Split(expString, ",")
 	if len(experiments) != 1 {
-		log.Println("Error: EXPERIMENTS environment should have only one experiment.")
+		log.Println("Error: EXPERIMENT environment should have only one experiment.")
 		return
 	}
 	tasks, err := ds.GetStatus(ctx, strings.TrimSpace(experiments[0]))
