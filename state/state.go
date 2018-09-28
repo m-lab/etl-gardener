@@ -286,7 +286,7 @@ loop:
 // GetStatus fetches all Task state of request experiment from Datastore.
 // If expt is empty string, return all tasks.
 func (ds *DatastoreSaver) GetStatus(ctx context.Context, expt string) ([]Task, error) {
-	q := datastore.NewQuery("task").Namespace(ds.Namespace).Filter("__Experiment__ =", expt)
+	q := datastore.NewQuery("task").Namespace(ds.Namespace).Filter("Experiment =", expt)
 	tasks := make([]Task, 0, 100)
 	_, err := ds.Client.GetAll(ctx, q, &tasks)
 	if err != nil {
