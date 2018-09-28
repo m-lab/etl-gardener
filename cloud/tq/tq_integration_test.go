@@ -31,9 +31,16 @@ func TestGetTaskqueueStats(t *testing.T) {
 
 // NOTE: this test depends on actual bucket content.  If it starts failing,
 // check that the bucket content has not been changed.
+// TODO - this currently leaks goroutines.
 func TestGetBucket(t *testing.T) {
+
+	storageClient, err := storage.NewClient(context.Background())
+	if err != nil {
+		t.Error(err)
+	}
+
 	bucketName := "archive-mlab-testing"
-	bucket, err := tq.GetBucket(nil, "mlab-testing", bucketName, false)
+	bucket, err := tq.GetBucket(storageClient, "mlab-testing", bucketName, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,6 +50,7 @@ func TestGetBucket(t *testing.T) {
 		Delimiter: "/",
 		Prefix:    prefix,
 	}
+
 	// TODO - can this error?  Or do errors only occur on iterator ops?
 	it := bucket.Objects(context.Background(), &qry)
 	count := 0
@@ -59,6 +67,8 @@ func TestGetBucket(t *testing.T) {
 	if count != 3 {
 		t.Error("Wrong number of objects: ", count)
 	}
+
+	storageClient.Close()
 }
 
 func TestIsEmpty(t *testing.T) {
@@ -83,9 +93,14 @@ func TestPostDay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// Use a real storage bucket.
+	storageClient, err := storage.NewClient(context.Background())
+	if err != nil {
+		t.Error(err)
+	}
 	bucketName := "archive-mlab-testing"
-	bucket, err := tq.GetBucket(nil, "mlab-testing", bucketName, false)
+	bucket, err := tq.GetBucket(storageClient, "mlab-testing", bucketName, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,4 +121,5 @@ func TestPostDay(t *testing.T) {
 	if counter.Count() != 48 {
 		t.Error("Should have made 48 http requests:", counter.Count())
 	}
+	storageClient.Close()
 }

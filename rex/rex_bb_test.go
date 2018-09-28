@@ -43,10 +43,10 @@ func TestRealBucket(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// Wait for all tasks to terminate.
+	// Wait for all tasks to terminate.  The tasks will each use queue-1, and terminate
+	// with an error when they reach Stabilizing state.
 	th.Wait()
 
-	// At that point, each task should have terminated, with error in Stabilizing state.
 	for _, tk := range saver.GetTasks() {
 		log.Println(len(tk), tk[len(tk)-1])
 		if len(tk) != 4 {

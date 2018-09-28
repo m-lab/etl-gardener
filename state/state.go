@@ -288,6 +288,7 @@ func (ds *DatastoreSaver) GetStatus(ctx context.Context) ([]Task, error) {
 // WriteHTMLStatusTo writes HTML formatted task status.
 func WriteHTMLStatusTo(w io.Writer, project string) error {
 	ds, err := NewDatastoreSaver(project)
+	defer ds.Client.Close()
 	if err != nil {
 		fmt.Fprintln(w, "Error creating Datastore client:", err)
 		return err
