@@ -230,7 +230,12 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Fprintf(w, "</br></br>\n")
-	state.WriteHTMLStatusTo(w, env.Project)
+
+	expString := os.Getenv("EXPERIMENTS")
+	experiments := strings.Split(expString, ",")
+	for _, expt := range experiments {
+		state.WriteHTMLStatusTo(w, env.Project, strings.TrimSpace(expt))
+	}
 	fmt.Fprintf(w, "</br>\n")
 
 	env := os.Environ()
@@ -273,49 +278,49 @@ func runService() {
 		log.Println(err)
 		return
 		// leaving healthy = false should eventually lead to rollback.
-	} else {
-		// TODO - add termination channel.
-		startDate := env.StartDate
-		bucket := os.Getenv("TASKFILE_BUCKET")
-		expString := os.Getenv("EXPERIMENTS")
-		if bucket == "" {
-			log.Println("Error: TASKFILE_BUCKET environment variable not set.")
-		} else if expString == "" {
-			log.Println("Error: EXPERIMENTS environment variable not set.")
+	}
+	// TODO - add termination channel.
+	startDate := env.StartDate
+	bucket := os.Getenv("TASKFILE_BUCKET")
+	expString := os.Getenv("EXPERIMENTS")
+	if bucket == "" {
+		log.Println("Error: TASKFILE_BUCKET environment variable not set.")
+		return
+	}
+	if expString == "" {
+		log.Println("Error: EXPERIMENTS environment variable not set.")
+		return
+	}
+	experiments := strings.Split(expString, ",")
+	ds, err := state.NewDatastoreSaver(env.Project)
+	if err != nil {
+		log.Println(err)
+		return
+		// We just leave healthy = false, and kubernetes should restart.
+	}
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	for i := range experiments {
+		experiments[i] = strings.TrimSpace(experiments[i])
+
+		tasks, err := ds.GetStatus(ctx, experiments[i])
+		cancel()
+		if err != nil {
+			log.Println(err)
 		} else {
-			experiments := strings.Split(expString, ",")
-			ds, err := state.NewDatastoreSaver(env.Project)
+			maxDate, err := handler.RestartTasks(tasks)
 			if err != nil {
 				log.Println(err)
-				// We just leave healthy = false, and kubernetes should restart.
 			} else {
-				ctx := context.Background()
-				ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-
-				for i := range experiments {
-					experiments[i] = strings.TrimSpace(experiments[i])
-
-					tasks, err := ds.GetStatus(ctx, experiments[i])
-					cancel()
-					if err != nil {
-						log.Println(err)
-					} else {
-						maxDate, err := handler.RestartTasks(tasks)
-						if err != nil {
-							log.Println(err)
-						} else {
-							if maxDate.After(startDate) {
-								startDate = maxDate.AddDate(0, 0, 1)
-							}
-						}
-					}
+				if maxDate.After(startDate) {
+					startDate = maxDate.AddDate(0, 0, 1)
 				}
 			}
-			log.Println("Using start date of", startDate)
-			go doDispatchLoop(handler, startDate, env.StartDate, bucket, experiments)
-			healthy = true
 		}
 	}
+	log.Println("Using start date of", startDate)
+	go doDispatchLoop(handler, startDate, env.StartDate, bucket, experiments)
+	healthy = true
 
 	// ListenAndServe, and terminate when it returns.
 	log.Println("Running as service")
