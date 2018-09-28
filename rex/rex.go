@@ -303,6 +303,9 @@ func waitForJob(ctx context.Context, job *bigquery.Job, maxBackoff time.Duration
 			if strings.Contains(status.Err().Error(), "Not found: Table") {
 				return state.ErrTableNotFound
 			}
+			if strings.Contains(status.Err().Error(), "rows belong to different partitions") {
+				return state.ErrRowsFromOtherPartition
+			}
 		} else if status.Done() {
 			break
 		}

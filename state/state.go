@@ -47,9 +47,10 @@ var StateNames = map[State]string{
 
 // Task Errors
 var (
-	ErrInvalidQueue  = errors.New("invalid queue")
-	ErrTaskSuspended = errors.New("task suspended")
-	ErrTableNotFound = errors.New("Not found: Table")
+	ErrInvalidQueue           = errors.New("invalid queue")
+	ErrTaskSuspended          = errors.New("task suspended")
+	ErrTableNotFound          = errors.New("Not found: Table")
+	ErrRowsFromOtherPartition = errors.New("Rows belong to different partition")
 )
 
 // Executor describes an object that can do all the required steps to execute a Task.
