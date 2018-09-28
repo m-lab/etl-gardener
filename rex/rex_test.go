@@ -79,12 +79,20 @@ func TestWithTaskQueue(t *testing.T) {
 	}
 
 	th.Wait()
-	log.Println(counter.Count())
-	log.Println("Deletes:", len(saver.GetDeletes()))
+
+	if counter.Count() != 3 {
+		t.Error("Wrong number of client calls", counter.Count())
+	}
+	if len(saver.GetDeletes()) != 3 {
+		t.Error("Wrong number of task deletes", len(saver.GetDeletes()))
+	}
 
 	tasks := saver.GetTasks()
-	for _, t := range tasks {
-		log.Println(t)
+	for _, task := range tasks {
+		log.Println(task)
+		if task[len(task)-1].State != state.Done {
+			t.Error("Bad task state:", task)
+		}
 	}
 
 }
