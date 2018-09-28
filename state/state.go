@@ -221,6 +221,7 @@ func (t *Task) Delete() error {
 
 // SetError adds error information and saves to the "saver"
 func (t *Task) SetError(err error, info string) error {
+	metrics.FailCount.WithLabelValues(info)
 	if t.saver == nil {
 		return ErrNoSaver
 	}
