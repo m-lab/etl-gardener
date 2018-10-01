@@ -116,6 +116,8 @@ func LoadEnv() {
 	if bucket == "" {
 		log.Println("Error: TASKFILE_BUCKET environment variable not set.")
 		env.Error = ErrNoBucket
+	} else {
+		env.Bucket = bucket
 	}
 
 	env.Commit = os.Getenv("GIT_COMMIT")
