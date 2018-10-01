@@ -57,14 +57,13 @@ var env environment
 
 // Errors associated with environment.
 var (
-	ErrNoProject             = errors.New("No env var for Project")
-	ErrNoQueueBase           = errors.New("No env var for QueueBase")
-	ErrNoNumQueues           = errors.New("No env var for NumQueues")
-	ErrNoStartDate           = errors.New("No env var for StartDate")
-	ErrBadStartDate          = errors.New("Bad StartDate")
-	ErrNoExperiment          = errors.New("No env var for Experiment")
-	ErrMoreThanOneExperiment = errors.New("Should be only one Experiment")
-	ErrNoBucket              = errors.New("No env var for Bucket")
+	ErrNoProject    = errors.New("No env var for Project")
+	ErrNoQueueBase  = errors.New("No env var for QueueBase")
+	ErrNoNumQueues  = errors.New("No env var for NumQueues")
+	ErrNoStartDate  = errors.New("No env var for StartDate")
+	ErrBadStartDate = errors.New("Bad StartDate")
+	ErrNoExperiment = errors.New("No env var for Experiment")
+	ErrNoBucket     = errors.New("No env var for Bucket")
 )
 
 // LoadEnv loads any required environment variables.
