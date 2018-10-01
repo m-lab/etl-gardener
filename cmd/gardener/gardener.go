@@ -36,12 +36,14 @@ import (
 // Any env vars that we want to read only at startup should be stored here.
 type environment struct {
 	// Vars for newDispatcher
-	Error     error
-	Project   string
-	Dataset   string
-	QueueBase string
-	NumQueues int
-	StartDate time.Time
+	Error      error
+	Project    string
+	Dataset    string
+	QueueBase  string
+	Experiment string
+	Bucket     string
+	NumQueues  int
+	StartDate  time.Time
 
 	// Vars for Status()
 	Commit  string
@@ -60,6 +62,8 @@ var (
 	ErrNoNumQueues  = errors.New("No env var for NumQueues")
 	ErrNoStartDate  = errors.New("No env var for StartDate")
 	ErrBadStartDate = errors.New("Bad StartDate")
+	ErrNoExperiment = errors.New("No env var for Experiment")
+	ErrNoBucket     = errors.New("No env var for Bucket")
 )
 
 // LoadEnv loads any required environment variables.
@@ -92,6 +96,22 @@ func LoadEnv() {
 			env.Error = ErrBadStartDate
 			log.Println(env.Error)
 		}
+	}
+
+	expt := os.Getenv("EXPERIMENT")
+	if expt == "" {
+		env.Error = ErrNoExperiment
+		log.Println("Error: EXPERIMENT environment variable not set.")
+	} else {
+		env.Experiment = strings.TrimSpace(expt)
+	}
+
+	bucket := os.Getenv("TASKFILE_BUCKET")
+	if bucket == "" {
+		log.Println("Error: TASKFILE_BUCKET environment variable not set.")
+		env.Error = ErrNoBucket
+	} else {
+		env.Bucket = bucket
 	}
 
 	env.Commit = os.Getenv("GIT_COMMIT")
@@ -160,21 +180,20 @@ func taskHandlerFromEnv(client *http.Client) (*reproc.TaskHandler, error) {
 // doDispatchLoop just sequences through archives in date order.
 // It will generally be blocked on the queues.
 // It will start processing at startDate, and when it catches up to "now" it will restart at restartDate.
-func doDispatchLoop(handler *reproc.TaskHandler, startDate time.Time, restartDate time.Time, bucket string, experiments []string) {
+func doDispatchLoop(handler *reproc.TaskHandler, startDate time.Time, restartDate time.Time, bucket string, experiment string) {
 	log.Println("(Re)starting at", startDate)
 	next := startDate
 
 	for {
-		for _, e := range experiments {
-			prefix := next.Format(fmt.Sprintf("gs://%s/%s/2006/01/02/", bucket, e))
 
-			// Note that this blocks until a queue is available.
-			err := handler.AddTask(prefix)
-			if err != nil {
-				// Only error expected here is ErrTerminating
-				log.Println(err)
-				return
-			}
+		prefix := next.Format(fmt.Sprintf("gs://%s/%s/2006/01/02/", bucket, experiment))
+
+		// Note that this blocks until a queue is available.
+		err := handler.AddTask(prefix)
+		if err != nil {
+			// Only error expected here is ErrTerminating
+			log.Println(err)
+			return
 		}
 
 		next = next.AddDate(0, 0, 1)
@@ -230,7 +249,8 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Fprintf(w, "</br></br>\n")
-	state.WriteHTMLStatusTo(w, env.Project)
+
+	state.WriteHTMLStatusTo(w, env.Project, env.Experiment)
 	fmt.Fprintf(w, "</br>\n")
 
 	env := os.Environ()
@@ -251,9 +271,9 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "ok")
 }
 
-// runService starts a service handler and runs forever.
+// setupService prepares the setting for a service.
 // The configuration info comes from environment variables.
-func runService() {
+func setupService() error {
 	// Enable block profiling
 	runtime.SetBlockProfileRate(1000000) // One event per msec.
 
@@ -269,56 +289,42 @@ func runService() {
 	http.HandleFunc("/ready", healthCheck)
 
 	handler, err := taskHandlerFromEnv(http.DefaultClient)
+
 	if err != nil {
 		log.Println(err)
-		// leaving healthy = false should eventually lead to rollback.
-	} else {
-		// TODO - add termination channel.
-		startDate := env.StartDate
-		bucket := os.Getenv("TASKFILE_BUCKET")
-		expString := os.Getenv("EXPERIMENTS")
-		if bucket == "" {
-			log.Println("Error: TASKFILE_BUCKET environment variable not set.")
-		} else if expString == "" {
-			log.Println("Error: EXPERIMENTS environment variable not set.")
-		} else {
-			experiments := strings.Split(expString, ",")
-			for i := range experiments {
-				experiments[i] = strings.TrimSpace(experiments[i])
-			}
+		return err
+	}
 
-			ds, err := state.NewDatastoreSaver(env.Project)
-			if err != nil {
-				log.Println(err)
-				// We just leave healthy = false, and kubernetes should restart.
-			} else {
-				ctx := context.Background()
-				ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-				tasks, err := ds.GetStatus(ctx)
-				cancel()
-				if err != nil {
-					log.Println(err)
-				} else {
-					maxDate, err := handler.RestartTasks(tasks)
-					if err != nil {
-						log.Println(err)
-					} else {
-						if maxDate.After(startDate) {
-							startDate = maxDate.AddDate(0, 0, 1)
-						}
-					}
-				}
-				log.Println("Using start date of", startDate)
-				go doDispatchLoop(handler, startDate, env.StartDate, bucket, experiments)
-				healthy = true
-			}
-			ds.Client.Close()
+	startDate := env.StartDate
+
+	ds, err := state.NewDatastoreSaver(env.Project)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+
+	tasks, err := ds.GetStatus(ctx, env.Experiment)
+	cancel()
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	maxDate, err := handler.RestartTasks(tasks)
+	if err != nil {
+		log.Println(err)
+		return err
+	} else {
+		if maxDate.After(startDate) {
+			startDate = maxDate.AddDate(0, 0, 1)
 		}
 	}
 
-	// ListenAndServe, and terminate when it returns.
-	log.Println("Running as service")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Println("Using start date of", startDate)
+	go doDispatchLoop(handler, startDate, env.StartDate, env.Bucket, env.Experiment)
+
+	return nil
 }
 
 // ###############################################################################
@@ -334,7 +340,17 @@ func main() {
 	// Check if invoked as a service.
 	isService, _ := strconv.ParseBool(os.Getenv("GARDENER_SERVICE"))
 	if isService {
-		runService()
+		// If setupService() returns an err instead of nil, healthy will be
+		// set as false and eventually it will cause kubernetes to roll back.
+		err := setupService()
+		if err != nil {
+			healthy = false
+			log.Println("Running as unhealthy service")
+		} else {
+			healthy = true
+			log.Println("Running as service")
+		}
+		log.Fatal(http.ListenAndServe(":8080", nil))
 		return
 	}
 

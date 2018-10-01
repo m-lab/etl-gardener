@@ -119,3 +119,10 @@ func TestSourceAndDest(t *testing.T) {
 		t.Error(dest.FullyQualifiedName())
 	}
 }
+
+func TestGetExperiment(t *testing.T) {
+	expt, err := state.GetExperiment("gs://archive-mlab-oti/ndt/2017/06/01/")
+	if expt != "ndt" || err != nil {
+		t.Error(err)
+	}
+}
