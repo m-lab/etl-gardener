@@ -317,6 +317,7 @@ func runService() error {
 	maxDate, err := handler.RestartTasks(tasks)
 	if err != nil {
 		log.Println(err)
+		return err
 	} else {
 		if maxDate.After(startDate) {
 			startDate = maxDate.AddDate(0, 0, 1)
@@ -349,7 +350,7 @@ func main() {
 		err := runService()
 		if err != nil {
 			healthy = false
-			log.Println("Running as service")
+			log.Println("Running as unhealthy service")
 			log.Fatal(http.ListenAndServe(":8080", nil))
 		}
 		return
