@@ -104,12 +104,7 @@ func LoadEnv() {
 		env.Error = ErrNoExperiment
 		log.Println("Error: EXPERIMENT environment variable not set.")
 	} else {
-		experiments := strings.Split(expt, ",")
-		if len(experiments) != 1 {
-			env.Error = ErrMoreThanOneExperiment
-			log.Println("Error: EXPERIMENT environment should have only one experiment.")
-		}
-		env.Experiment = strings.TrimSpace(experiments[0])
+		env.Experiment = strings.TrimSpace(expt)
 	}
 
 	bucket := os.Getenv("TASKFILE_BUCKET")
@@ -277,11 +272,9 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "ok")
 }
 
-// SetupService prepares the setting for a service.
+// setupService prepares the setting for a service.
 // The configuration info comes from environment variables.
-// If it returns an err instead of nil, healthy will be set as false
-// and eventually it will cause kubernetes to roll back.
-func SetupService() error {
+func setupService() error {
 	// Enable block profiling
 	runtime.SetBlockProfileRate(1000000) // One event per msec.
 
@@ -348,7 +341,9 @@ func main() {
 	// Check if invoked as a service.
 	isService, _ := strconv.ParseBool(os.Getenv("GARDENER_SERVICE"))
 	if isService {
-		err := SetupService()
+		// If setupService() returns an err instead of nil, healthy will be
+		// set as false and eventually it will cause kubernetes to roll back.
+		err := setupService()
 		if err != nil {
 			healthy = false
 			log.Println("Running as unhealthy service")
