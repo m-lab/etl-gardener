@@ -56,11 +56,13 @@ var env environment
 
 // Errors associated with environment.
 var (
-	ErrNoProject    = errors.New("No env var for Project")
-	ErrNoQueueBase  = errors.New("No env var for QueueBase")
-	ErrNoNumQueues  = errors.New("No env var for NumQueues")
-	ErrNoStartDate  = errors.New("No env var for StartDate")
-	ErrBadStartDate = errors.New("Bad StartDate")
+	ErrNoProject             = errors.New("No env var for Project")
+	ErrNoQueueBase           = errors.New("No env var for QueueBase")
+	ErrNoNumQueues           = errors.New("No env var for NumQueues")
+	ErrNoStartDate           = errors.New("No env var for StartDate")
+	ErrBadStartDate          = errors.New("Bad StartDate")
+	ErrNoExperiment          = errors.New("No env var for Experiment")
+	ErrMoreThanOneExperiment = errors.New("Should be only one Experiment")
 )
 
 // LoadEnv loads any required environment variables.
@@ -95,10 +97,17 @@ func LoadEnv() {
 		}
 	}
 
-	env.Experiment = os.Getenv("EXPERIMENT")
-	experiments := strings.Split(env.Experiment, ",")
-	if len(experiments) != 1 {
-		log.Println("Error: EXPERIMENT environment should have only one experiment.")
+	expt := os.Getenv("EXPERIMENT")
+	if expt == "" {
+		env.Error = ErrNoExperiment
+		log.Println("Error: EXPERIMENT environment variable not set.")
+	} else {
+		experiments := strings.Split(expt, ",")
+		if len(experiments) != 1 {
+			env.Error = ErrMoreThanOneExperiment
+			log.Println("Error: EXPERIMENT environment should have only one experiment.")
+		}
+		env.Experiment = strings.TrimSpace(experiments[0])
 	}
 
 	env.Commit = os.Getenv("GIT_COMMIT")
@@ -237,7 +246,7 @@ func Status(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Fprintf(w, "</br></br>\n")
 
-	state.WriteHTMLStatusTo(w, env.Project, strings.TrimSpace(env.Experiment))
+	state.WriteHTMLStatusTo(w, env.Project, env.Experiment)
 	fmt.Fprintf(w, "</br>\n")
 
 	env := os.Environ()
@@ -298,11 +307,6 @@ func runService() error {
 	}
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-
-	if env.Experiment == "" {
-		log.Println("Error: EXPERIMENT environment variable not set.")
-		return errors.New("EXPERIMENT environment variable not set")
-	}
 
 	tasks, err := ds.GetStatus(ctx, env.Experiment)
 	cancel()
