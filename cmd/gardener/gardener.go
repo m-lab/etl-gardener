@@ -36,12 +36,13 @@ import (
 // Any env vars that we want to read only at startup should be stored here.
 type environment struct {
 	// Vars for newDispatcher
-	Error     error
-	Project   string
-	Dataset   string
-	QueueBase string
-	NumQueues int
-	StartDate time.Time
+	Error      error
+	Project    string
+	Dataset    string
+	QueueBase  string
+	Experiment string
+	NumQueues  int
+	StartDate  time.Time
 
 	// Vars for Status()
 	Commit  string
@@ -92,6 +93,12 @@ func LoadEnv() {
 			env.Error = ErrBadStartDate
 			log.Println(env.Error)
 		}
+	}
+
+	env.Experiment = os.Getenv("EXPERIMENT")
+	experiments := strings.Split(env.Experiment, ",")
+	if len(experiments) != 1 {
+		log.Println("Error: EXPERIMENT environment should have only one experiment.")
 	}
 
 	env.Commit = os.Getenv("GIT_COMMIT")
@@ -230,11 +237,7 @@ func Status(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Fprintf(w, "</br></br>\n")
 
-	expString := os.Getenv("EXPERIMENT")
-	experiments := strings.Split(expString, ",")
-	if len(experiments) == 1 {
-		state.WriteHTMLStatusTo(w, env.Project, strings.TrimSpace(experiments[0]))
-	}
+	state.WriteHTMLStatusTo(w, env.Project, strings.TrimSpace(env.Experiment))
 	fmt.Fprintf(w, "</br>\n")
 
 	env := os.Environ()
@@ -257,7 +260,9 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 
 // runService starts a service handler and runs forever.
 // The configuration info comes from environment variables.
-func runService() {
+// On error, this returns, leaving healthy = false, which should
+// cause kubernetes to roll back.
+func runService() error {
 	// Enable block profiling
 	runtime.SetBlockProfileRate(1000000) // One event per msec.
 
@@ -273,43 +278,37 @@ func runService() {
 	http.HandleFunc("/ready", healthCheck)
 
 	handler, err := taskHandlerFromEnv(http.DefaultClient)
-	// On error, this returns, leaving healthy = false, which should cause kubernetes to roll back.
+
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 	// TODO - add termination channel.
 	startDate := env.StartDate
 	bucket := os.Getenv("TASKFILE_BUCKET")
 	if bucket == "" {
 		log.Println("Error: TASKFILE_BUCKET environment variable not set.")
-		return
+		return errors.New("TASKFILE_BUCKET environment variable not set")
 	}
 
 	ds, err := state.NewDatastoreSaver(env.Project)
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 
-	expString := os.Getenv("EXPERIMENT")
-	if expString == "" {
+	if env.Experiment == "" {
 		log.Println("Error: EXPERIMENT environment variable not set.")
-		return
+		return errors.New("EXPERIMENT environment variable not set")
 	}
-	experiments := strings.Split(expString, ",")
-	if len(experiments) != 1 {
-		log.Println("Error: EXPERIMENT environment should have only one experiment.")
-		return
-	}
-	expt := strings.TrimSpace(experiments[0])
-	tasks, err := ds.GetStatus(ctx, expt)
+
+	tasks, err := ds.GetStatus(ctx, env.Experiment)
 	cancel()
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 	maxDate, err := handler.RestartTasks(tasks)
 	if err != nil {
@@ -321,12 +320,13 @@ func runService() {
 	}
 
 	log.Println("Using start date of", startDate)
-	go doDispatchLoop(handler, startDate, env.StartDate, bucket, expt)
+	go doDispatchLoop(handler, startDate, env.StartDate, bucket, env.Experiment)
 	healthy = true
 
 	// ListenAndServe, and terminate when it returns.
 	log.Println("Running as service")
 	log.Fatal(http.ListenAndServe(":8080", nil))
+	return nil
 }
 
 // ###############################################################################
@@ -342,7 +342,12 @@ func main() {
 	// Check if invoked as a service.
 	isService, _ := strconv.ParseBool(os.Getenv("GARDENER_SERVICE"))
 	if isService {
-		runService()
+		err := runService()
+		if err != nil {
+			healthy = false
+			log.Println("Running as service")
+			log.Fatal(http.ListenAndServe(":8080", nil))
+		}
 		return
 	}
 
