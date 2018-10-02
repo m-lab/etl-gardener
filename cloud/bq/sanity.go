@@ -294,7 +294,9 @@ func (at *AnnotatedTable) GetPartitionInfo(ctx context.Context) (*bqext.Partitio
 	return &pInfo, nil
 }
 
-// TODO - move these up with other methods after review.
+// checkAlmostAsBig compares the current and given AnnotatedTable test counts and
+// task file counts. When the current AnnotatedTable has more than 1% fewer task files or 5%
+// fewer rows compare to the given AnnotatedTable, then a descriptive error is returned.
 func (at *AnnotatedTable) checkAlmostAsBig(ctx context.Context, other *AnnotatedTable) error {
 	thisDetail, err := at.CachedDetail(ctx)
 	if err != nil {
@@ -310,7 +312,9 @@ func (at *AnnotatedTable) checkAlmostAsBig(ctx context.Context, other *Annotated
 	if float32(thisDetail.TaskFileCount) < 0.99*float32(otherDetail.TaskFileCount) {
 		return ErrTooFewTasks
 	} else if thisDetail.TaskFileCount < otherDetail.TaskFileCount {
-		log.Printf("Warning - fewer task files: %d < %d\n", thisDetail.TaskFileCount, otherDetail.TaskFileCount)
+		log.Printf("Warning - fewer task files: %s(%d) < %s(%d)\n",
+			at.Table.FullyQualifiedName(), thisDetail.TaskFileCount,
+			other.Table.FullyQualifiedName(), otherDetail.TaskFileCount)
 	}
 
 	// Check that receiver table contains at least 95% as many tests as
@@ -318,7 +322,9 @@ func (at *AnnotatedTable) checkAlmostAsBig(ctx context.Context, other *Annotated
 	if float32(thisDetail.TestCount) < 0.95*float32(otherDetail.TestCount) {
 		return ErrTooFewTests
 	} else if thisDetail.TestCount < otherDetail.TestCount {
-		log.Printf("Warning - fewer tests: %d < %d\n", thisDetail.TestCount, otherDetail.TestCount)
+		log.Printf("Warning - fewer tests: %s(%d) < %s(%d)\n",
+			at.Table.FullyQualifiedName(), thisDetail.TestCount,
+			other.Table.FullyQualifiedName(), otherDetail.TestCount)
 	}
 	return nil
 }
@@ -374,14 +380,14 @@ func WaitForJob(ctx context.Context, job *bigquery.Job, maxBackoff time.Duration
 // TODO(gfr) Ideally this should be done by a separate process with
 // higher priviledge than the reprocessing and dedupping processes.
 // TODO(gfr) Also support copying from a template instead of partition?
-func SanityCheckAndCopy(ctx context.Context, client *bigquery.Client, srcTable, destTable *bigquery.Table) error {
+func SanityCheckAndCopy(ctx context.Context, src, dest *AnnotatedTable) error {
 	// Extract the
-	srcParts, err := getTableParts(srcTable.TableID)
+	srcParts, err := getTableParts(src.TableID)
 	if err != nil {
 		return err
 	}
 
-	destParts, err := getTableParts(destTable.TableID)
+	destParts, err := getTableParts(dest.TableID)
 	if err != nil {
 		return err
 	}
@@ -389,9 +395,19 @@ func SanityCheckAndCopy(ctx context.Context, client *bigquery.Client, srcTable, 
 		return ErrMismatchedPartitions
 	}
 
-	copier := destTable.CopierFrom(srcTable)
+	err = src.checkAlmostAsBig(ctx, dest)
+	if err != nil {
+		return err
+	}
+
+	err = src.checkModifiedAfter(ctx, dest)
+	if err != nil {
+		return err
+	}
+
+	copier := dest.Table.CopierFrom(src.Table)
 	copier.WriteDisposition = bigquery.WriteTruncate
-	log.Println("Copying...", srcTable.TableID)
+	log.Println("Copying...", src.TableID)
 	job, err := copier.Run(ctx)
 	if err != nil {
 		return err
