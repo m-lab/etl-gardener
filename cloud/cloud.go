@@ -28,8 +28,9 @@ type BQConfig struct {
 
 	// In prod, most services are from mlab-oti, but BQ tables may be in measurement-lab.
 	// So we provide a separate BQProject
-	BQProject string // Project for BigQuery tables
-	BQDataset string // Dataset for BigQuery tables
+	BQProject      string // Project for BigQuery tables
+	BQBatchDataset string // Dataset for intermediate BigQuery tables
+	BQFinalDataset string // Dataset for final BigQuery tables
 }
 
 // *******************************************************************
