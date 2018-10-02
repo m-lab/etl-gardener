@@ -48,9 +48,9 @@ type ReprocessingExecutor struct {
 	BucketOpts []option.ClientOption
 }
 
-// GetDS constructs an appropriate Dataset for BQ operations.
-func (rex *ReprocessingExecutor) GetDS() (bqext.Dataset, error) {
-	return bqext.NewDataset(rex.BQProject, rex.BQDataset, rex.Options...)
+// GetBatchDS constructs an appropriate Dataset for BQ operations.
+func (rex *ReprocessingExecutor) GetBatchDS() (bqext.Dataset, error) {
+	return bqext.NewDataset(rex.BQProject, rex.BQBatchDataset, rex.Options...)
 }
 
 // ErrNoSaver is returned when saver has not been set.
@@ -97,10 +97,10 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 
 	case state.Stabilizing:
 		// Wait for the streaming buffer to be nil.
-		ds, err := rex.GetDS()
+		ds, err := rex.GetBatchDS()
 		if err != nil {
 			// SetError also pushes to datastore, like Update()
-			t.SetError(err, "rex.GetDS")
+			t.SetError(err, "rex.GetBatchDS")
 			return err
 		}
 		s, _, err := t.SourceAndDest(&ds)
@@ -248,9 +248,9 @@ func (rex *ReprocessingExecutor) queue(t *state.Task) (int, error) {
 
 func (rex *ReprocessingExecutor) dedup(t *state.Task) error {
 	// Launch the dedup request, and save the JobID
-	ds, err := rex.GetDS()
+	ds, err := rex.GetBatchDS()
 	if err != nil {
-		t.SetError(err, "GetDS")
+		t.SetError(err, "GetBatchDS")
 		return err
 	}
 	src, dest, err := t.SourceAndDest(&ds)
@@ -323,12 +323,12 @@ func waitForJob(ctx context.Context, job *bigquery.Job, maxBackoff time.Duration
 
 func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}) error {
 	// TODO use a simple client instead of creating dataset?
-	ds, err := bqext.NewDataset(rex.Project, rex.BQDataset, rex.Options...)
+	ds, err := bqext.NewDataset(rex.Project, rex.BQBatchDataset, rex.Options...)
 	if err != nil {
 		t.SetError(err, "NewDataset")
 		return err
 	}
-	src, _, err := t.SourceAndDest(&ds)
+	src, copy, err := t.SourceAndDest(&ds)
 	if err != nil {
 		t.SetError(err, "SourceAndDest")
 		return err
@@ -355,7 +355,7 @@ func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}
 	}
 
 	// Wait for JobID to complete, then delete the template table.
-	log.Println("Completed deduplication, deleting", src.FullyQualifiedName())
+	log.Println("Completed deduplication, deleting source", src.FullyQualifiedName())
 	// If deduplication was successful, we should delete the source table.
 	ctx, cf := context.WithTimeout(context.Background(), time.Minute)
 	defer cf()
@@ -366,6 +366,27 @@ func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}
 		return err
 	}
 
-	// TODO - Copy to base_tables.
-	return nil
+	// Skip any deployment that does not specify the final dataset name.
+	if rex.BQFinalDataset == "" {
+		return nil
+	}
+
+	// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX - New code.
+	// Create a ds for writing to the final dataset.
+	// TODO: check that ds exists.
+	finalDs, err := bqext.NewDataset(rex.Project, rex.BQFinalDataset, rex.Options...)
+	if err != nil {
+		t.SetError(err, "NewDataset final")
+		return err
+	}
+	// Create reference to final Table using the same partitioned TableID from above.
+	// TODO: does this work?
+	finalTable := finalDs.Table(copy.TableID)
+
+	// TODO: checkAlmostAsBig
+	// TODO: checkModifiedAfter
+
+	// Copy to Final Dataset tables.
+	err = bq.SanityCheckAndCopy(ctx, finalDs.BqClient, copy, finalTable)
+	return err
 }

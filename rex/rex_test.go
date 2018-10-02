@@ -62,7 +62,7 @@ func (s *testSaver) GetDeletes() map[string]struct{} {
 func TestWithTaskQueue(t *testing.T) {
 	client, counter := cloud.DryRunClient()
 	config := cloud.Config{Project: "mlab-testing", Client: client}
-	bqConfig := cloud.BQConfig{Config: config, BQProject: "bqproject", BQDataset: "dataset"}
+	bqConfig := cloud.BQConfig{Config: config, BQProject: "bqproject", BQBatchDataset: "dataset"}
 	bucketOpts := []option.ClientOption{option.WithHTTPClient(client)}
 	exec := rex.ReprocessingExecutor{BQConfig: bqConfig, BucketOpts: bucketOpts}
 	saver := newTestSaver()
