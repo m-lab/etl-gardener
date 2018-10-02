@@ -9,6 +9,7 @@
 package reproc
 
 import (
+	"context"
 	"errors"
 	"log"
 	"strings"
@@ -89,7 +90,7 @@ func NewTaskHandler(exec state.Executor, queues []string, saver state.Saver) *Ta
 var ErrTerminating = errors.New("TaskHandler is terminating")
 
 // StartTask starts a single task.  It should be properly initialized except for saver.
-func (th *TaskHandler) StartTask(t state.Task) {
+func (th *TaskHandler) StartTask(ctx context.Context, t state.Task) {
 	t.SetSaver(th.saver)
 
 	// WARNING:  There is a race here when terminating, if a task gets
@@ -105,7 +106,7 @@ func (th *TaskHandler) StartTask(t state.Task) {
 		log.Println("Returning", t.Queue)
 		th.taskQueues <- t.Queue
 	}
-	go t.Process(th.exec, doneWithQueue, th.Terminator)
+	go t.Process(ctx, th.exec, doneWithQueue, th.Terminator)
 }
 
 // AddTask adds a new task, blocking until the task has been accepted.
@@ -113,7 +114,7 @@ func (th *TaskHandler) StartTask(t state.Task) {
 // for driving the reprocessing.
 // May return ErrTerminating, if th has started termination.
 // TODO: Add prometheus metrics.
-func (th *TaskHandler) AddTask(prefix string) error {
+func (th *TaskHandler) AddTask(ctx context.Context, prefix string) error {
 	log.Println("Waiting for a queue")
 	select {
 	// Wait until there is an available task queue.
@@ -124,7 +125,7 @@ func (th *TaskHandler) AddTask(prefix string) error {
 			return err
 		}
 		log.Println("Adding:", t.Name)
-		th.StartTask(*t)
+		th.StartTask(ctx, *t)
 		return nil
 
 	// Or until we start termination.
@@ -137,7 +138,9 @@ func (th *TaskHandler) AddTask(prefix string) error {
 // RestartTasks restarts all the tasks, allocating queues as needed.
 // SHOULD ONLY be called at startup.
 // Returns date of next jobs to process.
-func (th *TaskHandler) RestartTasks(tasks []state.Task) (time.Time, error) {
+// NOTE: The ctx parameter will be used for all rpc operations for all tasks, and must be
+// long lived.
+func (th *TaskHandler) RestartTasks(ctx context.Context, tasks []state.Task) (time.Time, error) {
 	// Retrieve all task queues from the pool.
 	queues := make(map[string]struct{}, 20)
 queueLoop:
@@ -171,7 +174,7 @@ queueLoop:
 			if ok {
 				delete(queues, t.Queue)
 				log.Println("Restarting", t)
-				th.StartTask(t)
+				th.StartTask(ctx, t)
 			} else {
 				log.Println("Queue", t.Queue, "already in use.  Skipping", t)
 				metrics.FailCount.WithLabelValues("queue not available").Inc()
@@ -180,7 +183,7 @@ queueLoop:
 		} else {
 			// No queue, just restart...
 			log.Println("Restarting", t)
-			th.StartTask(t)
+			th.StartTask(ctx, t)
 		}
 		if t.Date.After(maxDate) {
 			maxDate = t.Date

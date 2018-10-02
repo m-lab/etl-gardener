@@ -145,7 +145,11 @@ func NewBQConfig(config cloud.Config) cloud.BQConfig {
 
 // dispatcherFromEnv creates a Dispatcher struct initialized from environment variables.
 // It uses PROJECT, QUEUE_BASE, and NUM_QUEUES.
+// NOTE: ctx should only be used within the function scope, and not reused later.
+// Not currently clear if that is true.
 func taskHandlerFromEnv(ctx context.Context, client *http.Client) (*reproc.TaskHandler, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	if env.Error != nil {
 		log.Println(env.Error)
 		log.Println(env)
@@ -153,7 +157,6 @@ func taskHandlerFromEnv(ctx context.Context, client *http.Client) (*reproc.TaskH
 	}
 
 	config := cloud.Config{
-		Context: ctx,
 		Project: env.Project,
 		Client:  client}
 
@@ -165,7 +168,7 @@ func taskHandlerFromEnv(ctx context.Context, client *http.Client) (*reproc.TaskH
 	}
 
 	// TODO move DatastoreSaver to another package?
-	saver, err := state.NewDatastoreSaver(bqConfig.Context, env.Project)
+	saver, err := state.NewDatastoreSaver(ctx, env.Project)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +178,7 @@ func taskHandlerFromEnv(ctx context.Context, client *http.Client) (*reproc.TaskH
 // doDispatchLoop just sequences through archives in date order.
 // It will generally be blocked on the queues.
 // It will start processing at startDate, and when it catches up to "now" it will restart at restartDate.
-func doDispatchLoop(handler *reproc.TaskHandler, startDate time.Time, restartDate time.Time, bucket string, experiment string) {
+func doDispatchLoop(ctx context.Context, handler *reproc.TaskHandler, startDate time.Time, restartDate time.Time, bucket string, experiment string) {
 	log.Println("(Re)starting at", startDate)
 	next := startDate
 
@@ -184,7 +187,7 @@ func doDispatchLoop(handler *reproc.TaskHandler, startDate time.Time, restartDat
 		prefix := next.Format(fmt.Sprintf("gs://%s/%s/2006/01/02/", bucket, experiment))
 
 		// Note that this blocks until a queue is available.
-		err := handler.AddTask(prefix)
+		err := handler.AddTask(ctx, prefix)
 		if err != nil {
 			// Only error expected here is ErrTerminating
 			log.Println(err)
@@ -308,7 +311,7 @@ func setupService(ctx context.Context) error {
 		log.Println(err)
 		return err
 	}
-	maxDate, err := handler.RestartTasks(tasks)
+	maxDate, err := handler.RestartTasks(ctx, tasks)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -319,7 +322,7 @@ func setupService(ctx context.Context) error {
 	}
 
 	log.Println("Using start date of", startDate)
-	go doDispatchLoop(handler, startDate, env.StartDate, env.Bucket, env.Experiment)
+	go doDispatchLoop(ctx, handler, startDate, env.StartDate, env.Bucket, env.Experiment)
 
 	return nil
 }

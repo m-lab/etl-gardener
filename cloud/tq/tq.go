@@ -190,7 +190,7 @@ func (qh *QueueHandler) PostAll(bucket string, it *storage.ObjectIterator) (int,
 // PostDay fetches an iterator over the objects with ndt/YYYY/MM/DD prefix,
 // and passes the iterator to postDay with appropriate queue.
 // This typically takes about 10 minutes for a 20K task NDT day.
-func (qh *QueueHandler) PostDay(bucket *storage.BucketHandle, bucketName, prefix string) (int, error) {
+func (qh *QueueHandler) PostDay(ctx context.Context, bucket *storage.BucketHandle, bucketName, prefix string) (int, error) {
 	log.Println("Adding ", prefix, " to ", qh.Queue)
 	qry := storage.Query{
 		Delimiter: "/",
@@ -198,7 +198,7 @@ func (qh *QueueHandler) PostDay(bucket *storage.BucketHandle, bucketName, prefix
 	}
 	// TODO - handle timeout errors?
 	// TODO - should we add a deadline?
-	it := bucket.Objects(qh.Context, &qry)
+	it := bucket.Objects(ctx, &qry)
 	return qh.PostAll(bucketName, it)
 }
 

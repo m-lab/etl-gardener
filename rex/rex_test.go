@@ -63,17 +63,17 @@ func (s *testSaver) GetDeletes() map[string]struct{} {
 func TestWithTaskQueue(t *testing.T) {
 	ctx := context.Background()
 	client, counter := cloud.DryRunClient()
-	config := cloud.Config{Context: ctx, Project: "mlab-testing", Client: client}
+	config := cloud.Config{Project: "mlab-testing", Client: client}
 	bqConfig := cloud.BQConfig{Config: config, BQProject: "bqproject", BQBatchDataset: "dataset"}
 	bucketOpts := []option.ClientOption{option.WithHTTPClient(client)}
 	exec := rex.ReprocessingExecutor{BQConfig: bqConfig, BucketOpts: bucketOpts}
 	saver := newTestSaver()
 	th := reproc.NewTaskHandler(&exec, []string{"queue-1"}, saver)
 
-	th.AddTask("gs://foo/bar/2001/01/01/")
+	th.AddTask(ctx, "gs://foo/bar/2001/01/01/")
 
-	go th.AddTask("gs://foo/bar/2001/01/02/")
-	go th.AddTask("gs://foo/bar/2001/01/03/")
+	go th.AddTask(ctx, "gs://foo/bar/2001/01/02/")
+	go th.AddTask(ctx, "gs://foo/bar/2001/01/03/")
 
 	start := time.Now()
 	for counter.Count() < 3 && time.Now().Before(start.Add(2*time.Second)) {

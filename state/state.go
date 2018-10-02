@@ -57,7 +57,7 @@ var (
 // Used for mocking.
 // Interface must update the task in place, so that state changes are all visible.
 type Executor interface {
-	Next(task *Task, terminate <-chan struct{}) error
+	Next(ctx context.Context, task *Task, terminate <-chan struct{}) error
 }
 
 // Saver provides API for saving Task state.
@@ -261,7 +261,7 @@ type Terminator interface {
 }
 
 // Process handles all steps of processing a task.
-func (t Task) Process(ex Executor, doneWithQueue func(), term Terminator) {
+func (t Task) Process(ctx context.Context, ex Executor, doneWithQueue func(), term Terminator) {
 	metrics.TasksInFlight.Inc()
 	defer metrics.TasksInFlight.Dec()
 loop:
@@ -272,7 +272,7 @@ loop:
 			break loop
 		default:
 			q := t.Queue
-			if err := ex.Next(&t, term.GetNotifyChannel()); err != nil {
+			if err := ex.Next(ctx, &t, term.GetNotifyChannel()); err != nil {
 				break loop
 			}
 			if q != "" && t.Queue == "" {
