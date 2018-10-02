@@ -231,6 +231,10 @@ func (t *Task) Delete() error {
 	if t.saver == nil {
 		return ErrNoSaver
 	}
+	if t.ErrMsg != "" {
+		// TODO: leave tasks with error messages in data store.
+		return nil
+	}
 	return t.saver.DeleteTask(*t)
 }
 
