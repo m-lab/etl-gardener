@@ -20,7 +20,7 @@ import (
 func TestRealBucket(t *testing.T) {
 	client, counter := cloud.DryRunClient()
 	config := cloud.Config{Project: "mlab-testing", Client: client}
-	bqConfig := cloud.BQConfig{Config: config, BQProject: "mlab-testing", BQDataset: "batch"}
+	bqConfig := cloud.BQConfig{Config: config, BQProject: "mlab-testing", BQBatchDataset: "batch"}
 	exec := rex.ReprocessingExecutor{BQConfig: bqConfig}
 	saver := newTestSaver()
 	th := reproc.NewTaskHandler(&exec, []string{"queue-1"}, saver)
