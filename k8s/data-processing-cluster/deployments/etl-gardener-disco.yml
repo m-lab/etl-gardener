@@ -47,7 +47,7 @@ spec:
           value: "archive-{{GCLOUD_PROJECT}}"
         - name: START_DATE
           value: "20160501"
-        - name: EXPERIMENTS
+        - name: EXPERIMENT
           value: "switch"
         - name: DATASET
           value: "batch"
