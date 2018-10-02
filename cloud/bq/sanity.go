@@ -156,7 +156,7 @@ func GetTableDetail(dsExt *bqext.Dataset, table *bigquery.Table) (*Detail, error
 	where := ""
 	if len(parts) > 1 {
 		if len(parts[1]) == 8 {
-			where = "where _PARTITIONTIME = PARSE_TIMESTAMP(\"%Y%m%d\",\"" + parts[1] + "\")"
+			where = "WHERE _PARTITIONTIME = PARSE_TIMESTAMP(\"%Y%m%d\",\"" + parts[1] + "\")"
 		} else {
 			return nil, errors.New("Invalid partition string: " + parts[1])
 		}
@@ -164,15 +164,17 @@ func GetTableDetail(dsExt *bqext.Dataset, table *bigquery.Table) (*Detail, error
 	detail := Detail{}
 	queryString := fmt.Sprintf(`
 		#standardSQL
-		SELECT SUM(tests) AS TestCount, COUNT(task)-1 AS TaskFileCount
+		SELECT
+			SUM(tests) AS TestCount,
+			COUNT(task)-1 AS TaskFileCount
 		FROM (
-			-- This avoids null counts when the partition doesn't exist or is empty.
-  		    SELECT 0 AS tests, "fake-task" AS Task
-  		    UNION ALL
-		  	SELECT COUNT(test_id) AS tests, task_filename AS task
-		  	FROM `+"`%s.%s`"+`
-		  	%s  -- where clause
-		  	GROUP BY Task
+				-- This avoids null counts when the partition doesn't exist or is empty.
+				SELECT 0 AS tests, "fake-task" AS task
+				UNION ALL
+				SELECT COUNT(test_id) AS tests, task_filename AS task
+				FROM `+"`%s.%s`"+`
+				%s  -- where clause
+				GROUP BY task
 		)`, dataset, tableName, where)
 
 	// TODO - this should take a context?
@@ -396,6 +398,6 @@ func SanityCheckAndCopy(ctx context.Context, client *bigquery.Client, srcTable, 
 	}
 
 	err = WaitForJob(context.Background(), job, 10*time.Second)
-	log.Println("Done")
+	log.Println("SanityCheckAndCopy Done")
 	return err
 }
