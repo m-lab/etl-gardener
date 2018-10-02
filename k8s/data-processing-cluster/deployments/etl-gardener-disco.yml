@@ -79,4 +79,4 @@ spec:
             cpu: "1"
 
       nodeSelector:
-        gardener-node: true
+        gardener-node: "true"
