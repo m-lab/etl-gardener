@@ -131,14 +131,14 @@ var dedupTemplateSidestream = `
 var dedupTemplateSwitch = `
 	#standardSQL
 	SELECT
-	  * EXCEPT (row_number)
+		* EXCEPT (row_number)
 	FROM (
 		SELECT
-		  *, ROW_NUMBER() OVER (
-			  PARTITION BY CONCAT(test_id, metric, hostname, experiment)
+			*, ROW_NUMBER() OVER (
+				PARTITION BY CONCAT(test_id, metric, hostname, experiment)
 			) AS row_number
 		FROM ` + "`%s`" + `
-  )
+	)
 	WHERE
 		row_number = 1`
 
