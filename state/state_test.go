@@ -88,12 +88,11 @@ func TestTaskBasics(t *testing.T) {
 		t.Error("Should have error", tasks[2])
 	}
 
-	/*
-		task.Delete()
-		_, ok = saver.delete["foobar"]
-		if !ok {
-			t.Fatal("Should have called delete")
-		}*/
+	task.Delete()
+	_, ok = saver.delete["foobar"]
+	if !ok {
+		t.Fatal("Should have called delete")
+	}
 }
 
 func TestSourceAndDest(t *testing.T) {
