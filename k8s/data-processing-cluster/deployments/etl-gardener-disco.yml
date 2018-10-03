@@ -46,7 +46,7 @@ spec:
         - name: TASKFILE_BUCKET
           value: "archive-{{GCLOUD_PROJECT}}"
         - name: START_DATE
-          value: "20180501"
+          value: "20160501"
         - name: EXPERIMENT
           value: "switch"
         - name: DATASET
