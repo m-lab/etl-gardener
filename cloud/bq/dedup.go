@@ -119,8 +119,8 @@ var dedupTemplateSidestream = `
         PARTITION BY CONCAT(test_id, cast(web100_log_entry.snap.StartTimeStamp as string),
             web100_log_entry.connection_spec.local_ip, cast(web100_log_entry.connection_spec.local_port as string),
             web100_log_entry.connection_spec.remote_ip, cast(web100_log_entry.connection_spec.remote_port as string))
-               ) row_number
-           FROM ` + "`%s`" + `)
+		) row_number
+	    FROM ` + "`%s`" + `)
 	WHERE row_number = 1`
 
 // dedupTemplateSwitch expects to run on a table with a single day's data, i.e.
