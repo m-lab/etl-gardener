@@ -36,14 +36,15 @@ import (
 // Any env vars that we want to read only at startup should be stored here.
 type environment struct {
 	// Vars for newDispatcher
-	Error      error
-	Project    string
-	Dataset    string
-	QueueBase  string
-	Experiment string
-	Bucket     string
-	NumQueues  int
-	StartDate  time.Time
+	Error        error
+	Project      string
+	BatchDataset string // All working data is written to the batch data set.
+	FinalDataset string // Ultimate deduplicated, partitioned output dataset.
+	QueueBase    string
+	Experiment   string
+	Bucket       string
+	NumQueues    int
+	StartDate    time.Time
 
 	// Vars for Status()
 	Commit  string
@@ -116,8 +117,8 @@ func LoadEnv() {
 
 	env.Commit = os.Getenv("GIT_COMMIT")
 	env.Release = os.Getenv("RELEASE_TAG")
-
-	env.Dataset = os.Getenv("DATASET")
+	env.BatchDataset = os.Getenv("DATASET")
+	env.FinalDataset = os.Getenv("FINAL_DATASET")
 }
 
 func init() {
@@ -134,19 +135,12 @@ func init() {
 
 // NewBQConfig creates a BQConfig for use with NewDedupHandler
 func NewBQConfig(config cloud.Config) cloud.BQConfig {
-	bqDataset, ok := os.LookupEnv("DATASET")
-	if !ok {
-		log.Println("ERROR: env.DATASET not set")
+	return cloud.BQConfig{
+		Config:         config,
+		BQProject:      config.Project,
+		BQBatchDataset: env.BatchDataset,
+		BQFinalDataset: env.FinalDataset,
 	}
-
-	// When running in prod, the task files and queues are in mlab-oti, but the destination
-	// BigQuery tables are in measurement-lab.
-	// However, for sidestream private tables, we leave them in mlab-oti
-	bqProject := config.Project
-	if bqProject == "mlab-oti" && bqDataset != "private" {
-		bqProject = "measurement-lab" // destination for production tables.
-	}
-	return cloud.BQConfig{Config: config, BQProject: bqProject, BQDataset: bqDataset}
 }
 
 // dispatcherFromEnv creates a Dispatcher struct initialized from environment variables.

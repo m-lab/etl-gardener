@@ -48,13 +48,22 @@ type ReprocessingExecutor struct {
 	BucketOpts []option.ClientOption
 }
 
-// GetDS constructs an appropriate Dataset for BQ operations.
-func (rex *ReprocessingExecutor) GetDS() (bqext.Dataset, error) {
-	return bqext.NewDataset(rex.BQProject, rex.BQDataset, rex.Options...)
+// GetBatchDS constructs an appropriate Dataset for BQ operations.
+func (rex *ReprocessingExecutor) GetBatchDS() (bqext.Dataset, error) {
+	return bqext.NewDataset(rex.BQProject, rex.BQBatchDataset, rex.Options...)
 }
 
-// ErrNoSaver is returned when saver has not been set.
-var ErrNoSaver = errors.New("Task.saver is nil")
+// GetFinalDS constructs an appropriate Dataset for BQ operations.
+func (rex *ReprocessingExecutor) GetFinalDS() (bqext.Dataset, error) {
+	return bqext.NewDataset(rex.BQProject, rex.BQFinalDataset, rex.Options...)
+}
+
+var (
+	// ErrNoSaver is returned when saver has not been set.
+	ErrNoSaver = errors.New("Task.saver is nil")
+	// ErrDatasetNamesMatch is returned when a sanity check would compare a dataset to itself.
+	ErrDatasetNamesMatch = errors.New("Dataset names should not be the same")
+)
 
 // Next executes the currently specified action, updates Err/ErrInfo, and advances
 // the state.
@@ -97,10 +106,10 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 
 	case state.Stabilizing:
 		// Wait for the streaming buffer to be nil.
-		ds, err := rex.GetDS()
+		ds, err := rex.GetBatchDS()
 		if err != nil {
 			// SetError also pushes to datastore, like Update()
-			t.SetError(err, "rex.GetDS")
+			t.SetError(err, "rex.GetBatchDS")
 			return err
 		}
 		s, _, err := t.SourceAndDest(&ds)
@@ -248,9 +257,9 @@ func (rex *ReprocessingExecutor) queue(t *state.Task) (int, error) {
 
 func (rex *ReprocessingExecutor) dedup(t *state.Task) error {
 	// Launch the dedup request, and save the JobID
-	ds, err := rex.GetDS()
+	ds, err := rex.GetBatchDS()
 	if err != nil {
-		t.SetError(err, "GetDS")
+		t.SetError(err, "GetBatchDS")
 		return err
 	}
 	src, dest, err := t.SourceAndDest(&ds)
@@ -322,18 +331,18 @@ func waitForJob(ctx context.Context, job *bigquery.Job, maxBackoff time.Duration
 }
 
 func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}) error {
-	// TODO use a simple client instead of creating dataset?
-	ds, err := bqext.NewDataset(rex.Project, rex.BQDataset, rex.Options...)
+	// Wait for dedup job.
+	srcDs, err := rex.GetBatchDS()
 	if err != nil {
-		t.SetError(err, "NewDataset")
+		t.SetError(err, "GetBatchDS")
 		return err
 	}
-	src, _, err := t.SourceAndDest(&ds)
+	src, copy, err := t.SourceAndDest(&srcDs)
 	if err != nil {
 		t.SetError(err, "SourceAndDest")
 		return err
 	}
-	job, err := ds.BqClient.JobFromID(context.Background(), t.JobID)
+	job, err := srcDs.BqClient.JobFromID(context.Background(), t.JobID)
 	if err != nil {
 		t.SetError(err, "JobFromID")
 		return err
@@ -354,8 +363,10 @@ func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}
 		return err
 	}
 
+	// Delete dedup source table.
+
 	// Wait for JobID to complete, then delete the template table.
-	log.Println("Completed deduplication, deleting", src.FullyQualifiedName())
+	log.Println("Completed deduplication, deleting source", src.FullyQualifiedName())
 	// If deduplication was successful, we should delete the source table.
 	ctx, cf := context.WithTimeout(context.Background(), time.Minute)
 	defer cf()
@@ -366,6 +377,40 @@ func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}
 		return err
 	}
 
-	// TODO - Copy to base_tables.
+	// Sanity check and copy things to final DS.
+	// ==========================================================================
+	// Skip SanityCheckAndCopy for deployments that do not specify the final dataset.
+	if rex.BQFinalDataset == "" {
+		return nil
+	}
+	if rex.BQBatchDataset == rex.BQFinalDataset {
+		// We cannot sanity check a dataset to itself.
+		t.SetError(ErrDatasetNamesMatch, "Cannot SanityCheckAndCopy to same dataset")
+		return ErrDatasetNamesMatch
+	}
+	destDs, err := rex.GetFinalDS()
+	if err != nil {
+		t.SetError(err, "GetFinalDS")
+		return err
+	}
+
+	// Destination table has the same ID as source.
+	dest := destDs.Table(copy.TableID)
+	log.Printf("Sanity checking dedup'd data before final copy from %s to %s",
+		copy.FullyQualifiedName(), dest.FullyQualifiedName())
+
+	// TODO: how long can this actually take???
+	ctx, cf = context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cf()
+
+	srcAt := bq.NewAnnotatedTable(copy, &srcDs)
+	destAt := bq.NewAnnotatedTable(dest, &destDs)
+
+	// Copy to Final Dataset tables.
+	err = bq.SanityCheckAndCopy(ctx, srcAt, destAt)
+	if err != nil {
+		t.SetError(err, "SanityCheckAndCopy")
+		return err
+	}
 	return nil
 }

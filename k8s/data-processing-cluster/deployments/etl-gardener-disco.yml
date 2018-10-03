@@ -1,14 +1,14 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: etl-gardener-sidestream
+  name: etl-gardener-disco
   namespace: default
 spec:
   replicas: 1
   selector:
     matchLabels:
       # Used to match pre-existing pods that may be affected during updates.
-      run: etl-gardener-sidestream
+      run: etl-gardener-disco
   strategy:
     rollingUpdate:
       maxSurge: 1
@@ -20,7 +20,7 @@ spec:
       labels:
         # Note: run=etl-gardener-server should match a service config with a
         # public IP and port so that it is publicly accessible.
-        run: etl-gardener-sidestream
+        run: etl-gardener-disco
       annotations:
         # Tell prometheus service discovery to collect metrics from the containers.
         prometheus.io/scrape: 'true'
@@ -39,25 +39,24 @@ spec:
         env:
         - name: GARDENER_SERVICE
           value: "true"
-        - name:  GIT_COMMIT
+        - name: GIT_COMMIT
           value: "{{GIT_COMMIT}}"
         - name: PROJECT
-          value: {{GCLOUD_PROJECT}}
+          value: "{{GCLOUD_PROJECT}}"
         - name: TASKFILE_BUCKET
-          value: "scraper-{{GCLOUD_PROJECT}}"  # NOTE: if we start deleting unembargoed files from scraper, this will no longer work.
+          value: "archive-{{GCLOUD_PROJECT}}"
         - name: START_DATE
-          value: "20170601"
+          value: "20160501"
         - name: EXPERIMENT
-          value: "sidestream"  # For example "ndt,sidestream,switch"
+          value: "switch"
         - name: DATASET
-          value: private
+          value: "batch"
         - name: FINAL_DATASET
-          value: ""  # e.g. base_tables
+          value: "base_tables"
         - name: QUEUE_BASE
-          value: "etl-sidestream-batch-"
+          value: "etl-disco-batch-"
         - name: NUM_QUEUES
-          value: "16"
-
+          value: "4"
         ports:
         - name: prometheus-port
           containerPort: 9090

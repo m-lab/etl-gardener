@@ -123,6 +123,25 @@ var dedupTemplateSidestream = `
 	    FROM ` + "`%s`" + `)
 	WHERE row_number = 1`
 
+// dedupTemplateSwitch expects to run on a table with a single day's data, i.e.
+// "mlab-sandbox.batch.switch_20170601". The query ignores duplicate rows as
+// determined by unique combinations of test_id (which includes collection
+// timestamps), metric name, hostname, and experiment name. The `sample`
+// repeated record is copied as-is from the first row.
+var dedupTemplateSwitch = `
+	#standardSQL
+	SELECT
+		* EXCEPT (row_number)
+	FROM (
+		SELECT
+			*, ROW_NUMBER() OVER (
+				PARTITION BY CONCAT(test_id, metric, hostname, experiment)
+			) AS row_number
+		FROM ` + "`%s`" + `
+	)
+	WHERE
+		row_number = 1`
+
 // Dedup executes a query that dedups and writes to destination partition.
 // This function is alpha status.  The interface may change without notice
 // or major version number change.
@@ -149,8 +168,10 @@ func Dedup(dsExt *bqext.Dataset, src string, destTable *bigquery.Table) (*bigque
 		queryString = fmt.Sprintf(dedupTemplateSidestream, src)
 	case strings.HasPrefix(destTable.TableID, "ndt"):
 		queryString = fmt.Sprintf(dedupTemplateNDT, src)
+	case strings.HasPrefix(destTable.TableID, "switch"):
+		queryString = fmt.Sprintf(dedupTemplateSwitch, src)
 	default:
-		log.Println("Only handles sidestream, ndt, not " + destTable.TableID)
+		log.Println("Only handles sidestream, ndt, switch, not " + destTable.TableID)
 		return nil, errors.New("Unknown table type")
 	}
 	query := dsExt.DestQuery(queryString, destTable, bigquery.WriteTruncate)
