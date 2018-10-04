@@ -46,13 +46,13 @@ spec:
         - name: TASKFILE_BUCKET
           value: "scraper-{{GCLOUD_PROJECT}}"  # NOTE: if we start deleting unembargoed files from scraper, this will no longer work.
         - name: START_DATE
-          value: "20170601"
+          value: "20160101"
         - name: EXPERIMENT
-          value: "sidestream"  # For example "ndt,sidestream,switch"
+          value: "sidestream"
         - name: DATASET
-          value: private
+          value: "batch"
         - name: FINAL_DATASET
-          value: ""  # e.g. base_tables
+          value: "base_tables"
         - name: QUEUE_BASE
           value: "etl-sidestream-batch-"
         - name: NUM_QUEUES
