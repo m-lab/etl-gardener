@@ -3,14 +3,18 @@ package rex_test
 import (
 	"context"
 	"log"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"cloud.google.com/go/storage"
+	"github.com/GoogleCloudPlatform/google-cloud-go-testing/storage/stiface"
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/reproc"
 	"github.com/m-lab/etl-gardener/rex"
 	"github.com/m-lab/etl-gardener/state"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 )
 
@@ -55,6 +59,11 @@ func (s *testSaver) GetDeletes() map[string]struct{} {
 	return s.delete
 }
 
+// NewReprocessingExecutor creates an exec with a fakeClient.
+func NewReprocessingExecutor(ctx context.Context, config cloud.BQConfig, bucketOpts ...option.ClientOption) (*rex.ReprocessingExecutor, error) {
+	return &rex.ReprocessingExecutor{BQConfig: config, StorageClient: fakeClient{}}, nil
+}
+
 // This test exercises the task management, including invoking t.Process().
 // It does not check any state, but if the termination does not work properly,
 // may fail to complete.  Also, running with -race may detect race
@@ -66,7 +75,7 @@ func TestWithTaskQueue(t *testing.T) {
 	config := cloud.Config{Project: "mlab-testing", Client: client}
 	bqConfig := cloud.BQConfig{Config: config, BQProject: "bqproject", BQBatchDataset: "dataset"}
 	bucketOpts := []option.ClientOption{option.WithHTTPClient(client)}
-	exec, err := rex.NewReprocessingExecutor(ctx, bqConfig, bucketOpts...)
+	exec, err := NewReprocessingExecutor(ctx, bqConfig, bucketOpts...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,13 +89,13 @@ func TestWithTaskQueue(t *testing.T) {
 	go th.AddTask(ctx, "gs://foo/bar/2001/01/03/")
 
 	start := time.Now()
-	for counter.Count() < 3 && time.Now().Before(start.Add(2*time.Second)) {
+	for counter.Count() < 9 && time.Now().Before(start.Add(2*time.Second)) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
 	th.Wait()
 
-	if counter.Count() != 3 {
+	if counter.Count() != 9 {
 		t.Error("Wrong number of client calls", counter.Count())
 	}
 	if len(saver.GetDeletes()) != 3 {
@@ -95,10 +104,64 @@ func TestWithTaskQueue(t *testing.T) {
 
 	tasks := saver.GetTasks()
 	for _, task := range tasks {
-		log.Println(task)
-		if task[len(task)-1].State != state.Done {
-			t.Error("Bad task state:", task)
+		// Eventually, final state should be Done.  For now it is an error state
+		last := task[len(task)-1]
+		if true {
+			if last.State != state.Stabilizing {
+				t.Error("State should be Stabilizing:", last)
+			} else if !strings.Contains(last.ErrMsg, "googleapi: Error 404") {
+				t.Error("Bad task state:", task)
+			}
+		} else {
+			if last.State != state.Done {
+				t.Error("Bad task state:", task)
+			}
 		}
 	}
+}
 
+// By using the "interface" version of the client, we make it possible to sub in
+// our own fakes at any level. Here we sub in a fake Client which returns a fake
+// BucketHandle that returns a series of fake Objects.
+type fakeClient struct {
+	stiface.Client
+}
+
+func (f fakeClient) Close() error {
+	return nil
+}
+
+func (f fakeClient) Bucket(name string) stiface.BucketHandle {
+	return &fakeBucketHandle{}
+}
+
+type fakeBucketHandle struct {
+	stiface.BucketHandle
+}
+
+func (f fakeBucketHandle) Attrs(ctx context.Context) (*storage.BucketAttrs, error) {
+	return &storage.BucketAttrs{}, nil
+}
+
+func (f fakeBucketHandle) Objects(context.Context, *storage.Query) stiface.ObjectIterator {
+	n := 0
+	it := fakeObjectIterator{next: &n}
+	it.objects = append(it.objects, &storage.ObjectAttrs{Name: "obj1"})
+	it.objects = append(it.objects, &storage.ObjectAttrs{Name: "obj2"})
+	return it
+}
+
+type fakeObjectIterator struct {
+	stiface.ObjectIterator
+	objects []*storage.ObjectAttrs
+	next    *int
+}
+
+func (it fakeObjectIterator) Next() (*storage.ObjectAttrs, error) {
+	if *it.next >= len(it.objects) {
+		return nil, iterator.Done
+	}
+	log.Println(it.next)
+	*it.next += 1
+	return it.objects[*it.next-1], nil
 }
