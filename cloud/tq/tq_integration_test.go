@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"cloud.google.com/go/storage"
+	"github.com/GoogleCloudPlatform/google-cloud-go-testing/storage/stiface"
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"google.golang.org/api/iterator"
@@ -35,13 +36,14 @@ func TestGetTaskqueueStats(t *testing.T) {
 func TestGetBucket(t *testing.T) {
 	ctx := context.Background()
 
-	storageClient, err := storage.NewClient(context.Background())
+	sc, err := storage.NewClient(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
+	storageClient := stiface.AdaptClient(sc)
 
 	bucketName := "archive-mlab-testing"
-	bucket, err := tq.GetBucket(ctx, storageClient, "mlab-testing", bucketName, false)
+	bucket, err := tq.GetBucket(ctx, stiface.AdaptClient(sc), "mlab-testing", bucketName, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,10 +99,11 @@ func TestPostDay(t *testing.T) {
 	}
 
 	// Use a real storage bucket.
-	storageClient, err := storage.NewClient(ctx)
+	sc, err := storage.NewClient(ctx)
 	if err != nil {
 		t.Error(err)
 	}
+	storageClient := stiface.AdaptClient(sc)
 	bucketName := "archive-mlab-testing"
 	bucket, err := tq.GetBucket(ctx, storageClient, "mlab-testing", bucketName, false)
 	if err != nil {

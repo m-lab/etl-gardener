@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GoogleCloudPlatform/google-cloud-go-testing/storage/stiface"
+
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/storage"
 	"github.com/m-lab/etl-gardener/cloud"
@@ -228,12 +230,13 @@ func (rex *ReprocessingExecutor) queue(ctx context.Context, t *state.Task) (int,
 
 	// Use a real storage bucket.
 	// TODO - add a persistent storageClient to the rex object?
-	storageClient, err := storage.NewClient(ctx, rex.BucketOpts...)
+	sc, err := storage.NewClient(ctx, rex.BucketOpts...)
 	if err != nil {
 		log.Println(err)
 		t.SetError(ctx, err, "StorageClientError")
 		return 0, err
 	}
+	storageClient := stiface.AdaptClient(sc)
 	// TODO - try cancelling the context instead?
 	defer storageClient.Close()
 	bucket, err := tq.GetBucket(ctx, storageClient, rex.Project, bucketName, false)
