@@ -148,8 +148,6 @@ func NewBQConfig(config cloud.Config) cloud.BQConfig {
 // NOTE: ctx should only be used within the function scope, and not reused later.
 // Not currently clear if that is true.
 func taskHandlerFromEnv(ctx context.Context, client *http.Client) (*reproc.TaskHandler, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 	if env.Error != nil {
 		log.Println(env.Error)
 		log.Println(env)
@@ -337,8 +335,7 @@ func init() {
 }
 
 func main() {
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Check if invoked as a service.
