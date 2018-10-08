@@ -1,6 +1,7 @@
 package state_test
 
 import (
+	"context"
 	"errors"
 	"log"
 	"sync"
@@ -21,14 +22,14 @@ type testSaver struct {
 	delete map[string]struct{}
 }
 
-func (s *testSaver) SaveTask(t state.Task) error {
+func (s *testSaver) SaveTask(ctx context.Context, t state.Task) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.tasks[t.Name] = append(s.tasks[t.Name], t)
 	return nil
 }
 
-func (s *testSaver) DeleteTask(t state.Task) error {
+func (s *testSaver) DeleteTask(ctx context.Context, t state.Task) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.delete[t.Name] = struct{}{}
@@ -50,14 +51,15 @@ func (s *testSaver) GetDeletes(t state.Task) map[string]struct{} {
 func assertSaver() { func(ex state.Saver) {}(&testSaver{}) }
 
 func TestTaskBasics(t *testing.T) {
+	ctx := context.Background()
 	task := state.Task{Name: "foobar", State: state.Initializing}
 	saver := testSaver{tasks: make(map[string][]state.Task), delete: make(map[string]struct{})}
 	task.SetSaver(&saver)
 
-	task.Update(state.Initializing)
+	task.Update(ctx, state.Initializing)
 
 	task.Queue = "queue"
-	task.Update(state.Queuing)
+	task.Update(ctx, state.Queuing)
 
 	tasks, ok := saver.tasks["foobar"]
 	if !ok {
@@ -70,7 +72,7 @@ func TestTaskBasics(t *testing.T) {
 		t.Error("Should be queuing", tasks[1])
 	}
 
-	task.SetError(errors.New("test error"), "test")
+	task.SetError(ctx, errors.New("test error"), "test")
 	tasks, ok = saver.tasks["foobar"]
 	if !ok {
 		t.Fatal("Should have an entry for foobar")
@@ -88,7 +90,7 @@ func TestTaskBasics(t *testing.T) {
 		t.Error("Should have error", tasks[2])
 	}
 
-	task.Delete()
+	task.Delete(ctx)
 	_, ok = saver.delete["foobar"]
 	if !ok {
 		t.Fatal("Should have called delete")

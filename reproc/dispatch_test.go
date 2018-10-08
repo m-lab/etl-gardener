@@ -55,7 +55,7 @@ func NewTestSaver() *testSaver {
 	return &testSaver{make(map[string][]state.Task, 20), make(map[string]struct{}, 20), sync.Mutex{}}
 }
 
-func (s *testSaver) SaveTask(t state.Task) error {
+func (s *testSaver) SaveTask(ctx context.Context, t state.Task) error {
 	//log.Println(t)
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -63,7 +63,7 @@ func (s *testSaver) SaveTask(t state.Task) error {
 	return nil
 }
 
-func (s *testSaver) DeleteTask(t state.Task) error {
+func (s *testSaver) DeleteTask(ctx context.Context, t state.Task) error {
 	//log.Println("Delete:", t)
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -81,20 +81,20 @@ func (ex *Exec) Next(ctx context.Context, t *state.Task, terminate <-chan struct
 
 	switch t.State {
 	case state.Invalid:
-		t.Update(state.Initializing)
+		t.Update(ctx, state.Initializing)
 	case state.Initializing:
-		t.Update(state.Queuing)
+		t.Update(ctx, state.Queuing)
 	case state.Queuing:
-		t.Update(state.Processing)
+		t.Update(ctx, state.Processing)
 	case state.Processing:
 		t.Queue = "" // No longer need to keep the queue.
-		t.Update(state.Stabilizing)
+		t.Update(ctx, state.Stabilizing)
 	case state.Stabilizing:
-		t.Update(state.Deduplicating)
+		t.Update(ctx, state.Deduplicating)
 	case state.Deduplicating:
-		t.Update(state.Finishing)
+		t.Update(ctx, state.Finishing)
 	case state.Finishing:
-		t.Update(state.Done)
+		t.Update(ctx, state.Done)
 	case state.Done:
 		// Generally shouldn't happen.
 		// In prod, we would ignore this, but for test we log.Fatal to force

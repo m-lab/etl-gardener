@@ -29,14 +29,14 @@ func newTestSaver() *testSaver {
 	return &testSaver{tasks: make(map[string][]state.Task), delete: make(map[string]struct{})}
 }
 
-func (s *testSaver) SaveTask(t state.Task) error {
+func (s *testSaver) SaveTask(ctx context.Context, t state.Task) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.tasks[t.Name] = append(s.tasks[t.Name], t)
 	return nil
 }
 
-func (s *testSaver) DeleteTask(t state.Task) error {
+func (s *testSaver) DeleteTask(ctx context.Context, t state.Task) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.delete[t.Name] = struct{}{}

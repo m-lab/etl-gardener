@@ -52,13 +52,13 @@ func TestStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	log.Println("saving")
-	err = task.Save()
+	err = task.Save(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	task.Name = "gs://foo/bar/2000/01/01/task2"
 	task.Queue = "Q2"
-	err = task.Update(state.Queuing)
+	err = task.Update(ctx, state.Queuing)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestStatus(t *testing.T) {
 	}
 
 	for i := range tasks {
-		err := saver.DeleteTask(tasks[i])
+		err := saver.DeleteTask(ctx, tasks[i])
 		if err != nil {
 			t.Error(err)
 		}
@@ -90,12 +90,12 @@ func TestWriteStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	task.Save()
+	task.Save(ctx)
 	t1 := task
 	task.Name = "task2"
 	task.Experiment = "bar"
 	task.Queue = "Q2"
-	task.Update(state.Queuing)
+	task.Update(ctx, state.Queuing)
 	t2 := task
 
 	ExpectedTasks := 2
@@ -115,11 +115,11 @@ func TestWriteStatus(t *testing.T) {
 		t.Error("Missing task2")
 	}
 
-	err = t1.Delete()
+	err = t1.Delete(ctx)
 	if err != nil {
 		t.Error(err)
 	}
-	err = t2.Delete()
+	err = t2.Delete(ctx)
 	if err != nil {
 		t.Error(err)
 	}

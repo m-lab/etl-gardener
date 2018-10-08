@@ -78,77 +78,77 @@ func (rex *ReprocessingExecutor) Next(ctx context.Context, t *state.Task, termin
 		// TODO - should check that _suffix table doesn't already exist, or delete it
 		// if it does?  Also check if it has a streaming buffer?
 		// Nothing to do.
-		t.Update(state.Queuing)
+		t.Update(ctx, state.Queuing)
 		metrics.StartedCount.WithLabelValues("sidestream").Inc()
 
 	case state.Queuing:
 		// TODO - handle zero task case.
 		n, err := rex.queue(ctx, t)
 		if err != nil {
-			// SetError also pushes to datastore, like Update()
-			t.SetError(err, "rex.queue")
+			// SetError also pushes to datastore, like Update(ctx, )
+			t.SetError(ctx, err, "rex.queue")
 			return err
 		}
 		if n < 1 {
 			// If there were no tasks posted, then there is nothing more to do.
 			t.Queue = ""
-			t.Update(state.Done)
+			t.Update(ctx, state.Done)
 		} else {
-			t.Update(state.Processing)
+			t.Update(ctx, state.Processing)
 		}
 
 	case state.Processing: // TODO should this be Parsing?
-		if err := rex.waitForParsing(t, terminate); err != nil {
-			// SetError also pushes to datastore, like Update()
-			t.SetError(err, "rex.waitForParsing")
+		if err := rex.waitForParsing(ctx, t, terminate); err != nil {
+			// SetError also pushes to datastore, like Update(ctx, )
+			t.SetError(ctx, err, "rex.waitForParsing")
 			return err
 		}
 		t.Queue = "" // No longer need to keep the queue.
-		t.Update(state.Stabilizing)
+		t.Update(ctx, state.Stabilizing)
 
 	case state.Stabilizing:
 		// Wait for the streaming buffer to be nil.
 		ds, err := rex.GetBatchDS(ctx)
 		if err != nil {
-			// SetError also pushes to datastore, like Update()
-			t.SetError(err, "rex.GetBatchDS")
+			// SetError also pushes to datastore, like Update(ctx, )
+			t.SetError(ctx, err, "rex.GetBatchDS")
 			return err
 		}
 		s, _, err := t.SourceAndDest(&ds)
 		if err != nil {
-			// SetError also pushes to datastore, like Update()
-			t.SetError(err, "task.SourceAndDest")
+			// SetError also pushes to datastore, like Update(ctx, )
+			t.SetError(ctx, err, "task.SourceAndDest")
 			return err
 		}
 		err = bq.WaitForStableTable(ctx, s)
 		if err != nil {
 			// When testing, we expect to get ErrTableNotFound here.
 			if !env.TestMode || err != state.ErrTableNotFound {
-				// SetError also pushes to datastore, like Update()
-				t.SetError(err, "bq.WaitForStableTable")
+				// SetError also pushes to datastore, like Update(ctx, )
+				t.SetError(ctx, err, "bq.WaitForStableTable")
 				return err
 			}
 		}
 
-		t.Update(state.Deduplicating)
+		t.Update(ctx, state.Deduplicating)
 
 	case state.Deduplicating:
 		if err := rex.dedup(ctx, t); err != nil {
-			// SetError also pushes to datastore, like Update()
-			t.SetError(err, "rex.dedup")
+			// SetError also pushes to datastore, like Update(ctx, )
+			t.SetError(ctx, err, "rex.dedup")
 			return err
 		}
-		t.Update(state.Finishing)
+		t.Update(ctx, state.Finishing)
 
 	case state.Finishing:
 		log.Println("Finishing")
 		if err := rex.finish(ctx, t, terminate); err != nil {
-			// SetError also pushes to datastore, like Update()
-			t.SetError(err, "rex.finish")
+			// SetError also pushes to datastore, like Update(ctx, )
+			t.SetError(ctx, err, "rex.finish")
 			return err
 		}
 		t.JobID = ""
-		t.Update(state.Done)
+		t.Update(ctx, state.Done)
 
 	case state.Done:
 		log.Println("Unexpected call to Next when Done")
@@ -156,15 +156,15 @@ func (rex *ReprocessingExecutor) Next(ctx context.Context, t *state.Task, termin
 	case state.Invalid:
 		log.Println("Should not call Next on Invalid state!")
 		err := errors.New("called Next on invalid state")
-		// SetError also pushes to datastore, like Update()
-		t.SetError(err, "Invalid state")
+		// SetError also pushes to datastore, like Update(ctx, )
+		t.SetError(ctx, err, "Invalid state")
 		return err
 
 	default:
 		log.Println("Unknown state")
 		err := errors.New("Unknown state")
-		// SetError also pushes to datastore, like Update()
-		t.SetError(err, "Unknown state")
+		// SetError also pushes to datastore, like Update(ctx, )
+		t.SetError(ctx, err, "Unknown state")
 		return err
 	}
 
@@ -172,19 +172,19 @@ func (rex *ReprocessingExecutor) Next(ctx context.Context, t *state.Task, termin
 }
 
 // TODO should these take Task instead of *Task?
-func (rex *ReprocessingExecutor) waitForParsing(t *state.Task, terminate <-chan struct{}) error {
+func (rex *ReprocessingExecutor) waitForParsing(ctx context.Context, t *state.Task, terminate <-chan struct{}) error {
 	// Wait for the queue to drain.
 	// Don't want to accept a date until we can actually queue it.
 	qh, err := tq.NewQueueHandler(rex.Config, t.Queue)
 	if err != nil {
-		t.SetError(err, "NewQueueHandler")
+		t.SetError(ctx, err, "NewQueueHandler")
 		return err
 	}
 	log.Println("Wait for empty queue ", qh.Queue)
 	for err := qh.IsEmpty(); err != nil; err = qh.IsEmpty() {
 		select {
 		case <-terminate:
-			t.SetError(err, "Terminating")
+			t.SetError(ctx, err, "Terminating")
 			return err
 		default:
 		}
@@ -214,14 +214,14 @@ func (rex *ReprocessingExecutor) queue(ctx context.Context, t *state.Task) (int,
 	//func (qh *ChannelQueueHandler) handleLoop(next api.BasicPipe, bucketOpts ...option.ClientOption) {
 	qh, err := tq.NewQueueHandler(rex.Config, t.Queue)
 	if err != nil {
-		t.SetError(err, "NewQueueHandler")
+		t.SetError(ctx, err, "NewQueueHandler")
 		return 0, err
 	}
 	parts, err := t.ParsePrefix()
 	if err != nil {
 		// If there is a parse error, log and skip request.
 		log.Println(err)
-		t.SetError(err, "BadPrefix")
+		t.SetError(ctx, err, "BadPrefix")
 		return 0, err
 	}
 	bucketName := parts[0]
@@ -231,7 +231,7 @@ func (rex *ReprocessingExecutor) queue(ctx context.Context, t *state.Task) (int,
 	storageClient, err := storage.NewClient(ctx, rex.BucketOpts...)
 	if err != nil {
 		log.Println(err)
-		t.SetError(err, "StorageClientError")
+		t.SetError(ctx, err, "StorageClientError")
 		return 0, err
 	}
 	// TODO - try cancelling the context instead?
@@ -243,7 +243,7 @@ func (rex *ReprocessingExecutor) queue(ctx context.Context, t *state.Task) (int,
 			return 0, nil
 		}
 		log.Println(err)
-		t.SetError(err, "BucketError")
+		t.SetError(ctx, err, "BucketError")
 		return 0, err
 	}
 	// NOTE: This does not check the terminate channel, so once started, it will
@@ -251,7 +251,7 @@ func (rex *ReprocessingExecutor) queue(ctx context.Context, t *state.Task) (int,
 	n, err := qh.PostDay(ctx, bucket, bucketName, parts[1]+"/"+parts[2]+"/")
 	if err != nil {
 		log.Println(err)
-		t.SetError(err, "PostDayError")
+		t.SetError(ctx, err, "PostDayError")
 		return n, nil
 	}
 	log.Println("Added ", n, t.Name, " tasks to ", qh.Queue)
@@ -262,12 +262,12 @@ func (rex *ReprocessingExecutor) dedup(ctx context.Context, t *state.Task) error
 	// Launch the dedup request, and save the JobID
 	ds, err := rex.GetBatchDS(ctx)
 	if err != nil {
-		t.SetError(err, "GetBatchDS")
+		t.SetError(ctx, err, "GetBatchDS")
 		return err
 	}
 	src, dest, err := t.SourceAndDest(&ds)
 	if err != nil {
-		t.SetError(err, "SourceAndDest")
+		t.SetError(ctx, err, "SourceAndDest")
 		return err
 	}
 
@@ -282,7 +282,7 @@ func (rex *ReprocessingExecutor) dedup(ctx context.Context, t *state.Task) error
 			}
 		} else {
 			log.Println(err, src.FullyQualifiedName())
-			t.SetError(err, "DedupFailed")
+			t.SetError(ctx, err, "DedupFailed")
 			return err
 		}
 	}
@@ -337,24 +337,24 @@ func (rex *ReprocessingExecutor) finish(ctx context.Context, t *state.Task, term
 	// TODO use a simple client instead of creating dataset?
 	srcDs, err := rex.GetBatchDS(ctx)
 	if err != nil {
-		t.SetError(err, "GetBatchDS")
+		t.SetError(ctx, err, "GetBatchDS")
 		return err
 	}
 	src, copy, err := t.SourceAndDest(&srcDs)
 	if err != nil {
-		t.SetError(err, "SourceAndDest")
+		t.SetError(ctx, err, "SourceAndDest")
 		return err
 	}
 	job, err := srcDs.BqClient.JobFromID(ctx, t.JobID)
 	if err != nil {
-		t.SetError(err, "JobFromID")
+		t.SetError(ctx, err, "JobFromID")
 		return err
 	}
 	// TODO - should loop, and check terminate channel
 	err = waitForJob(ctx, job, 60*time.Second, terminate)
 	if err != nil {
 		log.Println(err, src.FullyQualifiedName())
-		t.SetError(err, "waitForJob")
+		t.SetError(ctx, err, "waitForJob")
 		return err
 	}
 	// TODO - should this context have a deadline?
@@ -362,7 +362,7 @@ func (rex *ReprocessingExecutor) finish(ctx context.Context, t *state.Task, term
 	if err != nil {
 		if err != state.ErrTaskSuspended {
 			log.Println(status.Err(), src.FullyQualifiedName())
-			t.SetError(err, "job.Wait")
+			t.SetError(ctx, err, "job.Wait")
 		}
 		return err
 	}
@@ -377,7 +377,7 @@ func (rex *ReprocessingExecutor) finish(ctx context.Context, t *state.Task, term
 	err = src.Delete(delCtx)
 	if err != nil {
 		log.Println(err)
-		t.SetError(err, "TableDelete")
+		t.SetError(ctx, err, "TableDelete")
 		return err
 	}
 
@@ -389,12 +389,12 @@ func (rex *ReprocessingExecutor) finish(ctx context.Context, t *state.Task, term
 	}
 	if rex.BQBatchDataset == rex.BQFinalDataset {
 		// We cannot sanity check a dataset to itself.
-		t.SetError(ErrDatasetNamesMatch, "Cannot SanityCheckAndCopy to same dataset")
+		t.SetError(ctx, ErrDatasetNamesMatch, "Cannot SanityCheckAndCopy to same dataset")
 		return ErrDatasetNamesMatch
 	}
 	destDs, err := rex.GetFinalDS(ctx)
 	if err != nil {
-		t.SetError(err, "GetFinalDS")
+		t.SetError(ctx, err, "GetFinalDS")
 		return err
 	}
 
@@ -413,7 +413,7 @@ func (rex *ReprocessingExecutor) finish(ctx context.Context, t *state.Task, term
 	// Copy to Final Dataset tables.
 	err = bq.SanityCheckAndCopy(copyCtx, srcAt, destAt)
 	if err != nil {
-		t.SetError(err, "SanityCheckAndCopy")
+		t.SetError(ctx, err, "SanityCheckAndCopy")
 		return err
 	}
 	return nil
