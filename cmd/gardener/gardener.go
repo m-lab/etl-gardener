@@ -22,7 +22,6 @@ import (
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/reproc"
 	"github.com/m-lab/etl-gardener/rex"
-	"google.golang.org/api/option"
 
 	"github.com/m-lab/etl-gardener/state"
 
@@ -159,7 +158,11 @@ func taskHandlerFromEnv(ctx context.Context, client *http.Client) (*reproc.TaskH
 		Client:  client}
 
 	bqConfig := NewBQConfig(config)
-	exec := rex.ReprocessingExecutor{BQConfig: bqConfig, BucketOpts: []option.ClientOption{}}
+	exec, err := rex.NewReprocessingExecutor(ctx, bqConfig)
+	if err != nil {
+		return nil, err
+	}
+	// TODO - exec.StorageClient should be closed.
 	queues := make([]string, env.NumQueues)
 	for i := 0; i < env.NumQueues; i++ {
 		queues[i] = fmt.Sprintf("%s%d", env.QueueBase, i)
@@ -170,7 +173,7 @@ func taskHandlerFromEnv(ctx context.Context, client *http.Client) (*reproc.TaskH
 	if err != nil {
 		return nil, err
 	}
-	return reproc.NewTaskHandler(&exec, queues, saver), nil
+	return reproc.NewTaskHandler(exec, queues, saver), nil
 }
 
 // doDispatchLoop just sequences through archives in date order.
@@ -285,6 +288,7 @@ func setupService(ctx context.Context) error {
 	http.HandleFunc("/alive", healthCheck)
 	http.HandleFunc("/ready", healthCheck)
 
+	// TODO - this creates a storage client, which should be closed on termination.
 	handler, err := taskHandlerFromEnv(ctx, http.DefaultClient)
 
 	if err != nil {

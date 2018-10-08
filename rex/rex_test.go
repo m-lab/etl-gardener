@@ -66,9 +66,13 @@ func TestWithTaskQueue(t *testing.T) {
 	config := cloud.Config{Project: "mlab-testing", Client: client}
 	bqConfig := cloud.BQConfig{Config: config, BQProject: "bqproject", BQBatchDataset: "dataset"}
 	bucketOpts := []option.ClientOption{option.WithHTTPClient(client)}
-	exec := rex.ReprocessingExecutor{BQConfig: bqConfig, BucketOpts: bucketOpts}
+	exec, err := rex.NewReprocessingExecutor(ctx, bqConfig, bucketOpts...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer exec.StorageClient.Close()
 	saver := newTestSaver()
-	th := reproc.NewTaskHandler(&exec, []string{"queue-1"}, saver)
+	th := reproc.NewTaskHandler(exec, []string{"queue-1"}, saver)
 
 	th.AddTask(ctx, "gs://foo/bar/2001/01/01/")
 
