@@ -10,8 +10,4 @@ For example:
 go run cmd/gardener/gardener.go -project mlab-oti -day 2017/10/01
 ```
 
-The pipeline job runs in mlab-oti, so I've granted bigquery.dataeditor
-permissions to measurement-lab for mlab-oti@appspot.gserviceaccount.com,
-but this is more permissive that I would like.  We should use a service-account
-instead.  One already exists called etl-pipeline that would
-probably make most sense.
+The batch pipeline job also runs in and writes to mlab-oti.

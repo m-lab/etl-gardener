@@ -90,7 +90,7 @@ ErrorTimeout:
 }
 
 // This template expects to be executed on a table containing a single day's data, such
-// as measurement-lab:batch.ndt_20170601.
+// as mlab-oti:batch.ndt_20170601.
 //
 // Some tests are collected as both uncompressed and compressed files. In some historical
 // archives (June 2017), files for a single test appear in different tar files, which

@@ -6,7 +6,7 @@ the table into the corresponding partition in __destination_table__.
 
 ## Useful bits:
 
-1. bq show --format=prettyjson measurement-lab.batch.ndt_* will give
+1. bq show --format=prettyjson mlab-oti.batch.ndt_* will give
  the summary for the whole set.  Using HTTP, this would be a get request:
  ```
 GET https://www.googleapis.com/bigquery/v2/projects/projectId/datasets/datasetId/tables/tableId
