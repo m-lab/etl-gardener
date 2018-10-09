@@ -1,6 +1,7 @@
 package reproc_test
 
 import (
+	"context"
 	"log"
 	"math/rand"
 	"sync"
@@ -54,7 +55,7 @@ func NewTestSaver() *testSaver {
 	return &testSaver{make(map[string][]state.Task, 20), make(map[string]struct{}, 20), sync.Mutex{}}
 }
 
-func (s *testSaver) SaveTask(t state.Task) error {
+func (s *testSaver) SaveTask(ctx context.Context, t state.Task) error {
 	//log.Println(t)
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -62,7 +63,7 @@ func (s *testSaver) SaveTask(t state.Task) error {
 	return nil
 }
 
-func (s *testSaver) DeleteTask(t state.Task) error {
+func (s *testSaver) DeleteTask(ctx context.Context, t state.Task) error {
 	//log.Println("Delete:", t)
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -74,26 +75,26 @@ func assertSaver() { func(ex state.Saver) {}(&testSaver{}) }
 
 type Exec struct{}
 
-func (ex *Exec) Next(t *state.Task, terminate <-chan struct{}) error {
+func (ex *Exec) Next(ctx context.Context, t *state.Task, terminate <-chan struct{}) error {
 	log.Println("Do", t)
 	time.Sleep(time.Duration(1+rand.Intn(2)) * time.Millisecond)
 
 	switch t.State {
 	case state.Invalid:
-		t.Update(state.Initializing)
+		t.Update(ctx, state.Initializing)
 	case state.Initializing:
-		t.Update(state.Queuing)
+		t.Update(ctx, state.Queuing)
 	case state.Queuing:
-		t.Update(state.Processing)
+		t.Update(ctx, state.Processing)
 	case state.Processing:
 		t.Queue = "" // No longer need to keep the queue.
-		t.Update(state.Stabilizing)
+		t.Update(ctx, state.Stabilizing)
 	case state.Stabilizing:
-		t.Update(state.Deduplicating)
+		t.Update(ctx, state.Deduplicating)
 	case state.Deduplicating:
-		t.Update(state.Finishing)
+		t.Update(ctx, state.Finishing)
 	case state.Finishing:
-		t.Update(state.Done)
+		t.Update(ctx, state.Done)
 	case state.Done:
 		// Generally shouldn't happen.
 		// In prod, we would ignore this, but for test we log.Fatal to force
@@ -110,13 +111,14 @@ func AssertExecutor() { func(ex state.Executor) {}(&Exec{}) }
 // may fail to complete.  Also, running with -race may detect race
 // conditions.
 func TestBasic(t *testing.T) {
+	ctx := context.Background()
 	// Start tracker with no queues.
 	exec := Exec{}
 	saver := NewTestSaver()
 	th := reproc.NewTaskHandler(&exec, []string{}, saver)
 
 	// This will block because there are no queues.
-	go th.AddTask("foobar")
+	go th.AddTask(ctx, "foobar")
 	// Just so it is clear where the message comes from...
 	time.Sleep(time.Duration(1+rand.Intn(10)) * time.Millisecond)
 
@@ -129,15 +131,16 @@ func TestBasic(t *testing.T) {
 // may fail to complete.  Also, running with -race may detect race
 // conditions.
 func TestWithTaskQueue(t *testing.T) {
+	ctx := context.Background()
 	// Start tracker with one queue.
 	exec := Exec{}
 	saver := NewTestSaver()
 	th := reproc.NewTaskHandler(&exec, []string{"queue-1"}, saver)
 
-	th.AddTask("gs://fake/ndt/2017/09/22/")
+	th.AddTask(ctx, "gs://fake/ndt/2017/09/22/")
 
-	go th.AddTask("gs://fake/ndt/2017/09/24/")
-	go th.AddTask("gs://fake/ndt/2017/09/26/")
+	go th.AddTask(ctx, "gs://fake/ndt/2017/09/24/")
+	go th.AddTask(ctx, "gs://fake/ndt/2017/09/26/")
 
 	time.Sleep(15 * time.Millisecond)
 	th.Terminate()
@@ -145,6 +148,7 @@ func TestWithTaskQueue(t *testing.T) {
 }
 
 func TestRestart(t *testing.T) {
+	ctx := context.Background()
 	exec := Exec{}
 	saver := NewTestSaver()
 	th := reproc.NewTaskHandler(&exec, []string{"queue-1", "queue-2"}, saver)
@@ -156,7 +160,7 @@ func TestRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	tasks := []state.Task{*t1}
-	th.RestartTasks(tasks)
+	th.RestartTasks(ctx, tasks)
 
 	time.Sleep(5 * time.Second)
 	log.Println(saver.tasks[taskName])

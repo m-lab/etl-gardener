@@ -411,7 +411,7 @@ func SanityCheckAndCopy(ctx context.Context, src, dest *AnnotatedTable) error {
 		return err
 	}
 
-	err = WaitForJob(context.Background(), job, 10*time.Second)
+	err = WaitForJob(ctx, job, 10*time.Second)
 	log.Println("SanityCheckAndCopy Done")
 	return err
 }

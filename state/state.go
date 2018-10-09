@@ -57,13 +57,13 @@ var (
 // Used for mocking.
 // Interface must update the task in place, so that state changes are all visible.
 type Executor interface {
-	Next(task *Task, terminate <-chan struct{}) error
+	Next(ctx context.Context, task *Task, terminate <-chan struct{}) error
 }
 
 // Saver provides API for saving Task state.
 type Saver interface {
-	SaveTask(t Task) error
-	DeleteTask(t Task) error
+	SaveTask(ctx context.Context, t Task) error
+	DeleteTask(ctx context.Context, t Task) error
 }
 
 // DatastoreSaver will implement a Saver that stores Task state in Datastore.
@@ -73,9 +73,10 @@ type DatastoreSaver struct {
 }
 
 // NewDatastoreSaver creates and returns an appropriate saver.
+// ctx is only used to create the client.
 // TODO - if this ever needs more context, use cloud.Config
-func NewDatastoreSaver(project string) (*DatastoreSaver, error) {
-	client, err := datastore.NewClient(context.Background(), project)
+func NewDatastoreSaver(ctx context.Context, project string) (*DatastoreSaver, error) {
+	client, err := datastore.NewClient(ctx, project)
 	if err != nil {
 		return nil, err
 	}
@@ -84,10 +85,9 @@ func NewDatastoreSaver(project string) (*DatastoreSaver, error) {
 
 // SaveTask implements Saver.SaveTask using Datastore.
 // TODO - do we want to use transactions and some consistency checking?
-func (ds *DatastoreSaver) SaveTask(t Task) error {
+func (ds *DatastoreSaver) SaveTask(ctx context.Context, t Task) error {
 	k := datastore.NameKey("task", t.Name, nil)
 	k.Namespace = ds.Namespace
-	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	_, err := ds.Client.Put(ctx, k, &t)
@@ -98,10 +98,9 @@ func (ds *DatastoreSaver) SaveTask(t Task) error {
 }
 
 // DeleteTask implements Saver.DeleteTask using Datastore.
-func (ds *DatastoreSaver) DeleteTask(t Task) error {
+func (ds *DatastoreSaver) DeleteTask(ctx context.Context, t Task) error {
 	k := datastore.NameKey("task", t.Name, nil)
 	k.Namespace = ds.Namespace
-	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	err := ds.Client.Delete(ctx, k)
@@ -206,16 +205,16 @@ func (t Task) String() string {
 var ErrNoSaver = errors.New("Task.saver is nil")
 
 // Save saves the task state to the "saver".
-func (t *Task) Save() error {
+func (t *Task) Save(ctx context.Context) error {
 	if t.saver == nil {
 		return ErrNoSaver
 	}
 	t.UpdateTime = time.Now()
-	return t.saver.SaveTask(*t)
+	return t.saver.SaveTask(ctx, *t)
 }
 
 // Update updates the task state, and saves to the "saver".
-func (t *Task) Update(st State) error {
+func (t *Task) Update(ctx context.Context, st State) error {
 	duration := t.UpdateTime.Sub(time.Now())
 	metrics.StateTimeSummary.WithLabelValues(StateNames[t.State]).Observe(duration.Seconds())
 	t.State = st
@@ -223,19 +222,19 @@ func (t *Task) Update(st State) error {
 	if t.saver == nil {
 		return ErrNoSaver
 	}
-	return t.saver.SaveTask(*t)
+	return t.saver.SaveTask(ctx, *t)
 }
 
 // Delete removes by calling saver.DeleteTask.
-func (t *Task) Delete() error {
+func (t *Task) Delete(ctx context.Context) error {
 	if t.saver == nil {
 		return ErrNoSaver
 	}
-	return t.saver.DeleteTask(*t)
+	return t.saver.DeleteTask(ctx, *t)
 }
 
 // SetError adds error information and saves to the "saver"
-func (t *Task) SetError(err error, info string) error {
+func (t *Task) SetError(ctx context.Context, err error, info string) error {
 	metrics.FailCount.WithLabelValues(info)
 	if t.saver == nil {
 		return ErrNoSaver
@@ -243,7 +242,7 @@ func (t *Task) SetError(err error, info string) error {
 	t.ErrMsg = err.Error()
 	t.ErrInfo = info
 	t.UpdateTime = time.Now()
-	return t.saver.SaveTask(*t)
+	return t.saver.SaveTask(ctx, *t)
 }
 
 // SetSaver sets the value of the saver to be used for all other calls.
@@ -262,18 +261,18 @@ type Terminator interface {
 }
 
 // Process handles all steps of processing a task.
-func (t Task) Process(ex Executor, doneWithQueue func(), term Terminator) {
+func (t Task) Process(ctx context.Context, ex Executor, doneWithQueue func(), term Terminator) {
 	metrics.TasksInFlight.Inc()
 	defer metrics.TasksInFlight.Dec()
 loop:
 	for t.State != Done { //&& t.ErrMsg == "" {
 		select {
 		case <-term.GetNotifyChannel():
-			t.SetError(ErrTaskSuspended, "Terminating")
+			t.SetError(ctx, ErrTaskSuspended, "Terminating")
 			break loop
 		default:
 			q := t.Queue
-			if err := ex.Next(&t, term.GetNotifyChannel()); err != nil {
+			if err := ex.Next(ctx, &t, term.GetNotifyChannel()); err != nil {
 				break loop
 			}
 			if q != "" && t.Queue == "" {
@@ -284,7 +283,7 @@ loop:
 		}
 	}
 	metrics.CompletedCount.WithLabelValues("todo - add exp type").Inc()
-	t.Delete()
+	t.Delete(ctx)
 	term.Done()
 }
 
@@ -302,14 +301,13 @@ func (ds *DatastoreSaver) GetStatus(ctx context.Context, expt string) ([]Task, e
 }
 
 // WriteHTMLStatusTo writes HTML formatted task status.
-func WriteHTMLStatusTo(w io.Writer, project string, expt string) error {
-	ds, err := NewDatastoreSaver(project)
+func WriteHTMLStatusTo(ctx context.Context, w io.Writer, project string, expt string) error {
+	ds, err := NewDatastoreSaver(ctx, project)
 	defer ds.Client.Close()
 	if err != nil {
 		fmt.Fprintln(w, "Error creating Datastore client:", err)
 		return err
 	}
-	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	tasks, err := ds.GetStatus(ctx, expt)

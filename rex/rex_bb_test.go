@@ -3,6 +3,7 @@
 package rex_test
 
 import (
+	"context"
 	"log"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 // conditions.
 // TODO - Consider creating fake BQ tables, so that the dedup phase completes.
 func TestRealBucket(t *testing.T) {
+	ctx := context.Background()
 	client, counter := cloud.DryRunClient()
 	config := cloud.Config{Project: "mlab-testing", Client: client}
 	bqConfig := cloud.BQConfig{Config: config, BQProject: "mlab-testing", BQBatchDataset: "batch"}
@@ -26,10 +28,10 @@ func TestRealBucket(t *testing.T) {
 	th := reproc.NewTaskHandler(&exec, []string{"queue-1"}, saver)
 
 	// We submit tasks corresponding to real buckets...
-	th.AddTask("gs://archive-mlab-testing/ndt/2017/09/22/")
+	th.AddTask(ctx, "gs://archive-mlab-testing/ndt/2017/09/22/")
 
-	go th.AddTask("gs://archive-mlab-testing/ndt/2017/09/24/")
-	go th.AddTask("gs://archive-mlab-testing/ndt/2017/09/26/")
+	go th.AddTask(ctx, "gs://archive-mlab-testing/ndt/2017/09/24/")
+	go th.AddTask(ctx, "gs://archive-mlab-testing/ndt/2017/09/26/")
 
 	// But the jobs will eventually fail because there is no actual task queue,
 	// so there won't actually be any templated tables, so BQ dedup will fail.

@@ -31,7 +31,7 @@ var (
 
 // WaitForStableTable loops checking until table exists and has no streaming buffer.
 // TODO - move these functions to go/bqext package
-func WaitForStableTable(tt *bigquery.Table) error {
+func WaitForStableTable(ctx context.Context, tt *bigquery.Table) error {
 	errorTimeout := 2 * time.Minute
 	if testMode {
 		errorTimeout = 100 * time.Millisecond
@@ -44,7 +44,7 @@ ErrorTimeout:
 	// Check table status until streaming buffer is empty, OR there is
 	// an error condition we don't expect to recover from.
 	for {
-		ctx, cf := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cf := context.WithTimeout(ctx, 10*time.Second)
 		defer cf()
 		meta, err = tt.Metadata(ctx)
 		if err == nil && ctx.Err() != nil {
@@ -153,9 +153,10 @@ var dedupTemplateSwitch = `
 // NOTE: If destination table is partitioned, destTable MUST include the partition
 // suffix to avoid accidentally overwriting the entire table.
 // TODO - move these functions to go/bqext package
-func Dedup(dsExt *bqext.Dataset, src string, destTable *bigquery.Table) (*bigquery.Job, error) {
+// TODO - should we get the context from the dsExt?
+func Dedup(ctx context.Context, dsExt *bqext.Dataset, src string, destTable *bigquery.Table) (*bigquery.Job, error) {
 	if !strings.Contains(destTable.TableID, "$") {
-		meta, err := destTable.Metadata(context.Background())
+		meta, err := destTable.Metadata(ctx)
 		if err == nil && meta.TimePartitioning != nil {
 			return nil, errors.New("Destination table must specify partition")
 		}
@@ -179,7 +180,7 @@ func Dedup(dsExt *bqext.Dataset, src string, destTable *bigquery.Table) (*bigque
 	if query.QueryConfig.Dst == nil && query.QueryConfig.DryRun == false {
 		return nil, errors.New("query must be a destination or dry run")
 	}
-	job, err := query.Run(context.Background())
+	job, err := query.Run(ctx)
 	if err != nil {
 		return nil, err
 	}

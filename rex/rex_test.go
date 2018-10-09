@@ -1,6 +1,7 @@
 package rex_test
 
 import (
+	"context"
 	"log"
 	"sync"
 	"testing"
@@ -28,14 +29,14 @@ func newTestSaver() *testSaver {
 	return &testSaver{tasks: make(map[string][]state.Task), delete: make(map[string]struct{})}
 }
 
-func (s *testSaver) SaveTask(t state.Task) error {
+func (s *testSaver) SaveTask(ctx context.Context, t state.Task) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.tasks[t.Name] = append(s.tasks[t.Name], t)
 	return nil
 }
 
-func (s *testSaver) DeleteTask(t state.Task) error {
+func (s *testSaver) DeleteTask(ctx context.Context, t state.Task) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.delete[t.Name] = struct{}{}
@@ -60,6 +61,7 @@ func (s *testSaver) GetDeletes() map[string]struct{} {
 // conditions.
 // TODO - use a fake bigtable, so that tasks can get beyond Stabilizing.
 func TestWithTaskQueue(t *testing.T) {
+	ctx := context.Background()
 	client, counter := cloud.DryRunClient()
 	config := cloud.Config{Project: "mlab-testing", Client: client}
 	bqConfig := cloud.BQConfig{Config: config, BQProject: "bqproject", BQBatchDataset: "dataset"}
@@ -68,10 +70,10 @@ func TestWithTaskQueue(t *testing.T) {
 	saver := newTestSaver()
 	th := reproc.NewTaskHandler(&exec, []string{"queue-1"}, saver)
 
-	th.AddTask("gs://foo/bar/2001/01/01/")
+	th.AddTask(ctx, "gs://foo/bar/2001/01/01/")
 
-	go th.AddTask("gs://foo/bar/2001/01/02/")
-	go th.AddTask("gs://foo/bar/2001/01/03/")
+	go th.AddTask(ctx, "gs://foo/bar/2001/01/02/")
+	go th.AddTask(ctx, "gs://foo/bar/2001/01/03/")
 
 	start := time.Now()
 	for counter.Count() < 3 && time.Now().Before(start.Add(2*time.Second)) {
