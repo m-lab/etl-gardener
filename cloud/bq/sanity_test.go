@@ -48,28 +48,3 @@ func Test_getTableParts(t *testing.T) {
 		t.Error("Should error when partition is invalid")
 	}
 }
-
-// getTable constructs a bigquery Table object from project/dataset/table/partition.
-// The project/dataset/table/partition may or may not actually exist.
-// This does NOT do any network operations.
-func Test_getTable(t *testing.T) {
-	// We won't do anything with the tables, so we can use a nil client.
-	table, err := getTable(nil, "project", "dataset", "table", "20160102")
-	if err != nil {
-		t.Error(err)
-	} else {
-		if table.DatasetID != "dataset" {
-			t.Error("Bad parsing")
-		}
-	}
-
-	table, err = getTable(nil, "project", "dataset", "table$124", "20160102")
-	if err == nil {
-		t.Error("Bad table name not detected")
-	}
-
-	table, err = getTable(nil, "project", "dataset", "table", "201601020")
-	if err == nil {
-		t.Error("Bad suffix not detected")
-	}
-}

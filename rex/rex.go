@@ -18,14 +18,14 @@ import (
 
 	"github.com/GoogleCloudPlatform/google-cloud-go-testing/storage/stiface"
 
-	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/storage"
+	"github.com/GoogleCloudPlatform/google-cloud-go-testing/bigquery/bqiface"
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/cloud/bq"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/etl-gardener/state"
-	"github.com/m-lab/go/bqext"
+	"github.com/m-lab/go/dataset"
 	"google.golang.org/api/option"
 )
 
@@ -61,15 +61,14 @@ func NewReprocessingExecutor(ctx context.Context, config cloud.BQConfig, bucketO
 }
 
 // GetBatchDS constructs an appropriate Dataset for BQ operations.
-func (rex *ReprocessingExecutor) GetBatchDS(ctx context.Context) (bqext.Dataset, error) {
-	// TODO - bqext should use the provided context.
-	return bqext.NewDataset(rex.BQProject, rex.BQBatchDataset, rex.Options...)
+func (rex *ReprocessingExecutor) GetBatchDS(ctx context.Context) (dataset.Dataset, error) {
+	return dataset.NewDataset(ctx, rex.BQProject, rex.BQBatchDataset, rex.Options...)
 }
 
 // GetFinalDS constructs an appropriate Dataset for BQ operations.
-func (rex *ReprocessingExecutor) GetFinalDS(ctx context.Context) (bqext.Dataset, error) {
-	// TODO - bqext should use the provided context.
-	return bqext.NewDataset(rex.BQProject, rex.BQFinalDataset, rex.Options...)
+func (rex *ReprocessingExecutor) GetFinalDS(ctx context.Context) (dataset.Dataset, error) {
+	// TODO - dataset should use the provided context.
+	return dataset.NewDataset(ctx, rex.BQProject, rex.BQFinalDataset, rex.Options...)
 }
 
 var (
@@ -278,7 +277,7 @@ func (rex *ReprocessingExecutor) dedup(ctx context.Context, t *state.Task) error
 
 	log.Println("Dedupping", src.FullyQualifiedName())
 	// TODO move Dedup??
-	job, err := bq.Dedup(ctx, &ds, src.TableID, dest)
+	job, err := bq.Dedup(ctx, &ds, src.TableID(), dest)
 	if err != nil {
 		if err == io.EOF {
 			if env.TestMode {
@@ -298,8 +297,8 @@ func (rex *ReprocessingExecutor) dedup(ctx context.Context, t *state.Task) error
 // WaitForJob waits for job to complete.  Uses fibonacci backoff until the backoff
 // >= maxBackoff, at which point it continues using same backoff.
 // TODO - develop a BQJob interface for wrapping bigquery.Job, and allowing fakes.
-// TODO - move this to go/bqext, since it is bigquery specific and general purpose.
-func waitForJob(ctx context.Context, job *bigquery.Job, maxBackoff time.Duration, terminate <-chan struct{}) error {
+// TODO - move this to go/dataset, since it is bigquery specific and general purpose.
+func waitForJob(ctx context.Context, job bqiface.Job, maxBackoff time.Duration, terminate <-chan struct{}) error {
 	backoff := 10 * time.Millisecond
 	previous := backoff
 	for {
@@ -404,7 +403,7 @@ func (rex *ReprocessingExecutor) finish(ctx context.Context, t *state.Task, term
 	}
 
 	// Destination table has the same ID as source.
-	dest := destDs.Table(copy.TableID)
+	dest := destDs.Table(copy.TableID())
 	log.Printf("Sanity checking dedup'd data before final copy from %s to %s",
 		copy.FullyQualifiedName(), dest.FullyQualifiedName())
 

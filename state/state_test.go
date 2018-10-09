@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/m-lab/etl-gardener/state"
-	"github.com/m-lab/go/bqext"
+	"github.com/m-lab/go/dataset"
 )
 
 func init() {
@@ -98,12 +98,13 @@ func TestTaskBasics(t *testing.T) {
 }
 
 func TestSourceAndDest(t *testing.T) {
+	ctx := context.Background()
 	task, err := state.NewTask("gs://foo/foobar/2000/01/01/task1", "Q1", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	dsExt, err := bqext.NewDataset("mlab-testing", "dataset")
+	dsExt, err := dataset.NewDataset(ctx, "mlab-testing", "dataset")
 	if err != nil {
 		t.Fatal(err)
 	}
