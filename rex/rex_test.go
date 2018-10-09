@@ -74,11 +74,11 @@ func TestWithTaskQueue(t *testing.T) {
 	client, counter := cloud.DryRunClient()
 	config := cloud.Config{Project: "mlab-testing", Client: client}
 	bqConfig := cloud.BQConfig{Config: config, BQProject: "bqproject", BQBatchDataset: "dataset"}
-	bucketOpts := []option.ClientOption{option.WithHTTPClient(client)}
-	exec, err := NewReprocessingExecutor(ctx, bqConfig, bucketOpts...)
-	if err != nil {
-		t.Fatal(err)
-	}
+	fc := fakeClient{objects: []*storage.ObjectAttrs{
+		&storage.ObjectAttrs{Name: "obj1"},
+		&storage.ObjectAttrs{Name: "obj2"},
+	}}
+	exec := &rex.ReprocessingExecutor{BQConfig: bqConfig, StorageClient: fc}
 	defer exec.StorageClient.Close()
 	saver := newTestSaver()
 	th := reproc.NewTaskHandler(exec, []string{"queue-1"}, saver)
@@ -125,6 +125,7 @@ func TestWithTaskQueue(t *testing.T) {
 // BucketHandle that returns a series of fake Objects.
 type fakeClient struct {
 	stiface.Client
+	objects []*storage.ObjectAttrs // Objects that will be returned by iterator
 }
 
 func (f fakeClient) Close() error {
@@ -132,23 +133,21 @@ func (f fakeClient) Close() error {
 }
 
 func (f fakeClient) Bucket(name string) stiface.BucketHandle {
-	return &fakeBucketHandle{}
+	return &fakeBucketHandle{objects: f.objects}
 }
 
 type fakeBucketHandle struct {
 	stiface.BucketHandle
+	objects []*storage.ObjectAttrs // Objects that will be returned by iterator
 }
 
-func (f fakeBucketHandle) Attrs(ctx context.Context) (*storage.BucketAttrs, error) {
+func (bh fakeBucketHandle) Attrs(ctx context.Context) (*storage.BucketAttrs, error) {
 	return &storage.BucketAttrs{}, nil
 }
 
-func (f fakeBucketHandle) Objects(context.Context, *storage.Query) stiface.ObjectIterator {
+func (bh fakeBucketHandle) Objects(context.Context, *storage.Query) stiface.ObjectIterator {
 	n := 0
-	it := fakeObjectIterator{next: &n}
-	it.objects = append(it.objects, &storage.ObjectAttrs{Name: "obj1"})
-	it.objects = append(it.objects, &storage.ObjectAttrs{Name: "obj2"})
-	return it
+	return fakeObjectIterator{next: &n, objects: bh.objects}
 }
 
 type fakeObjectIterator struct {
@@ -164,4 +163,62 @@ func (it fakeObjectIterator) Next() (*storage.ObjectAttrs, error) {
 	log.Println(it.next)
 	*it.next += 1
 	return it.objects[*it.next-1], nil
+}
+
+func TestBadPrefix(t *testing.T) {
+	ctx := context.Background()
+	client, _ := cloud.DryRunClient()
+	config := cloud.Config{Project: "mlab-testing", Client: client}
+	bqConfig := cloud.BQConfig{Config: config, BQProject: "bqproject", BQBatchDataset: "dataset"}
+	fc := fakeClient{objects: []*storage.ObjectAttrs{
+		&storage.ObjectAttrs{Name: "obj1"},
+		&storage.ObjectAttrs{Name: "obj2"},
+	}}
+	exec := &rex.ReprocessingExecutor{BQConfig: bqConfig, StorageClient: fc}
+	defer exec.StorageClient.Close()
+
+	saver := newTestSaver()
+	th := reproc.NewTaskHandler(exec, []string{"queue-1"}, saver)
+
+	err := th.AddTask(ctx, "gs://foo/bar/badprefix/01/01/")
+	if err == nil {
+		th.Wait()
+		log.Fatal("AddTask should return bad prefix error")
+	}
+
+	if !strings.HasPrefix(err.Error(), "Invalid test path:") {
+		log.Println("Should have invalid test path error")
+		t.Error(err)
+	}
+}
+
+func TestZeroFiles(t *testing.T) {
+	ctx := context.Background()
+	client, _ := cloud.DryRunClient()
+	config := cloud.Config{Project: "mlab-testing", Client: client}
+	bqConfig := cloud.BQConfig{Config: config, BQProject: "bqproject", BQBatchDataset: "dataset"}
+	fc := fakeClient{objects: []*storage.ObjectAttrs{}}
+	exec := &rex.ReprocessingExecutor{BQConfig: bqConfig, StorageClient: fc}
+	defer exec.StorageClient.Close()
+
+	saver := newTestSaver()
+	th := reproc.NewTaskHandler(exec, []string{"queue-1"}, saver)
+
+	err := th.AddTask(ctx, "gs://foo/bar/2001/01/01/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	th.Wait()
+
+	tasks := saver.GetTasks()
+	if len(tasks) != 1 {
+		t.Fatal("Should be exactly one task record")
+	}
+	for _, task := range tasks {
+		// Eventually, final state should be Done.  For now it is an error state
+		last := task[len(task)-1]
+		if last.State != state.Done {
+			t.Error("Bad task state:", task)
+		}
+	}
 }
