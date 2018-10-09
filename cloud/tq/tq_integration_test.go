@@ -43,7 +43,7 @@ func TestGetBucket(t *testing.T) {
 	storageClient := stiface.AdaptClient(sc)
 
 	bucketName := "archive-mlab-testing"
-	bucket, err := tq.GetBucket(ctx, stiface.AdaptClient(sc), "mlab-testing", bucketName, false)
+	bucket, err := tq.GetBucket(ctx, storageClient, "mlab-testing", bucketName, false)
 	if err != nil {
 		t.Fatal(err)
 	}
