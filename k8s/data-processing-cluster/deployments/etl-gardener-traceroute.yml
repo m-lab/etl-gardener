@@ -39,22 +39,22 @@ spec:
         env:
         - name: GARDENER_SERVICE
           value: "true"
-        - name:  GIT_COMMIT
+        - name: GIT_COMMIT
           value: "{{GIT_COMMIT}}"
         - name: PROJECT
-          value: {{GCLOUD_PROJECT}}
+          value: "{{GCLOUD_PROJECT}}"
         - name: TASKFILE_BUCKET
-          value: "scraper-{{GCLOUD_PROJECT}}"  # NOTE: if we start deleting unembargoed files from scraper, this will no longer work.
+          value: "archive-{{GCLOUD_PROJECT}}"
         - name: START_DATE
-          value: "20170601"
+          value: "20170101"  # Provide 6-month overlap with legacy tables.
         - name: EXPERIMENT
-          value: "traceroute"  # For example "ndt,sidestream,switch"
+          value: "traceroute"
         - name: DATASET
-          value: private
+          value: "batch"
         - name: FINAL_DATASET
-          value: ""  # e.g. base_tables
+          value: "base_tables"
         - name: QUEUE_BASE
-          value: "etl-sidestream-batch-"
+          value: "etl-traceroute-batch-"
         - name: NUM_QUEUES
           value: "16"
 
