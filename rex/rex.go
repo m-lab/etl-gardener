@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GoogleCloudPlatform/google-cloud-go-testing/storage/stiface"
+
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/storage"
 	"github.com/m-lab/etl-gardener/cloud"
@@ -45,7 +47,17 @@ func init() {
 // ReprocessingExecutor handles all reprocessing steps.
 type ReprocessingExecutor struct {
 	cloud.BQConfig
-	BucketOpts []option.ClientOption
+	StorageClient stiface.Client
+}
+
+// NewReprocessingExecutor creates a new exec.
+// NOTE:  The context is used to create a persistent storage Client!
+func NewReprocessingExecutor(ctx context.Context, config cloud.BQConfig, bucketOpts ...option.ClientOption) (*ReprocessingExecutor, error) {
+	storageClient, err := storage.NewClient(ctx, bucketOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return &ReprocessingExecutor{config, stiface.AdaptClient(storageClient)}, nil
 }
 
 // GetBatchDS constructs an appropriate Dataset for BQ operations.
@@ -228,15 +240,8 @@ func (rex *ReprocessingExecutor) queue(ctx context.Context, t *state.Task) (int,
 
 	// Use a real storage bucket.
 	// TODO - add a persistent storageClient to the rex object?
-	storageClient, err := storage.NewClient(ctx, rex.BucketOpts...)
-	if err != nil {
-		log.Println(err)
-		t.SetError(ctx, err, "StorageClientError")
-		return 0, err
-	}
 	// TODO - try cancelling the context instead?
-	defer storageClient.Close()
-	bucket, err := tq.GetBucket(ctx, storageClient, rex.Project, bucketName, false)
+	bucket, err := tq.GetBucket(ctx, rex.StorageClient, rex.Project, bucketName, false)
 	if err != nil {
 		if err == io.EOF && env.TestMode {
 			log.Println("Using fake client, ignoring EOF error")
