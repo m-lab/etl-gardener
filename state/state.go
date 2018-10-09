@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/datastore"
+	"github.com/GoogleCloudPlatform/google-cloud-go-testing/bigquery/bqiface"
 	"github.com/m-lab/etl-gardener/metrics"
-	"github.com/m-lab/go/bqext"
+	"github.com/m-lab/go/dataset"
 )
 
 // State indicates the state of a single Task in flight.
@@ -182,7 +182,7 @@ func (t *Task) ParsePrefix() ([]string, error) {
 }
 
 // SourceAndDest creates BQ Table entities for the source templated table, and destination partition.
-func (t *Task) SourceAndDest(ds *bqext.Dataset) (*bigquery.Table, *bigquery.Table, error) {
+func (t *Task) SourceAndDest(ds *dataset.Dataset) (bqiface.Table, bqiface.Table, error) {
 	// Launch the dedup request, and save the JobID
 	parts, err := t.ParsePrefix()
 	if err != nil {
