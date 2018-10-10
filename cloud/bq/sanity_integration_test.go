@@ -204,31 +204,11 @@ func TestAnnotatedTableGetPartitionInfo(t *testing.T) {
 
 	tbl := dsExt.Table("DedupTest$19990101")
 	at := bq.NewAnnotatedTable(tbl, &dsExt)
-	// Test nil context.
-	_, err = at.GetPartitionInfo(nil)
-	if err == nil {
-		t.Error("Should error on nil ctx")
-	}
-
-	// Test initial fetch
 	info, err := at.GetPartitionInfo(ctx)
 	if err != nil {
 		t.Error(err)
 	} else if info.PartitionID != "19990101" {
 		t.Error("wrong partitionID: " + info.PartitionID)
-	}
-	// Check cached code path
-	info, err = at.GetPartitionInfo(ctx)
-	if err != nil {
-		t.Error(err)
-	} else if info.PartitionID != "19990101" {
-		t.Error("wrong partitionID: " + info.PartitionID)
-	}
-
-	// Once cache is populated, also ok to send a nil ctx.
-	_, err = at.GetPartitionInfo(nil)
-	if err != nil {
-		t.Error(err)
 	}
 
 	// Check behavior for missing partition
