@@ -73,12 +73,17 @@ func TestWithTaskQueue(t *testing.T) {
 	ctx := context.Background()
 	client, counter := cloud.DryRunClient()
 	config := cloud.Config{Project: "mlab-testing", Client: client}
-	bqConfig := cloud.BQConfig{Config: config, BQProject: "bqproject", BQBatchDataset: "dataset"}
+	bqConfig := cloud.BQConfig{Config: config, BQProject: "bqproject", BQBatchDataset: "batch", BQFinalDataset: "final"}
 	fc := fakeClient{objects: []*storage.ObjectAttrs{
 		&storage.ObjectAttrs{Name: "obj1"},
 		&storage.ObjectAttrs{Name: "obj2"},
 	}}
-	exec := &rex.ReprocessingExecutor{BQConfig: bqConfig, StorageClient: fc}
+	exec, err := rex.NewReprocessingExecutor(ctx, bqConfig)
+	if err != nil {
+		log.Fatal(err)
+	}
+	exec.StorageClient = fc
+
 	defer exec.StorageClient.Close()
 	saver := newTestSaver()
 	th := reproc.NewTaskHandler(exec, []string{"queue-1"}, saver)

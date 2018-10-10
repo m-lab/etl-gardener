@@ -31,12 +31,7 @@ var (
 	ErrInvalidQueueName = errors.New("invalid queue name")
 )
 
-// QueueHandler is much like tq.Queuer, but for a single queue.  We want
-// independent single queue handlers to avoid thread safety issues, among
-// other things.
-// It needs:
-//   bucket
-//   strategies for enqueuing.
+// QueueHandler provides methods for adding tasks, and getting stats and status.
 type QueueHandler struct {
 	cloud.Config
 	Queue string // task queue name

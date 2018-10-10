@@ -48,28 +48,30 @@ func init() {
 // ReprocessingExecutor handles all reprocessing steps.
 type ReprocessingExecutor struct {
 	cloud.BQConfig
+	// These collectively allow injection of various fakes for testing.
 	StorageClient stiface.Client
+	BatchDS       dataset.Dataset
+	FinalDS       dataset.Dataset
+	// TODO need to allow injection of QueueHandler factory.
+	// QHFactory     func(config cloud.Config, queue string) (*tq.QueueHandler, error)
 }
 
 // NewReprocessingExecutor creates a new exec.
-// NOTE:  The context is used to create a persistent storage Client!
+// NOTE: Datasets may be injected after construction.
 func NewReprocessingExecutor(ctx context.Context, config cloud.BQConfig, bucketOpts ...option.ClientOption) (*ReprocessingExecutor, error) {
 	storageClient, err := storage.NewClient(ctx, bucketOpts...)
 	if err != nil {
 		return nil, err
 	}
-	return &ReprocessingExecutor{config, stiface.AdaptClient(storageClient)}, nil
-}
-
-// GetBatchDS constructs an appropriate Dataset for BQ operations.
-func (rex *ReprocessingExecutor) GetBatchDS(ctx context.Context) (dataset.Dataset, error) {
-	return dataset.NewDataset(ctx, rex.BQProject, rex.BQBatchDataset, rex.Options...)
-}
-
-// GetFinalDS constructs an appropriate Dataset for BQ operations.
-func (rex *ReprocessingExecutor) GetFinalDS(ctx context.Context) (dataset.Dataset, error) {
-	// TODO - dataset should use the provided context.
-	return dataset.NewDataset(ctx, rex.BQProject, rex.BQFinalDataset, rex.Options...)
+	batchDS, err := dataset.NewDataset(ctx, config.BQProject, config.BQBatchDataset, config.Options...)
+	if err != nil {
+		return nil, err
+	}
+	finalDS, err := dataset.NewDataset(ctx, config.BQProject, config.BQFinalDataset, config.Options...)
+	if err != nil {
+		return nil, err
+	}
+	return &ReprocessingExecutor{config, stiface.AdaptClient(storageClient), batchDS, finalDS}, nil
 }
 
 var (
@@ -124,13 +126,7 @@ func (rex *ReprocessingExecutor) Next(ctx context.Context, t *state.Task, termin
 
 	case state.Stabilizing:
 		// Wait for the streaming buffer to be nil.
-		ds, err := rex.GetBatchDS(ctx)
-		if err != nil {
-			// SetError also pushes to datastore, like Update(ctx, )
-			t.SetError(ctx, err, "rex.GetBatchDS")
-			return err
-		}
-		s, _, err := t.SourceAndDest(&ds)
+		s, _, err := t.SourceAndDest(&rex.BatchDS)
 		if err != nil {
 			// SetError also pushes to datastore, like Update(ctx, )
 			t.SetError(ctx, err, "task.SourceAndDest")
@@ -269,11 +265,7 @@ func (rex *ReprocessingExecutor) queue(ctx context.Context, t *state.Task) (int,
 
 func (rex *ReprocessingExecutor) dedup(ctx context.Context, t *state.Task) error {
 	// Launch the dedup request, and save the JobID
-	ds, err := rex.GetBatchDS(ctx)
-	if err != nil {
-		t.SetError(ctx, err, "GetBatchDS")
-		return err
-	}
+	ds := rex.BatchDS
 	src, dest, err := t.SourceAndDest(&ds)
 	if err != nil {
 		t.SetError(ctx, err, "SourceAndDest")
@@ -344,17 +336,12 @@ func waitForJob(ctx context.Context, job bqiface.Job, maxBackoff time.Duration, 
 
 func (rex *ReprocessingExecutor) finish(ctx context.Context, t *state.Task, terminate <-chan struct{}) error {
 	// TODO use a simple client instead of creating dataset?
-	srcDs, err := rex.GetBatchDS(ctx)
-	if err != nil {
-		t.SetError(ctx, err, "GetBatchDS")
-		return err
-	}
-	src, copy, err := t.SourceAndDest(&srcDs)
+	src, copy, err := t.SourceAndDest(&rex.BatchDS)
 	if err != nil {
 		t.SetError(ctx, err, "SourceAndDest")
 		return err
 	}
-	job, err := srcDs.BqClient.JobFromID(ctx, t.JobID)
+	job, err := rex.BatchDS.BqClient.JobFromID(ctx, t.JobID)
 	if err != nil {
 		t.SetError(ctx, err, "JobFromID")
 		return err
@@ -401,14 +388,9 @@ func (rex *ReprocessingExecutor) finish(ctx context.Context, t *state.Task, term
 		t.SetError(ctx, ErrDatasetNamesMatch, "Cannot SanityCheckAndCopy to same dataset")
 		return ErrDatasetNamesMatch
 	}
-	destDs, err := rex.GetFinalDS(ctx)
-	if err != nil {
-		t.SetError(ctx, err, "GetFinalDS")
-		return err
-	}
 
 	// Destination table has the same ID as source.
-	dest := destDs.Table(copy.TableID())
+	dest := rex.FinalDS.Table(copy.TableID())
 	log.Printf("Sanity checking dedup'd data before final copy from %s to %s",
 		copy.FullyQualifiedName(), dest.FullyQualifiedName())
 
@@ -416,8 +398,9 @@ func (rex *ReprocessingExecutor) finish(ctx context.Context, t *state.Task, term
 	copyCtx, cf := context.WithTimeout(ctx, 30*time.Minute)
 	defer cf()
 
-	srcAt := bq.NewAnnotatedTable(copy, &srcDs)
-	destAt := bq.NewAnnotatedTable(dest, &destDs)
+	// TODO - move the AnnotatedTable stuff inside SanityCheckAndCopy?
+	srcAt := bq.NewAnnotatedTable(copy, &rex.BatchDS)
+	destAt := bq.NewAnnotatedTable(dest, &rex.FinalDS)
 
 	// Copy to Final Dataset tables.
 	err = bq.SanityCheckAndCopy(copyCtx, srcAt, destAt)
