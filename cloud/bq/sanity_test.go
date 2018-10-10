@@ -1,8 +1,12 @@
 package bq
 
 import (
+	"context"
 	"log"
+	"strings"
 	"testing"
+
+	"github.com/m-lab/go/dataset"
 )
 
 func init() {
@@ -46,5 +50,25 @@ func Test_getTableParts(t *testing.T) {
 	parts, err = getTableParts("table$20162102")
 	if err == nil {
 		t.Error("Should error when partition is invalid")
+	}
+}
+
+func TestSanityCheckAndCopy(t *testing.T) {
+	ctx := context.Background()
+	ds, err := dataset.NewDataset(ctx, "project", "dataset")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := ds.Table("foo_19990101")
+	dest := ds.Table("foo$19990101")
+	srcAt := NewAnnotatedTable(src, &ds)
+	destAt := NewAnnotatedTable(dest, &ds)
+
+	err = SanityCheckAndCopy(ctx, srcAt, destAt)
+	if err == nil {
+		t.Fatal("Should have 404 error")
+	}
+	if !strings.HasPrefix(err.Error(), "googleapi: Error 404") {
+		t.Fatal(err)
 	}
 }
