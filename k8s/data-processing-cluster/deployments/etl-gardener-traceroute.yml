@@ -48,7 +48,7 @@ spec:
         - name: START_DATE
           value: "20170101"  # Provide 6-month overlap with legacy tables.
         - name: EXPERIMENT
-          value: "traceroute"
+          value: "paris-traceroute"
         - name: DATASET
           value: "batch"
         - name: FINAL_DATASET
