@@ -166,7 +166,7 @@ func TestAnnotationPartitionInfo(t *testing.T) {
 
 	badTable := dsExt.Table("non-existant")
 
-	badAT := bq.NewAnnotatedTable(tbl, &dsExt)
+	badAT := bq.NewAnnotatedTable(badTable, &dsExt)
 	// Fetch cache detail - which hits backend
 
 	_, err = badAT.CachedPartitionInfo(ctx)
@@ -204,11 +204,31 @@ func TestAnnotatedTableGetPartitionInfo(t *testing.T) {
 
 	tbl := dsExt.Table("DedupTest$19990101")
 	at := bq.NewAnnotatedTable(tbl, &dsExt)
+	// Test nil context.
+	_, err = at.GetPartitionInfo(nil)
+	if err == nil {
+		t.Error("Should error on nil ctx")
+	}
+
+	// Test initial fetch
 	info, err := at.GetPartitionInfo(ctx)
 	if err != nil {
 		t.Error(err)
 	} else if info.PartitionID != "19990101" {
 		t.Error("wrong partitionID: " + info.PartitionID)
+	}
+	// Check cached code path
+	info, err = at.GetPartitionInfo(ctx)
+	if err != nil {
+		t.Error(err)
+	} else if info.PartitionID != "19990101" {
+		t.Error("wrong partitionID: " + info.PartitionID)
+	}
+
+	// Once cache is populated, also ok to send a nil ctx.
+	_, err = at.GetPartitionInfo(nil)
+	if err != nil {
+		t.Error(err)
 	}
 
 	// Check behavior for missing partition
@@ -220,6 +240,7 @@ func TestAnnotatedTableGetPartitionInfo(t *testing.T) {
 	} else if info.PartitionID != "" {
 		t.Error("Non-existent partition should return empty PartitionID")
 	}
+
 }
 
 func TestAnnotatedTable(t *testing.T) {
