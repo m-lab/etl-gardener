@@ -110,6 +110,9 @@ func (at *AnnotatedTable) CachedDetail(ctx context.Context) (*Detail, error) {
 	// TODO - use context
 	// TODO - maybe just embed code here.
 	at.detail, at.err = GetTableDetail(ctx, at.dataset, at.Table)
+	if at.err != nil {
+		log.Println(at.FullyQualifiedName(), at.TableID())
+	}
 	return at.detail, at.err
 }
 
@@ -178,6 +181,10 @@ func GetTableDetail(ctx context.Context, dsExt *dataset.Dataset, table bqiface.T
 
 	// TODO - this should take a context?
 	err := dsExt.QueryAndParse(ctx, queryString, &detail)
+	if err != nil {
+		log.Println(err)
+		log.Println("Query error:", queryString)
+	}
 	return &detail, err
 }
 
@@ -239,8 +246,11 @@ func getTableParts(tableName string) (tableNameParts, error) {
 func (at *AnnotatedTable) GetPartitionInfo(ctx context.Context) (*dataset.PartitionInfo, error) {
 	tableName := at.Table.TableID()
 	parts, err := getTableParts(tableName)
-	if err != nil || !parts.isPartitioned {
-		return nil, errors.New("TableID missing partition: " + tableName)
+	if err != nil {
+		return nil, err
+	}
+	if !parts.isPartitioned {
+		return nil, errors.New("TableID does not specify partition: " + tableName)
 	}
 	// Assemble the FQ table name, without the partition suffix.
 	fullTable := fmt.Sprintf("%s:%s.%s", at.ProjectID(), at.DatasetID(), parts.prefix)

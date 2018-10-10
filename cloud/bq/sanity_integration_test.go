@@ -149,7 +149,7 @@ func TestAnnotationPartitionInfo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tbl := dsExt.Table("DedupTest")
+	tbl := dsExt.Table("DedupTest$19990101")
 
 	at := bq.NewAnnotatedTable(tbl, &dsExt)
 	// Fetch cache detail - which hits backend
@@ -225,11 +225,11 @@ func TestAnnotatedTableGetPartitionInfo(t *testing.T) {
 
 func TestAnnotatedTable(t *testing.T) {
 	ctx := context.Background()
-	ds, err := dataset.NewDataset(ctx, "mlab-testing", "go")
+	ds, err := dataset.NewDataset(ctx, "mlab-testing", "src")
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := ds.Table("TestGetTableStats")
+	src := ds.Table("DedupTest")
 	srcAt := bq.NewAnnotatedTable(src, &ds)
 	// Fetch detail.
 	_, err = srcAt.CachedDetail(ctx)
