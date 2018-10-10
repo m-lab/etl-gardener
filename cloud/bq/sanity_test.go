@@ -5,8 +5,13 @@ import (
 	"log"
 	"strings"
 	"testing"
+	"time"
 
+	"cloud.google.com/go/bigquery"
+	"github.com/GoogleCloudPlatform/google-cloud-go-testing/bigquery/bqiface"
+	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/go/dataset"
+	"google.golang.org/api/option"
 )
 
 func init() {
@@ -71,4 +76,68 @@ func TestSanityCheckAndCopy(t *testing.T) {
 	if !strings.HasPrefix(err.Error(), "googleapi: Error 404") {
 		t.Fatal(err)
 	}
+}
+
+// This defines a Dataset that returns a Table, that returns a canned Metadata.
+type testTable struct {
+	bqiface.Table
+}
+
+func (tbl testTable) Metadata(ctx context.Context) (*bigquery.TableMetadata, error) {
+	meta := bigquery.TableMetadata{CreationTime: time.Now(), LastModifiedTime: time.Now(), NumBytes: 168, NumRows: 8}
+	meta.TimePartitioning = &bigquery.TimePartitioning{Expiration: 0 * time.Second}
+	return &meta, nil
+}
+
+type testDataset struct {
+	bqiface.Dataset
+}
+
+func (ds *testDataset) Table(name string) bqiface.Table {
+	tt := testTable{ds.Dataset.Table(name)}
+	return tt
+}
+
+// creates a Dataset with a dry run client.
+func newTestDataset(project, ds string) dataset.Dataset {
+	ctx := context.Background()
+	dryRun, _ := cloud.DryRunClient()
+	c, err := bigquery.NewClient(ctx, project, option.WithHTTPClient(dryRun))
+	if err != nil {
+		panic(err)
+	}
+
+	bqClient := bqiface.AdaptClient(c)
+
+	return dataset.Dataset{Dataset: &testDataset{bqClient.Dataset(ds)}, BqClient: bqClient}
+}
+
+func TestCachedMeta(t *testing.T) {
+	ctx := context.Background()
+	dsExt := newTestDataset("mlab-testing", "etl")
+
+	tbl := dsExt.Table("DedupTest")
+	meta, err := tbl.Metadata(ctx)
+	if err != nil {
+		t.Error(err)
+	} else if meta == nil {
+		t.Error("Meta should not be nil")
+	}
+
+	at := NewAnnotatedTable(tbl, &dsExt)
+	// Fetch cache detail - which hits backend
+	meta, err = at.CachedMeta(ctx)
+	if err != nil {
+		t.Error(err)
+	} else if meta == nil {
+		t.Error("Meta should not be nil")
+	}
+	// Fetch again, exercising the cached code path.
+	meta, err = at.CachedMeta(ctx)
+	if err != nil {
+		t.Error(err)
+	} else if meta == nil {
+		t.Error("Meta should not be nil")
+	}
+
 }

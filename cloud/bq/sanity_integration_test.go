@@ -55,7 +55,7 @@ func TestGetTableDetail(t *testing.T) {
 	}
 }
 
-func TestAnnotationTableMeta(t *testing.T) {
+func TestCachedMeta(t *testing.T) {
 	// TODO - Make NewDataSet return a pointer, for consistency with bigquery.
 	ctx := context.Background()
 	dsExt, err := dataset.NewDataset(ctx, "mlab-testing", "src")
@@ -87,62 +87,7 @@ func TestAnnotationTableMeta(t *testing.T) {
 	}
 }
 
-func TestAnnotationDetail(t *testing.T) {
-	ctx := context.Background()
-	dsExt, err := dataset.NewDataset(ctx, "mlab-testing", "src")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tbl := dsExt.Table("DedupTest")
-
-	at := bq.NewAnnotatedTable(tbl, &dsExt)
-	// Fetch cache detail - which hits backend
-	_, err = at.CachedDetail(ctx)
-	if err != nil {
-		t.Error(err)
-	}
-	// Fetch again, exercising the cached code path.
-	_, err = at.CachedDetail(ctx)
-	if err != nil {
-		t.Error(err)
-	}
-}
-
-func TestAnnotationMeta(t *testing.T) {
-	ctx := context.Background()
-	dsExt, err := dataset.NewDataset(ctx, "mlab-testing", "src")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tbl := dsExt.Table("DedupTest")
-	meta, err := tbl.Metadata(ctx)
-	if err != nil {
-		t.Error(err)
-	} else if meta == nil {
-		t.Error("Meta should not be nil")
-	}
-
-	at := bq.NewAnnotatedTable(tbl, &dsExt)
-	// Fetch cache detail - which hits backend
-	meta, err = at.CachedMeta(ctx)
-	if err != nil {
-		t.Error(err)
-	} else if meta == nil {
-		t.Error("Meta should not be nil")
-	}
-	// Fetch again, exercising the cached code path.
-	meta, err = at.CachedMeta(ctx)
-	if err != nil {
-		t.Error(err)
-	} else if meta == nil {
-		t.Error("Meta should not be nil")
-	}
-
-}
-
-func TestAnnotationPartitionInfo(t *testing.T) {
+func TestCachedPartitionInfo(t *testing.T) {
 	ctx := context.Background()
 	dsExt, err := dataset.NewDataset(ctx, "mlab-testing", "src")
 	if err != nil {
@@ -223,7 +168,7 @@ func TestAnnotatedTableGetPartitionInfo(t *testing.T) {
 
 }
 
-func TestAnnotatedTable(t *testing.T) {
+func TestCachedDetail(t *testing.T) {
 	ctx := context.Background()
 	ds, err := dataset.NewDataset(ctx, "mlab-testing", "src")
 	if err != nil {
