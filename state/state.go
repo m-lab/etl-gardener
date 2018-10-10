@@ -111,7 +111,9 @@ func (ds *DatastoreSaver) DeleteTask(ctx context.Context, t Task) error {
 }
 
 // Task contains the state of a single Task.
-// These will be stored and retrieved from DataStore
+// These will be stored and retrieved from DataStore. The fact that this struct
+// is written to datastore means that it can not be an interface and instead
+// must be a struct.
 type Task struct {
 	Name       string // e.g. gs://archive-mlab-oti/ndt/2017/06/01/
 	Experiment string // e.g. ndt, sidestream, etc.
@@ -175,9 +177,7 @@ func (t *Task) ParsePrefix() ([]string, error) {
 	if fields == nil {
 		return nil, errors.New("Invalid test path: " + t.Name)
 	}
-	if len(fields) != 4 {
-		return nil, errors.New("Path does not include all fields: " + t.Name)
-	}
+	// If fields is not nil, then there was a match, and all matches contain 4 fields.
 	return fields[1:], nil
 }
 

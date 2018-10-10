@@ -95,9 +95,40 @@ func TestTaskBasics(t *testing.T) {
 	if !ok {
 		t.Fatal("Should have called delete")
 	}
+
+	if err := task.Save(ctx); err != nil {
+		t.Fatal("Should not have an error here", err)
+	}
+
+	task.SetSaver(nil)
+	if err := task.Save(ctx); err != state.ErrNoSaver {
+		t.Fatal("Should have gotten ErrNoSaver but instead got", err)
+	}
+	if err := task.Delete(ctx); err != state.ErrNoSaver {
+		t.Fatal("Should have gotten ErrNoSaver but instead got", err)
+	}
+	if err := task.Update(ctx, state.Queuing); err != state.ErrNoSaver {
+		t.Fatal("Should have gotten ErrNoSaver but instead got", err)
+	}
+	if err := task.SetError(ctx, nil, ""); err != state.ErrNoSaver {
+		t.Fatal("Should have gotten ErrNoSaver but instead got", err)
+	}
+	if len(task.String()) < 1 {
+		t.Fatal("The string should exist.")
+	}
 }
 
 func TestSourceAndDest(t *testing.T) {
+	if _, err := state.NewTask("gs://task1", "Q1", nil); err == nil {
+		t.Fatal("Should have had an error here")
+	}
+	if _, err := state.NewTask("gs://foo/foobar/2000/ab/01/task1", "Q1", nil); err == nil {
+		t.Fatal("Should have had an error here")
+	}
+	if _, err := state.NewTask("gs://foo/foobar/2000/13/01/task1", "Q1", nil); err == nil {
+		t.Fatal("Should have had an error here")
+	}
+
 	ctx := context.Background()
 	task, err := state.NewTask("gs://foo/foobar/2000/01/01/task1", "Q1", nil)
 	if err != nil {
@@ -120,6 +151,13 @@ func TestSourceAndDest(t *testing.T) {
 	// Source should be a partition, ending in $date.
 	if dest.FullyQualifiedName() != "mlab-testing:dataset.foobar$20000101" {
 		t.Error(dest.FullyQualifiedName())
+	}
+
+	// Exercise error case, which should be impossible if the task was created with NewTask.
+	task = &state.Task{Name: "gs://foo/foobar/2000/ab/01/task1"}
+	_, _, err = task.SourceAndDest(&dsExt)
+	if err == nil {
+		t.Fatal("Should have had an error")
 	}
 }
 
