@@ -192,6 +192,9 @@ func (t *Task) SourceAndDest(ds *bqext.Dataset) (*bigquery.Table, *bigquery.Tabl
 		return nil, nil, err
 	}
 
+	if parts[1] == "paris-traceroute" {
+		parts[1] = "traceroute"
+	}
 	src := ds.Table(parts[1] + "_" + strings.Join(strings.Split(parts[2], "/"), ""))
 	dest := ds.Table(parts[1] + "$" + strings.Join(strings.Split(parts[2], "/"), ""))
 	return src, dest, nil
