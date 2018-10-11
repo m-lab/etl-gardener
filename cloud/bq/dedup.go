@@ -142,6 +142,19 @@ var dedupTemplateSwitch = `
 	WHERE
 		row_number = 1`
 
+// dedupTemplateTraceroute expects to be executed on a table containing a single day's data, such
+// as mlab-oti:batch.traceroute_20170601.
+var dedupTemplateTraceroute = `
+	#standardSQL
+	# Select single row based on test_id, client_ip, server_ip, src_ip, dest_ip
+	SELECT * EXCEPT (row_number)
+    FROM ( SELECT *, ROW_NUMBER() OVER (
+        PARTITION BY CONCAT(test_id, connection_spec.local_ip, connection_spec.remote_ip,
+            paris_traceroute_hop.src_ip, paris_traceroute_hop.dest_ip)
+		) row_number
+	    FROM ` + "`%s`" + `)
+	WHERE row_number = 1`
+
 // Dedup executes a query that dedups and writes to destination partition.
 // This function is alpha status.  The interface may change without notice
 // or major version number change.
@@ -170,8 +183,10 @@ func Dedup(dsExt *bqext.Dataset, src string, destTable *bigquery.Table) (*bigque
 		queryString = fmt.Sprintf(dedupTemplateNDT, src)
 	case strings.HasPrefix(destTable.TableID, "switch"):
 		queryString = fmt.Sprintf(dedupTemplateSwitch, src)
+	case strings.HasPrefix(destTable.TableID, "traceroute"):
+		queryString = fmt.Sprintf(dedupTemplateTraceroute, src)
 	default:
-		log.Println("Only handles sidestream, ndt, switch, not " + destTable.TableID)
+		log.Println("Only handles sidestream, ndt, switch, traceroute, not " + destTable.TableID)
 		return nil, errors.New("Unknown table type")
 	}
 	query := dsExt.DestQuery(queryString, destTable, bigquery.WriteTruncate)
