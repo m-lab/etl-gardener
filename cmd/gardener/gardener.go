@@ -22,7 +22,6 @@ import (
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/reproc"
 	"github.com/m-lab/etl-gardener/rex"
-	"google.golang.org/api/option"
 
 	"github.com/m-lab/etl-gardener/state"
 
@@ -145,7 +144,9 @@ func NewBQConfig(config cloud.Config) cloud.BQConfig {
 
 // dispatcherFromEnv creates a Dispatcher struct initialized from environment variables.
 // It uses PROJECT, QUEUE_BASE, and NUM_QUEUES.
-func taskHandlerFromEnv(client *http.Client) (*reproc.TaskHandler, error) {
+// NOTE: ctx should only be used within the function scope, and not reused later.
+// Not currently clear if that is true.
+func taskHandlerFromEnv(ctx context.Context, client *http.Client) (*reproc.TaskHandler, error) {
 	if env.Error != nil {
 		log.Println(env.Error)
 		log.Println(env)
@@ -157,24 +158,28 @@ func taskHandlerFromEnv(client *http.Client) (*reproc.TaskHandler, error) {
 		Client:  client}
 
 	bqConfig := NewBQConfig(config)
-	exec := rex.ReprocessingExecutor{BQConfig: bqConfig, BucketOpts: []option.ClientOption{}}
+	exec, err := rex.NewReprocessingExecutor(ctx, bqConfig)
+	if err != nil {
+		return nil, err
+	}
+	// TODO - exec.StorageClient should be closed.
 	queues := make([]string, env.NumQueues)
 	for i := 0; i < env.NumQueues; i++ {
 		queues[i] = fmt.Sprintf("%s%d", env.QueueBase, i)
 	}
 
 	// TODO move DatastoreSaver to another package?
-	saver, err := state.NewDatastoreSaver(env.Project)
+	saver, err := state.NewDatastoreSaver(ctx, env.Project)
 	if err != nil {
 		return nil, err
 	}
-	return reproc.NewTaskHandler(&exec, queues, saver), nil
+	return reproc.NewTaskHandler(exec, queues, saver), nil
 }
 
 // doDispatchLoop just sequences through archives in date order.
 // It will generally be blocked on the queues.
 // It will start processing at startDate, and when it catches up to "now" it will restart at restartDate.
-func doDispatchLoop(handler *reproc.TaskHandler, startDate time.Time, restartDate time.Time, bucket string, experiment string) {
+func doDispatchLoop(ctx context.Context, handler *reproc.TaskHandler, startDate time.Time, restartDate time.Time, bucket string, experiment string) {
 	log.Println("(Re)starting at", startDate)
 	next := startDate
 
@@ -183,7 +188,7 @@ func doDispatchLoop(handler *reproc.TaskHandler, startDate time.Time, restartDat
 		prefix := next.Format(fmt.Sprintf("gs://%s/%s/2006/01/02/", bucket, experiment))
 
 		// Note that this blocks until a queue is available.
-		err := handler.AddTask(prefix)
+		err := handler.AddTask(ctx, prefix)
 		if err != nil {
 			// Only error expected here is ErrTerminating
 			log.Println(err)
@@ -244,7 +249,8 @@ func Status(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Fprintf(w, "</br></br>\n")
 
-	state.WriteHTMLStatusTo(w, env.Project, env.Experiment)
+	// TODO - attach the environment to the context.
+	state.WriteHTMLStatusTo(r.Context(), w, env.Project, env.Experiment)
 	fmt.Fprintf(w, "</br>\n")
 
 	env := os.Environ()
@@ -267,7 +273,7 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 
 // setupService prepares the setting for a service.
 // The configuration info comes from environment variables.
-func setupService() error {
+func setupService(ctx context.Context) error {
 	// Enable block profiling
 	runtime.SetBlockProfileRate(1000000) // One event per msec.
 
@@ -282,7 +288,8 @@ func setupService() error {
 	http.HandleFunc("/alive", healthCheck)
 	http.HandleFunc("/ready", healthCheck)
 
-	handler, err := taskHandlerFromEnv(http.DefaultClient)
+	// TODO - this creates a storage client, which should be closed on termination.
+	handler, err := taskHandlerFromEnv(ctx, http.DefaultClient)
 
 	if err != nil {
 		log.Println(err)
@@ -291,32 +298,33 @@ func setupService() error {
 
 	startDate := env.StartDate
 
-	ds, err := state.NewDatastoreSaver(env.Project)
+	ds, err := state.NewDatastoreSaver(ctx, env.Project)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 
-	tasks, err := ds.GetStatus(ctx, env.Experiment)
+	// Move the timeout into GetStatus?
+	taskCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	tasks, err := ds.GetStatus(taskCtx, env.Experiment)
 	cancel()
+
 	if err != nil {
 		log.Println(err)
 		return err
 	}
-	maxDate, err := handler.RestartTasks(tasks)
+	maxDate, err := handler.RestartTasks(ctx, tasks)
 	if err != nil {
 		log.Println(err)
 		return err
-	} else {
-		if maxDate.After(startDate) {
-			startDate = maxDate.AddDate(0, 0, 1)
-		}
+	}
+
+	if maxDate.After(startDate) {
+		startDate = maxDate.AddDate(0, 0, 1)
 	}
 
 	log.Println("Using start date of", startDate)
-	go doDispatchLoop(handler, startDate, env.StartDate, env.Bucket, env.Experiment)
+	go doDispatchLoop(ctx, handler, startDate, env.StartDate, env.Bucket, env.Experiment)
 
 	return nil
 }
@@ -331,12 +339,15 @@ func init() {
 }
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Check if invoked as a service.
 	isService, _ := strconv.ParseBool(os.Getenv("GARDENER_SERVICE"))
 	if isService {
 		// If setupService() returns an err instead of nil, healthy will be
 		// set as false and eventually it will cause kubernetes to roll back.
-		err := setupService()
+		err := setupService(ctx)
 		if err != nil {
 			healthy = false
 			log.Println("Running as unhealthy service")

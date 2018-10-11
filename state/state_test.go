@@ -1,13 +1,14 @@
 package state_test
 
 import (
+	"context"
 	"errors"
 	"log"
 	"sync"
 	"testing"
 
 	"github.com/m-lab/etl-gardener/state"
-	"github.com/m-lab/go/bqext"
+	"github.com/m-lab/go/dataset"
 )
 
 func init() {
@@ -21,14 +22,14 @@ type testSaver struct {
 	delete map[string]struct{}
 }
 
-func (s *testSaver) SaveTask(t state.Task) error {
+func (s *testSaver) SaveTask(ctx context.Context, t state.Task) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.tasks[t.Name] = append(s.tasks[t.Name], t)
 	return nil
 }
 
-func (s *testSaver) DeleteTask(t state.Task) error {
+func (s *testSaver) DeleteTask(ctx context.Context, t state.Task) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.delete[t.Name] = struct{}{}
@@ -50,14 +51,15 @@ func (s *testSaver) GetDeletes(t state.Task) map[string]struct{} {
 func assertSaver() { func(ex state.Saver) {}(&testSaver{}) }
 
 func TestTaskBasics(t *testing.T) {
+	ctx := context.Background()
 	task := state.Task{Name: "foobar", State: state.Initializing}
 	saver := testSaver{tasks: make(map[string][]state.Task), delete: make(map[string]struct{})}
 	task.SetSaver(&saver)
 
-	task.Update(state.Initializing)
+	task.Update(ctx, state.Initializing)
 
 	task.Queue = "queue"
-	task.Update(state.Queuing)
+	task.Update(ctx, state.Queuing)
 
 	tasks, ok := saver.tasks["foobar"]
 	if !ok {
@@ -70,7 +72,7 @@ func TestTaskBasics(t *testing.T) {
 		t.Error("Should be queuing", tasks[1])
 	}
 
-	task.SetError(errors.New("test error"), "test")
+	task.SetError(ctx, errors.New("test error"), "test")
 	tasks, ok = saver.tasks["foobar"]
 	if !ok {
 		t.Fatal("Should have an entry for foobar")
@@ -88,20 +90,52 @@ func TestTaskBasics(t *testing.T) {
 		t.Error("Should have error", tasks[2])
 	}
 
-	task.Delete()
+	task.Delete(ctx)
 	_, ok = saver.delete["foobar"]
 	if !ok {
 		t.Fatal("Should have called delete")
 	}
+
+	if err := task.Save(ctx); err != nil {
+		t.Fatal("Should not have an error here", err)
+	}
+
+	task.SetSaver(nil)
+	if err := task.Save(ctx); err != state.ErrNoSaver {
+		t.Fatal("Should have gotten ErrNoSaver but instead got", err)
+	}
+	if err := task.Delete(ctx); err != state.ErrNoSaver {
+		t.Fatal("Should have gotten ErrNoSaver but instead got", err)
+	}
+	if err := task.Update(ctx, state.Queuing); err != state.ErrNoSaver {
+		t.Fatal("Should have gotten ErrNoSaver but instead got", err)
+	}
+	if err := task.SetError(ctx, nil, ""); err != state.ErrNoSaver {
+		t.Fatal("Should have gotten ErrNoSaver but instead got", err)
+	}
+	if len(task.String()) < 1 {
+		t.Fatal("The string should exist.")
+	}
 }
 
 func TestSourceAndDest(t *testing.T) {
+	if _, err := state.NewTask("gs://task1", "Q1", nil); err == nil {
+		t.Fatal("Should have had an error here")
+	}
+	if _, err := state.NewTask("gs://foo/foobar/2000/ab/01/task1", "Q1", nil); err == nil {
+		t.Fatal("Should have had an error here")
+	}
+	if _, err := state.NewTask("gs://foo/foobar/2000/13/01/task1", "Q1", nil); err == nil {
+		t.Fatal("Should have had an error here")
+	}
+
+	ctx := context.Background()
 	task, err := state.NewTask("gs://foo/foobar/2000/01/01/task1", "Q1", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	dsExt, err := bqext.NewDataset("mlab-testing", "dataset")
+	dsExt, err := dataset.NewDataset(ctx, "mlab-testing", "dataset")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,6 +151,13 @@ func TestSourceAndDest(t *testing.T) {
 	// Source should be a partition, ending in $date.
 	if dest.FullyQualifiedName() != "mlab-testing:dataset.foobar$20000101" {
 		t.Error(dest.FullyQualifiedName())
+	}
+
+	// Exercise error case, which should be impossible if the task was created with NewTask.
+	task = &state.Task{Name: "gs://foo/foobar/2000/ab/01/task1"}
+	_, _, err = task.SourceAndDest(&dsExt)
+	if err == nil {
+		t.Fatal("Should have had an error")
 	}
 }
 

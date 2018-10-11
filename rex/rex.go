@@ -16,14 +16,16 @@ import (
 	"strings"
 	"time"
 
-	"cloud.google.com/go/bigquery"
+	"github.com/GoogleCloudPlatform/google-cloud-go-testing/storage/stiface"
+
 	"cloud.google.com/go/storage"
+	"github.com/GoogleCloudPlatform/google-cloud-go-testing/bigquery/bqiface"
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/cloud/bq"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/etl-gardener/state"
-	"github.com/m-lab/go/bqext"
+	"github.com/m-lab/go/dataset"
 	"google.golang.org/api/option"
 )
 
@@ -45,17 +47,28 @@ func init() {
 // ReprocessingExecutor handles all reprocessing steps.
 type ReprocessingExecutor struct {
 	cloud.BQConfig
-	BucketOpts []option.ClientOption
+	StorageClient stiface.Client
+}
+
+// NewReprocessingExecutor creates a new exec.
+// NOTE:  The context is used to create a persistent storage Client!
+func NewReprocessingExecutor(ctx context.Context, config cloud.BQConfig, bucketOpts ...option.ClientOption) (*ReprocessingExecutor, error) {
+	storageClient, err := storage.NewClient(ctx, bucketOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return &ReprocessingExecutor{config, stiface.AdaptClient(storageClient)}, nil
 }
 
 // GetBatchDS constructs an appropriate Dataset for BQ operations.
-func (rex *ReprocessingExecutor) GetBatchDS() (bqext.Dataset, error) {
-	return bqext.NewDataset(rex.BQProject, rex.BQBatchDataset, rex.Options...)
+func (rex *ReprocessingExecutor) GetBatchDS(ctx context.Context) (dataset.Dataset, error) {
+	return dataset.NewDataset(ctx, rex.BQProject, rex.BQBatchDataset, rex.Options...)
 }
 
 // GetFinalDS constructs an appropriate Dataset for BQ operations.
-func (rex *ReprocessingExecutor) GetFinalDS() (bqext.Dataset, error) {
-	return bqext.NewDataset(rex.BQProject, rex.BQFinalDataset, rex.Options...)
+func (rex *ReprocessingExecutor) GetFinalDS(ctx context.Context) (dataset.Dataset, error) {
+	// TODO - dataset should use the provided context.
+	return dataset.NewDataset(ctx, rex.BQProject, rex.BQFinalDataset, rex.Options...)
 }
 
 var (
@@ -69,84 +82,84 @@ var (
 // the state.
 // It may terminate prematurely if terminate is closed prior to completion.
 // TODO - consider returning any error to caller.
-func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) error {
+func (rex *ReprocessingExecutor) Next(ctx context.Context, t *state.Task, terminate <-chan struct{}) error {
 	// Note that only the state in state.Task is maintained between actions.
 	switch t.State {
 	case state.Initializing:
 		// TODO - should check that _suffix table doesn't already exist, or delete it
 		// if it does?  Also check if it has a streaming buffer?
 		// Nothing to do.
-		t.Update(state.Queuing)
+		t.Update(ctx, state.Queuing)
 		metrics.StartedCount.WithLabelValues("sidestream").Inc()
 
 	case state.Queuing:
 		// TODO - handle zero task case.
-		n, err := rex.queue(t)
+		n, err := rex.queue(ctx, t)
 		if err != nil {
-			// SetError also pushes to datastore, like Update()
-			t.SetError(err, "rex.queue")
+			// SetError also pushes to datastore, like Update(ctx, )
+			t.SetError(ctx, err, "rex.queue")
 			return err
 		}
 		if n < 1 {
 			// If there were no tasks posted, then there is nothing more to do.
 			t.Queue = ""
-			t.Update(state.Done)
+			t.Update(ctx, state.Done)
 		} else {
-			t.Update(state.Processing)
+			t.Update(ctx, state.Processing)
 		}
 
 	case state.Processing: // TODO should this be Parsing?
-		if err := rex.waitForParsing(t, terminate); err != nil {
-			// SetError also pushes to datastore, like Update()
-			t.SetError(err, "rex.waitForParsing")
+		if err := rex.waitForParsing(ctx, t, terminate); err != nil {
+			// SetError also pushes to datastore, like Update(ctx, )
+			t.SetError(ctx, err, "rex.waitForParsing")
 			return err
 		}
 		t.Queue = "" // No longer need to keep the queue.
-		t.Update(state.Stabilizing)
+		t.Update(ctx, state.Stabilizing)
 
 	case state.Stabilizing:
 		// Wait for the streaming buffer to be nil.
-		ds, err := rex.GetBatchDS()
+		ds, err := rex.GetBatchDS(ctx)
 		if err != nil {
-			// SetError also pushes to datastore, like Update()
-			t.SetError(err, "rex.GetBatchDS")
+			// SetError also pushes to datastore, like Update(ctx, )
+			t.SetError(ctx, err, "rex.GetBatchDS")
 			return err
 		}
 		s, _, err := t.SourceAndDest(&ds)
 		if err != nil {
-			// SetError also pushes to datastore, like Update()
-			t.SetError(err, "task.SourceAndDest")
+			// SetError also pushes to datastore, like Update(ctx, )
+			t.SetError(ctx, err, "task.SourceAndDest")
 			return err
 		}
-		err = bq.WaitForStableTable(s)
+		err = bq.WaitForStableTable(ctx, s)
 		if err != nil {
 			// When testing, we expect to get ErrTableNotFound here.
 			if !env.TestMode || err != state.ErrTableNotFound {
-				// SetError also pushes to datastore, like Update()
-				t.SetError(err, "bq.WaitForStableTable")
+				// SetError also pushes to datastore, like Update(ctx, )
+				t.SetError(ctx, err, "bq.WaitForStableTable")
 				return err
 			}
 		}
 
-		t.Update(state.Deduplicating)
+		t.Update(ctx, state.Deduplicating)
 
 	case state.Deduplicating:
-		if err := rex.dedup(t); err != nil {
-			// SetError also pushes to datastore, like Update()
-			t.SetError(err, "rex.dedup")
+		if err := rex.dedup(ctx, t); err != nil {
+			// SetError also pushes to datastore, like Update(ctx, )
+			t.SetError(ctx, err, "rex.dedup")
 			return err
 		}
-		t.Update(state.Finishing)
+		t.Update(ctx, state.Finishing)
 
 	case state.Finishing:
 		log.Println("Finishing")
-		if err := rex.finish(t, terminate); err != nil {
-			// SetError also pushes to datastore, like Update()
-			t.SetError(err, "rex.finish")
+		if err := rex.finish(ctx, t, terminate); err != nil {
+			// SetError also pushes to datastore, like Update(ctx, )
+			t.SetError(ctx, err, "rex.finish")
 			return err
 		}
 		t.JobID = ""
-		t.Update(state.Done)
+		t.Update(ctx, state.Done)
 
 	case state.Done:
 		log.Println("Unexpected call to Next when Done")
@@ -154,15 +167,15 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 	case state.Invalid:
 		log.Println("Should not call Next on Invalid state!")
 		err := errors.New("called Next on invalid state")
-		// SetError also pushes to datastore, like Update()
-		t.SetError(err, "Invalid state")
+		// SetError also pushes to datastore, like Update(ctx, )
+		t.SetError(ctx, err, "Invalid state")
 		return err
 
 	default:
 		log.Println("Unknown state")
 		err := errors.New("Unknown state")
-		// SetError also pushes to datastore, like Update()
-		t.SetError(err, "Unknown state")
+		// SetError also pushes to datastore, like Update(ctx, )
+		t.SetError(ctx, err, "Unknown state")
 		return err
 	}
 
@@ -170,19 +183,19 @@ func (rex *ReprocessingExecutor) Next(t *state.Task, terminate <-chan struct{}) 
 }
 
 // TODO should these take Task instead of *Task?
-func (rex *ReprocessingExecutor) waitForParsing(t *state.Task, terminate <-chan struct{}) error {
+func (rex *ReprocessingExecutor) waitForParsing(ctx context.Context, t *state.Task, terminate <-chan struct{}) error {
 	// Wait for the queue to drain.
 	// Don't want to accept a date until we can actually queue it.
 	qh, err := tq.NewQueueHandler(rex.Config, t.Queue)
 	if err != nil {
-		t.SetError(err, "NewQueueHandler")
+		t.SetError(ctx, err, "NewQueueHandler")
 		return err
 	}
 	log.Println("Wait for empty queue ", qh.Queue)
 	for err := qh.IsEmpty(); err != nil; err = qh.IsEmpty() {
 		select {
 		case <-terminate:
-			t.SetError(err, "Terminating")
+			t.SetError(ctx, err, "Terminating")
 			return err
 		default:
 		}
@@ -206,71 +219,65 @@ func (rex *ReprocessingExecutor) waitForParsing(t *state.Task, terminate <-chan 
 	return nil
 }
 
-func (rex *ReprocessingExecutor) queue(t *state.Task) (int, error) {
+func (rex *ReprocessingExecutor) queue(ctx context.Context, t *state.Task) (int, error) {
 	// Submit all files from the bucket that match the prefix.
 	// Where do we get the bucket?
 	//func (qh *ChannelQueueHandler) handleLoop(next api.BasicPipe, bucketOpts ...option.ClientOption) {
 	qh, err := tq.NewQueueHandler(rex.Config, t.Queue)
 	if err != nil {
-		t.SetError(err, "NewQueueHandler")
+		t.SetError(ctx, err, "NewQueueHandler")
 		return 0, err
 	}
 	parts, err := t.ParsePrefix()
 	if err != nil {
 		// If there is a parse error, log and skip request.
 		log.Println(err)
-		t.SetError(err, "BadPrefix")
+		t.SetError(ctx, err, "BadPrefix")
 		return 0, err
 	}
 	bucketName := parts[0]
 
 	// Use a real storage bucket.
 	// TODO - add a persistent storageClient to the rex object?
-	storageClient, err := storage.NewClient(context.Background(), rex.BucketOpts...)
-	if err != nil {
-		log.Println(err)
-		t.SetError(err, "StorageClientError")
-		return 0, err
-	}
-	defer storageClient.Close()
-	bucket, err := tq.GetBucket(storageClient, rex.Project, bucketName, false)
+	// TODO - try cancelling the context instead?
+	bucket, err := tq.GetBucket(ctx, rex.StorageClient, rex.Project, bucketName, false)
 	if err != nil {
 		if err == io.EOF && env.TestMode {
 			log.Println("Using fake client, ignoring EOF error")
 			return 0, nil
 		}
 		log.Println(err)
-		t.SetError(err, "BucketError")
+		t.SetError(ctx, err, "BucketError")
 		return 0, err
 	}
 	// NOTE: This does not check the terminate channel, so once started, it will
 	// complete the queuing.
-	n, err := qh.PostDay(bucket, bucketName, parts[1]+"/"+parts[2]+"/")
+	n, err := qh.PostDay(ctx, bucket, bucketName, parts[1]+"/"+parts[2]+"/")
 	if err != nil {
 		log.Println(err)
-		t.SetError(err, "PostDayError")
+		t.SetError(ctx, err, "PostDayError")
 		return n, nil
 	}
 	log.Println("Added ", n, t.Name, " tasks to ", qh.Queue)
 	return n, nil
 }
 
-func (rex *ReprocessingExecutor) dedup(t *state.Task) error {
+func (rex *ReprocessingExecutor) dedup(ctx context.Context, t *state.Task) error {
 	// Launch the dedup request, and save the JobID
-	ds, err := rex.GetBatchDS()
+	ds, err := rex.GetBatchDS(ctx)
 	if err != nil {
-		t.SetError(err, "GetBatchDS")
+		t.SetError(ctx, err, "GetBatchDS")
 		return err
 	}
 	src, dest, err := t.SourceAndDest(&ds)
 	if err != nil {
-		t.SetError(err, "SourceAndDest")
+		t.SetError(ctx, err, "SourceAndDest")
 		return err
 	}
 
 	log.Println("Dedupping", src.FullyQualifiedName())
 	// TODO move Dedup??
-	job, err := bq.Dedup(&ds, src.TableID, dest)
+	job, err := bq.Dedup(ctx, &ds, src.TableID(), dest)
 	if err != nil {
 		if err == io.EOF {
 			if env.TestMode {
@@ -279,7 +286,7 @@ func (rex *ReprocessingExecutor) dedup(t *state.Task) error {
 			}
 		} else {
 			log.Println(err, src.FullyQualifiedName())
-			t.SetError(err, "DedupFailed")
+			t.SetError(ctx, err, "DedupFailed")
 			return err
 		}
 	}
@@ -290,8 +297,8 @@ func (rex *ReprocessingExecutor) dedup(t *state.Task) error {
 // WaitForJob waits for job to complete.  Uses fibonacci backoff until the backoff
 // >= maxBackoff, at which point it continues using same backoff.
 // TODO - develop a BQJob interface for wrapping bigquery.Job, and allowing fakes.
-// TODO - move this to go/bqext, since it is bigquery specific and general purpose.
-func waitForJob(ctx context.Context, job *bigquery.Job, maxBackoff time.Duration, terminate <-chan struct{}) error {
+// TODO - move this to go/dataset, since it is bigquery specific and general purpose.
+func waitForJob(ctx context.Context, job bqiface.Job, maxBackoff time.Duration, terminate <-chan struct{}) error {
 	backoff := 10 * time.Millisecond
 	previous := backoff
 	for {
@@ -330,35 +337,36 @@ func waitForJob(ctx context.Context, job *bigquery.Job, maxBackoff time.Duration
 	return nil
 }
 
-func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}) error {
-	// Wait for dedup job.
-	srcDs, err := rex.GetBatchDS()
+func (rex *ReprocessingExecutor) finish(ctx context.Context, t *state.Task, terminate <-chan struct{}) error {
+	// TODO use a simple client instead of creating dataset?
+	srcDs, err := rex.GetBatchDS(ctx)
 	if err != nil {
-		t.SetError(err, "GetBatchDS")
+		t.SetError(ctx, err, "GetBatchDS")
 		return err
 	}
 	src, copy, err := t.SourceAndDest(&srcDs)
 	if err != nil {
-		t.SetError(err, "SourceAndDest")
+		t.SetError(ctx, err, "SourceAndDest")
 		return err
 	}
-	job, err := srcDs.BqClient.JobFromID(context.Background(), t.JobID)
+	job, err := srcDs.BqClient.JobFromID(ctx, t.JobID)
 	if err != nil {
-		t.SetError(err, "JobFromID")
+		t.SetError(ctx, err, "JobFromID")
 		return err
 	}
 	// TODO - should loop, and check terminate channel
-	err = waitForJob(context.Background(), job, 60*time.Second, terminate)
+	err = waitForJob(ctx, job, 60*time.Second, terminate)
 	if err != nil {
 		log.Println(err, src.FullyQualifiedName())
-		t.SetError(err, "waitForJob")
+		t.SetError(ctx, err, "waitForJob")
 		return err
 	}
-	status, err := job.Wait(context.Background())
+	// TODO - should this context have a deadline?
+	status, err := job.Wait(ctx)
 	if err != nil {
 		if err != state.ErrTaskSuspended {
 			log.Println(status.Err(), src.FullyQualifiedName())
-			t.SetError(err, "job.Wait")
+			t.SetError(ctx, err, "job.Wait")
 		}
 		return err
 	}
@@ -368,12 +376,12 @@ func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}
 	// Wait for JobID to complete, then delete the template table.
 	log.Println("Completed deduplication, deleting source", src.FullyQualifiedName())
 	// If deduplication was successful, we should delete the source table.
-	ctx, cf := context.WithTimeout(context.Background(), time.Minute)
+	delCtx, cf := context.WithTimeout(ctx, time.Minute)
 	defer cf()
-	err = src.Delete(ctx)
+	err = src.Delete(delCtx)
 	if err != nil {
 		log.Println(err)
-		t.SetError(err, "TableDelete")
+		t.SetError(ctx, err, "TableDelete")
 		return err
 	}
 
@@ -385,31 +393,31 @@ func (rex *ReprocessingExecutor) finish(t *state.Task, terminate <-chan struct{}
 	}
 	if rex.BQBatchDataset == rex.BQFinalDataset {
 		// We cannot sanity check a dataset to itself.
-		t.SetError(ErrDatasetNamesMatch, "Cannot SanityCheckAndCopy to same dataset")
+		t.SetError(ctx, ErrDatasetNamesMatch, "Cannot SanityCheckAndCopy to same dataset")
 		return ErrDatasetNamesMatch
 	}
-	destDs, err := rex.GetFinalDS()
+	destDs, err := rex.GetFinalDS(ctx)
 	if err != nil {
-		t.SetError(err, "GetFinalDS")
+		t.SetError(ctx, err, "GetFinalDS")
 		return err
 	}
 
 	// Destination table has the same ID as source.
-	dest := destDs.Table(copy.TableID)
+	dest := destDs.Table(copy.TableID())
 	log.Printf("Sanity checking dedup'd data before final copy from %s to %s",
 		copy.FullyQualifiedName(), dest.FullyQualifiedName())
 
 	// TODO: how long can this actually take???
-	ctx, cf = context.WithTimeout(context.Background(), 30*time.Minute)
+	copyCtx, cf := context.WithTimeout(ctx, 30*time.Minute)
 	defer cf()
 
 	srcAt := bq.NewAnnotatedTable(copy, &srcDs)
 	destAt := bq.NewAnnotatedTable(dest, &destDs)
 
 	// Copy to Final Dataset tables.
-	err = bq.SanityCheckAndCopy(ctx, srcAt, destAt)
+	err = bq.SanityCheckAndCopy(copyCtx, srcAt, destAt)
 	if err != nil {
-		t.SetError(err, "SanityCheckAndCopy")
+		t.SetError(ctx, err, "SanityCheckAndCopy")
 		return err
 	}
 	return nil

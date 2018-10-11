@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/GoogleCloudPlatform/google-cloud-go-testing/storage/stiface"
 	"github.com/m-lab/etl-gardener/cloud"
 	"google.golang.org/api/iterator"
 	"google.golang.org/appengine/taskqueue"
@@ -72,7 +73,7 @@ func (qh *QueueHandler) IsEmpty() error {
 // GetTaskqueueStats gets stats for a single task queue.
 func GetTaskqueueStats(config cloud.Config, name string) (stats taskqueue.QueueStatistics, err error) {
 	// Would prefer to use this, but it does not work from flex![]
-	// stats, err := taskqueue.QueueStats(context.Background(), queueNames)
+	// stats, err := taskqueue.QueueStats(config.Context, queueNames)
 	resp, err := config.Client.Get(fmt.Sprintf(`https://queue-pusher-dot-%s.appspot.com/stats?queuename=%s`, config.Project, name))
 	if err != nil {
 		return
@@ -155,7 +156,7 @@ func (qh *QueueHandler) postWithRetry(bucket, filepath string) error {
 }
 
 // PostAll posts all normal file items in an ObjectIterator into the appropriate queue.
-func (qh *QueueHandler) PostAll(bucket string, it *storage.ObjectIterator) (int, error) {
+func (qh *QueueHandler) PostAll(bucket string, it stiface.ObjectIterator) (int, error) {
 	fileCount := 0
 	qpErrCount := 0
 	gcsErrCount := 0
@@ -190,14 +191,15 @@ func (qh *QueueHandler) PostAll(bucket string, it *storage.ObjectIterator) (int,
 // PostDay fetches an iterator over the objects with ndt/YYYY/MM/DD prefix,
 // and passes the iterator to postDay with appropriate queue.
 // This typically takes about 10 minutes for a 20K task NDT day.
-func (qh *QueueHandler) PostDay(bucket *storage.BucketHandle, bucketName, prefix string) (int, error) {
+func (qh *QueueHandler) PostDay(ctx context.Context, bucket stiface.BucketHandle, bucketName, prefix string) (int, error) {
 	log.Println("Adding ", prefix, " to ", qh.Queue)
 	qry := storage.Query{
 		Delimiter: "/",
 		Prefix:    prefix,
 	}
-	// TODO - can this error?  Or do errors only occur on iterator ops?
-	it := bucket.Objects(context.Background(), &qry)
+	// TODO - handle timeout errors?
+	// TODO - should we add a deadline?
+	it := bucket.Objects(ctx, &qry)
 	return qh.PostAll(bucketName, it)
 }
 
@@ -208,13 +210,12 @@ func (qh *QueueHandler) PostDay(bucket *storage.BucketHandle, bucketName, prefix
 
 // GetBucket gets a storage bucket.
 //   opts       - ClientOptions, e.g. credentials, for tests that need to access storage buckets.
-func GetBucket(sClient *storage.Client, project, bucketName string, dryRun bool) (*storage.BucketHandle, error) {
-
+func GetBucket(ctx context.Context, sClient stiface.Client, project, bucketName string, dryRun bool) (stiface.BucketHandle, error) {
 	bucket := sClient.Bucket(bucketName)
 	// Check that the bucket is valid, by fetching it's attributes.
 	// Bypass check if we are running travis tests.
 	if !dryRun {
-		_, err := bucket.Attrs(context.Background())
+		_, err := bucket.Attrs(ctx)
 		if err != nil {
 			return nil, err
 		}

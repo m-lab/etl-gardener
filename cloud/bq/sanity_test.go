@@ -1,8 +1,12 @@
 package bq
 
 import (
+	"context"
 	"log"
+	"strings"
 	"testing"
+
+	"github.com/m-lab/go/dataset"
 )
 
 func init() {
@@ -49,27 +53,22 @@ func Test_getTableParts(t *testing.T) {
 	}
 }
 
-// getTable constructs a bigquery Table object from project/dataset/table/partition.
-// The project/dataset/table/partition may or may not actually exist.
-// This does NOT do any network operations.
-func Test_getTable(t *testing.T) {
-	// We won't do anything with the tables, so we can use a nil client.
-	table, err := getTable(nil, "project", "dataset", "table", "20160102")
+func TestSanityCheckAndCopy(t *testing.T) {
+	ctx := context.Background()
+	ds, err := dataset.NewDataset(ctx, "project", "dataset")
 	if err != nil {
-		t.Error(err)
-	} else {
-		if table.DatasetID != "dataset" {
-			t.Error("Bad parsing")
-		}
+		t.Fatal(err)
 	}
+	src := ds.Table("foo_19990101")
+	dest := ds.Table("foo$19990101")
+	srcAt := NewAnnotatedTable(src, &ds)
+	destAt := NewAnnotatedTable(dest, &ds)
 
-	table, err = getTable(nil, "project", "dataset", "table$124", "20160102")
+	err = SanityCheckAndCopy(ctx, srcAt, destAt)
 	if err == nil {
-		t.Error("Bad table name not detected")
+		t.Fatal("Should have 404 error")
 	}
-
-	table, err = getTable(nil, "project", "dataset", "table", "201601020")
-	if err == nil {
-		t.Error("Bad suffix not detected")
+	if !strings.HasPrefix(err.Error(), "googleapi: Error 404") {
+		t.Fatal(err)
 	}
 }

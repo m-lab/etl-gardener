@@ -17,7 +17,8 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
-	"github.com/m-lab/go/bqext"
+	"github.com/GoogleCloudPlatform/google-cloud-go-testing/bigquery/bqiface"
+	"github.com/m-lab/go/dataset"
 	"golang.org/x/net/context"
 	"google.golang.org/api/iterator"
 )
@@ -51,16 +52,16 @@ type Detail struct {
 // It keeps track of all the info we have so far, automatically fetches
 // more data as needed, and thus avoids possibly fetching multiple times.
 type AnnotatedTable struct {
-	*bigquery.Table
-	dataset *bqext.Dataset // A dataset that can query the table.  May be nil.
+	bqiface.Table
+	dataset *dataset.Dataset // A dataset that can query the table.  May be nil.
 	meta    *bigquery.TableMetadata
 	detail  *Detail
-	pInfo   *bqext.PartitionInfo
+	pInfo   *dataset.PartitionInfo
 	err     error // first error (if any) when attempting to fetch annotation
 }
 
 // NewAnnotatedTable creates an AnnotatedTable
-func NewAnnotatedTable(t *bigquery.Table, ds *bqext.Dataset) *AnnotatedTable {
+func NewAnnotatedTable(t bqiface.Table, ds *dataset.Dataset) *AnnotatedTable {
 	return &AnnotatedTable{Table: t, dataset: ds}
 }
 
@@ -108,12 +109,12 @@ func (at *AnnotatedTable) CachedDetail(ctx context.Context) (*Detail, error) {
 	}
 	// TODO - use context
 	// TODO - maybe just embed code here.
-	at.detail, at.err = GetTableDetail(at.dataset, at.Table)
+	at.detail, at.err = GetTableDetail(ctx, at.dataset, at.Table)
 	return at.detail, at.err
 }
 
 // CachedPartitionInfo returns the cached PInfo, possibly fetching it if possible.
-func (at *AnnotatedTable) CachedPartitionInfo(ctx context.Context) (*bqext.PartitionInfo, error) {
+func (at *AnnotatedTable) CachedPartitionInfo(ctx context.Context) (*dataset.PartitionInfo, error) {
 	if at.pInfo != nil {
 		return at.pInfo, nil
 	}
@@ -148,10 +149,10 @@ func (at *AnnotatedTable) CheckIsRegular(ctx context.Context) error {
 
 // GetTableDetail fetches more detailed info about a partition or table.
 // Expects table to have test_id, and task_filename fields.
-func GetTableDetail(dsExt *bqext.Dataset, table *bigquery.Table) (*Detail, error) {
+func GetTableDetail(ctx context.Context, dsExt *dataset.Dataset, table bqiface.Table) (*Detail, error) {
 	// If table is a partition, then we have to separate out the partition part for the query.
-	parts := strings.Split(table.TableID, "$")
-	dataset := table.DatasetID
+	parts := strings.Split(table.TableID(), "$")
+	dataset := table.DatasetID()
 	tableName := parts[0]
 	where := ""
 	if len(parts) > 1 {
@@ -176,7 +177,7 @@ func GetTableDetail(dsExt *bqext.Dataset, table *bigquery.Table) (*Detail, error
 		)`, dataset, tableName, where)
 
 	// TODO - this should take a context?
-	err := dsExt.QueryAndParse(queryString, &detail)
+	err := dsExt.QueryAndParse(ctx, queryString, &detail)
 	return &detail, err
 }
 
@@ -184,12 +185,12 @@ func GetTableDetail(dsExt *bqext.Dataset, table *bigquery.Table) (*Detail, error
 // and collects the basic stats about each of them.
 // It performs many network operations, possibly two per table.
 // Returns slice ordered by decreasing age.
-func GetTablesMatching(ctx context.Context, dsExt *bqext.Dataset, filter string) ([]AnnotatedTable, error) {
+func GetTablesMatching(ctx context.Context, dsExt *dataset.Dataset, filter string) ([]AnnotatedTable, error) {
 	alt := make([]AnnotatedTable, 0)
 	ti := dsExt.Tables(ctx)
 	for t, err := ti.Next(); err == nil; t, err = ti.Next() {
 		// TODO should this be starts with?  Or a regex?
-		if strings.Contains(t.TableID, filter) {
+		if strings.Contains(t.TableID(), filter) {
 			// TODO - make this run in parallel
 			at := AnnotatedTable{Table: t, dataset: dsExt}
 			_, err := at.CachedMeta(ctx)
@@ -230,44 +231,19 @@ func getTableParts(tableName string) (tableNameParts, error) {
 	return tableNameParts{date[1], date[2] == "$", date[3]}, nil
 }
 
-// getTable constructs a bigquery Table object from project/dataset/table/partition.
-// The project/dataset/table/partition may or may not actually exist.
-// This does NOT do any network operations.
-// TODO(gfr) Probably should move this to go/bqext
-func getTable(bqClient *bigquery.Client, project, dataset, table, partition string) (*bigquery.Table, error) {
-	// This checks that the table name is NOT a partitioned or templated table.
-	if strings.Contains(table, "$") || strings.Contains(table, "_") {
-		return nil, errors.New("Table base must not include _ or $: " + table)
-	}
-	date := denseDateSuffix.FindStringSubmatch(table)
-	if len(date) > 0 {
-		return nil, errors.New("Table base must not include partition or template suffix: " + table)
-	}
-
-	full := table + "$" + partition
-	_, err := getTableParts(full)
-	if err != nil {
-		return nil, err
-	}
-
-	// A nil client works here, but may lead to failures later, e.g.
-	// if you create a copier.
-	return bqClient.DatasetInProject(project, dataset).Table(full), nil
-}
-
 // GetPartitionInfo provides basic information about a partition.
-// Unlike bqext.GetPartitionInfo, this gets project and dataset from the
+// Unlike dataset.GetPartitionInfo, this gets project and dataset from the
 // table, which should include partition spec.
 // at.dataset should have access to the table, but its project and dataset are not used.
-// TODO - possibly migrate this to go/bqext.
-func (at *AnnotatedTable) GetPartitionInfo(ctx context.Context) (*bqext.PartitionInfo, error) {
-	tableName := at.Table.TableID
+// TODO - possibly migrate this to go/dataset.
+func (at *AnnotatedTable) GetPartitionInfo(ctx context.Context) (*dataset.PartitionInfo, error) {
+	tableName := at.Table.TableID()
 	parts, err := getTableParts(tableName)
 	if err != nil || !parts.isPartitioned {
 		return nil, errors.New("TableID missing partition: " + tableName)
 	}
 	// Assemble the FQ table name, without the partition suffix.
-	fullTable := fmt.Sprintf("%s:%s.%s", at.ProjectID, at.DatasetID, parts.prefix)
+	fullTable := fmt.Sprintf("%s:%s.%s", at.ProjectID(), at.DatasetID(), parts.prefix)
 
 	// This uses legacy, because PARTITION_SUMMARY is not supported in standard.
 	queryString := fmt.Sprintf(
@@ -279,13 +255,13 @@ func (at *AnnotatedTable) GetPartitionInfo(ctx context.Context) (*bqext.Partitio
 		FROM
 		  [%s$__PARTITIONS_SUMMARY__]
 		WHERE partition_id = "%s" `, fullTable, parts.yyyymmdd)
-	pInfo := bqext.PartitionInfo{}
+	pInfo := dataset.PartitionInfo{}
 
-	err = at.dataset.QueryAndParse(queryString, &pInfo)
+	err = at.dataset.QueryAndParse(ctx, queryString, &pInfo)
 	if err != nil {
 		// If the partition doesn't exist, just return empty Info, no error.
 		if err == iterator.Done {
-			return &bqext.PartitionInfo{}, nil
+			return &dataset.PartitionInfo{}, nil
 		}
 		return nil, err
 	}
@@ -346,8 +322,8 @@ func (at *AnnotatedTable) checkModifiedAfter(ctx context.Context, other *Annotat
 
 // WaitForJob waits for job to complete.  Uses fibonacci backoff until the backoff
 // >= maxBackoff, at which point it continues using same backoff.
-// TODO - move this to go/bqext, since it is bigquery specific and general purpose.
-func WaitForJob(ctx context.Context, job *bigquery.Job, maxBackoff time.Duration) error {
+// TODO - move this to go/dataset, since it is bigquery specific and general purpose.
+func WaitForJob(ctx context.Context, job bqiface.Job, maxBackoff time.Duration) error {
 	backoff := 10 * time.Millisecond
 	previous := backoff
 	for {
@@ -380,12 +356,12 @@ func WaitForJob(ctx context.Context, job *bigquery.Job, maxBackoff time.Duration
 // TODO(gfr) Also support copying from a template instead of partition?
 func SanityCheckAndCopy(ctx context.Context, src, dest *AnnotatedTable) error {
 	// Extract the
-	srcParts, err := getTableParts(src.TableID)
+	srcParts, err := getTableParts(src.TableID())
 	if err != nil {
 		return err
 	}
 
-	destParts, err := getTableParts(dest.TableID)
+	destParts, err := getTableParts(dest.TableID())
 	if err != nil {
 		return err
 	}
@@ -404,14 +380,17 @@ func SanityCheckAndCopy(ctx context.Context, src, dest *AnnotatedTable) error {
 	}
 
 	copier := dest.Table.CopierFrom(src.Table)
-	copier.WriteDisposition = bigquery.WriteTruncate
-	log.Println("Copying...", src.TableID)
+	config := bqiface.CopyConfig{}
+	config.WriteDisposition = bigquery.WriteTruncate
+	config.Dst = dest.Table
+	copier.SetCopyConfig(config)
+	log.Println("Copying...", src.TableID())
 	job, err := copier.Run(ctx)
 	if err != nil {
 		return err
 	}
 
-	err = WaitForJob(context.Background(), job, 10*time.Second)
+	err = WaitForJob(ctx, job, 10*time.Second)
 	log.Println("SanityCheckAndCopy Done")
 	return err
 }

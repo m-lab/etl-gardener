@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"cloud.google.com/go/storage"
+	"github.com/GoogleCloudPlatform/google-cloud-go-testing/storage/stiface"
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"google.golang.org/api/iterator"
@@ -33,14 +34,16 @@ func TestGetTaskqueueStats(t *testing.T) {
 // check that the bucket content has not been changed.
 // TODO - this currently leaks goroutines.
 func TestGetBucket(t *testing.T) {
+	ctx := context.Background()
 
-	storageClient, err := storage.NewClient(context.Background())
+	sc, err := storage.NewClient(context.Background())
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
+	storageClient := stiface.AdaptClient(sc)
 
 	bucketName := "archive-mlab-testing"
-	bucket, err := tq.GetBucket(storageClient, "mlab-testing", bucketName, false)
+	bucket, err := tq.GetBucket(ctx, storageClient, "mlab-testing", bucketName, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,6 +91,7 @@ func TestIsEmpty(t *testing.T) {
 func TestPostDay(t *testing.T) {
 	// Use a fake queue client.
 	client, counter := cloud.DryRunClient()
+	ctx := context.Background()
 	config := cloud.Config{Client: client, Project: "fake-project"}
 	q, err := tq.NewQueueHandler(config, "test-queue")
 	if err != nil {
@@ -95,23 +99,24 @@ func TestPostDay(t *testing.T) {
 	}
 
 	// Use a real storage bucket.
-	storageClient, err := storage.NewClient(context.Background())
+	sc, err := storage.NewClient(ctx)
 	if err != nil {
 		t.Error(err)
 	}
+	storageClient := stiface.AdaptClient(sc)
 	bucketName := "archive-mlab-testing"
-	bucket, err := tq.GetBucket(storageClient, "mlab-testing", bucketName, false)
+	bucket, err := tq.GetBucket(ctx, storageClient, "mlab-testing", bucketName, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	n, err := q.PostDay(bucket, bucketName, "ndt/2017/09/24/")
+	n, err := q.PostDay(ctx, bucket, bucketName, "ndt/2017/09/24/")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if n != 3 {
 		t.Error("Should have posted 3 items", n)
 	}
-	n, err = q.PostDay(bucket, bucketName, "ndt/2018/05/01/")
+	n, err = q.PostDay(ctx, bucket, bucketName, "ndt/2018/05/01/")
 	if err != nil {
 		t.Fatal(err)
 	}
