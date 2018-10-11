@@ -10,6 +10,7 @@ func init() {
 	prometheus.MustRegister(StartedCount)
 	prometheus.MustRegister(CompletedCount)
 	prometheus.MustRegister(StateTimeSummary)
+	prometheus.MustRegister(StateDate)
 }
 
 var (
@@ -76,12 +77,26 @@ var (
 	// Provides metrics:
 	//   gardener_tasks_in_flight
 	// Example usage:
-	// metrics.TasksInFlight.Inc()
+	// metrics.TasksInFlight.Add(1)
 	TasksInFlight = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "gardener_tasks_in_flight",
 			Help: "Number of tasks in flight",
 		},
+	)
+
+	// StateDate identifies the date of the most recent update to each state.
+	//
+	// Provides metrics:
+	//   gardener_state_date
+	// Example usage:
+	// metrics.StateDate.WithLabelValues(StateNames[t.State]).Observe(time.Now())
+	StateDate = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "gardener_state_date",
+			Help: "Most recent date for each state.",
+		},
+		[]string{"state"},
 	)
 
 	// StateTimeSummary measures the time spent in different task states.
