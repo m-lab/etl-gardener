@@ -150,7 +150,7 @@ var dedupTemplateTraceroute = `
 	# Select single row based on test_id, client_ip, server_ip, src_ip, dest_ip
 	SELECT * EXCEPT (row_number)
     FROM ( SELECT *, ROW_NUMBER() OVER (
-        PARTITION BY CONCAT(test_id, connection_spec.local_ip, connection_spec.remote_ip,
+        PARTITION BY CONCAT(test_id, connection_spec.client_ip, connection_spec.server_ip,
             paris_traceroute_hop.src_ip, paris_traceroute_hop.dest_ip)
 		) row_number
 	    FROM ` + "`%s`" + `)
