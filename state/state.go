@@ -192,8 +192,7 @@ func (t *Task) SourceAndDest(ds *dataset.Dataset) (bqiface.Table, bqiface.Table,
 		return nil, nil, err
 	}
 
-	// Use github.com/m-lab/etl/etl/globals.go to translate gs dir to bq table name.
-	tableName := etl.dataTypeToTable(etl.DataType(parts[1]))
+	tableName := etl.DirToTablename(parts[1])
 
 	src := ds.Table(tableName + "_" + strings.Join(strings.Split(parts[2], "/"), ""))
 	dest := ds.Table(tableName + "$" + strings.Join(strings.Split(parts[2], "/"), ""))
