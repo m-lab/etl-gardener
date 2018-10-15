@@ -15,6 +15,7 @@ import (
 	"cloud.google.com/go/datastore"
 	"github.com/GoogleCloudPlatform/google-cloud-go-testing/bigquery/bqiface"
 	"github.com/m-lab/etl-gardener/metrics"
+	"github.com/m-lab/etl/etl"
 	"github.com/m-lab/go/dataset"
 )
 
@@ -191,11 +192,11 @@ func (t *Task) SourceAndDest(ds *dataset.Dataset) (bqiface.Table, bqiface.Table,
 		return nil, nil, err
 	}
 
-	if parts[1] == "paris-traceroute" {
-		parts[1] = "traceroute"
-	}
-	src := ds.Table(parts[1] + "_" + strings.Join(strings.Split(parts[2], "/"), ""))
-	dest := ds.Table(parts[1] + "$" + strings.Join(strings.Split(parts[2], "/"), ""))
+	// Use github.com/m-lab/etl/etl/globals.go to translate gs dir to bq table name.
+	tableName := etl.dataTypeToTable(etl.DataType(parts[1]))
+
+	src := ds.Table(tableName + "_" + strings.Join(strings.Split(parts[2], "/"), ""))
+	dest := ds.Table(tableName + "$" + strings.Join(strings.Split(parts[2], "/"), ""))
 	return src, dest, nil
 }
 
