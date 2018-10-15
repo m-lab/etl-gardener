@@ -383,6 +383,7 @@ func SanityCheckAndCopy(ctx context.Context, src, dest *AnnotatedTable) error {
 	config := bqiface.CopyConfig{}
 	config.WriteDisposition = bigquery.WriteTruncate
 	config.Dst = dest.Table
+	config.Srcs = append(config.Srcs, src.Table)
 	copier.SetCopyConfig(config)
 	log.Println("Copying...", src.TableID())
 	job, err := copier.Run(ctx)
