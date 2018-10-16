@@ -388,6 +388,7 @@ func SanityCheckAndCopy(ctx context.Context, src, dest *AnnotatedTable) error {
 	log.Println("Copying...", src.TableID())
 	job, err := copier.Run(ctx)
 	if err != nil {
+		log.Println("Copy Error: %v", err)
 		return err
 	}
 

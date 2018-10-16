@@ -122,15 +122,15 @@ func TestSourceAndDest(t *testing.T) {
 	if _, err := state.NewTask("gs://task1", "Q1", nil); err == nil {
 		t.Fatal("Should have had an error here")
 	}
-	if _, err := state.NewTask("gs://foo/foobar/2000/ab/01/task1", "Q1", nil); err == nil {
+	if _, err := state.NewTask("gs://foo/ndt/2000/ab/01/task1", "Q1", nil); err == nil {
 		t.Fatal("Should have had an error here")
 	}
-	if _, err := state.NewTask("gs://foo/foobar/2000/13/01/task1", "Q1", nil); err == nil {
+	if _, err := state.NewTask("gs://foo/ndt/2000/13/01/task1", "Q1", nil); err == nil {
 		t.Fatal("Should have had an error here")
 	}
 
 	ctx := context.Background()
-	task, err := state.NewTask("gs://foo/foobar/2000/01/01/task1", "Q1", nil)
+	task, err := state.NewTask("gs://foo/ndt/2000/01/01/task1", "Q1", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,16 +145,16 @@ func TestSourceAndDest(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Source should be a templated table, ending in _date.
-	if src.FullyQualifiedName() != "mlab-testing:dataset.foobar_20000101" {
+	if src.FullyQualifiedName() != "mlab-testing:dataset.ndt_20000101" {
 		t.Error(src.FullyQualifiedName())
 	}
 	// Source should be a partition, ending in $date.
-	if dest.FullyQualifiedName() != "mlab-testing:dataset.foobar$20000101" {
+	if dest.FullyQualifiedName() != "mlab-testing:dataset.ndt$20000101" {
 		t.Error(dest.FullyQualifiedName())
 	}
 
 	// Exercise error case, which should be impossible if the task was created with NewTask.
-	task = &state.Task{Name: "gs://foo/foobar/2000/ab/01/task1"}
+	task = &state.Task{Name: "gs://foo/ndt/2000/ab/01/task1"}
 	_, _, err = task.SourceAndDest(&dsExt)
 	if err == nil {
 		t.Fatal("Should have had an error")
