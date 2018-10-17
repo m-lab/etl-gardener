@@ -43,10 +43,11 @@ spec:
           value: "{{GIT_COMMIT}}"
         - name: PROJECT
           value: "{{GCLOUD_PROJECT}}"
+        # NOTE: We read archives from the public archive for all projects.
         - name: TASKFILE_BUCKET
-          value: "archive-{{GCLOUD_PROJECT}}"
+          value: "archive-measurement-lab"
         - name: START_DATE
-          value: "20170101"  # Provide 6-month overlap with legacy tables.
+          value: "20150101"
         - name: EXPERIMENT
           value: "paris-traceroute"
         - name: DATASET
