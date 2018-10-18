@@ -55,7 +55,7 @@ func TestGetTableDetail(t *testing.T) {
 	}
 }
 
-func TestAnnotationTableMeta(t *testing.T) {
+func TestCachedMeta(t *testing.T) {
 	// TODO - Make NewDataSet return a pointer, for consistency with bigquery.
 	ctx := context.Background()
 	dsExt, err := dataset.NewDataset(ctx, "mlab-testing", "src")
@@ -87,24 +87,41 @@ func TestAnnotationTableMeta(t *testing.T) {
 	}
 }
 
-func TestAnnotationDetail(t *testing.T) {
+func TestCachedPartitionInfo(t *testing.T) {
 	ctx := context.Background()
 	dsExt, err := dataset.NewDataset(ctx, "mlab-testing", "src")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	tbl := dsExt.Table("DedupTest")
-	meta, err := tbl.Metadata(ctx)
-	if err != nil {
-		t.Error(err)
-	} else if meta == nil {
-		t.Error("Meta should not be nil")
-	}
+	tbl := dsExt.Table("DedupTest$19990101")
+
 	at := bq.NewAnnotatedTable(tbl, &dsExt)
-	_, err = at.CachedDetail(ctx)
+	// Fetch cache detail - which hits backend
+
+	_, err = at.CachedPartitionInfo(ctx)
 	if err != nil {
 		t.Error(err)
+	}
+	// Fetch again, exercising the cached code path.
+	_, err = at.CachedPartitionInfo(ctx)
+	if err != nil {
+		t.Error(err)
+	}
+
+	badTable := dsExt.Table("non-existant")
+
+	badAT := bq.NewAnnotatedTable(badTable, &dsExt)
+	// Fetch cache detail - which hits backend
+
+	_, err = badAT.CachedPartitionInfo(ctx)
+	if err == nil {
+		t.Error("Should return error")
+	}
+	// Fetch again, exercising the already errored code path.
+	_, err = badAT.CachedPartitionInfo(ctx)
+	if err == nil {
+		t.Error("Should return error")
 	}
 }
 
@@ -147,5 +164,26 @@ func TestAnnotatedTableGetPartitionInfo(t *testing.T) {
 		t.Error(err)
 	} else if info.PartitionID != "" {
 		t.Error("Non-existent partition should return empty PartitionID")
+	}
+
+}
+
+func TestCachedDetail(t *testing.T) {
+	ctx := context.Background()
+	ds, err := dataset.NewDataset(ctx, "mlab-testing", "src")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := ds.Table("DedupTest")
+	srcAt := bq.NewAnnotatedTable(src, &ds)
+	// Fetch detail.
+	_, err = srcAt.CachedDetail(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Fetch again to exercise cached code path.
+	_, err = srcAt.CachedDetail(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
