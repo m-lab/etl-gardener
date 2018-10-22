@@ -109,14 +109,14 @@ func TestPostDay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	n, err := q.PostDay(ctx, bucket, bucketName, "ndt/2017/09/24/")
+	n, _, err := q.PostDay(ctx, bucket, bucketName, "ndt/2017/09/24/")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if n != 3 {
 		t.Error("Should have posted 3 items", n)
 	}
-	n, err = q.PostDay(ctx, bucket, bucketName, "ndt/2018/05/01/")
+	n, _, err = q.PostDay(ctx, bucket, bucketName, "ndt/2018/05/01/")
 	if err != nil {
 		t.Fatal(err)
 	}
