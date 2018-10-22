@@ -94,17 +94,22 @@ func (rex *ReprocessingExecutor) Next(ctx context.Context, t *state.Task, termin
 
 	case state.Queuing:
 		// TODO - handle zero task case.
-		n, err := rex.queue(ctx, t)
+		fileCount, byteCount, err := rex.queue(ctx, t)
 		if err != nil {
 			// SetError also pushes to datastore, like Update(ctx, )
 			t.SetError(ctx, err, "rex.queue")
 			return err
 		}
-		if n < 1 {
+		if fileCount < 1 {
 			// If there were no tasks posted, then there is nothing more to do.
 			t.Queue = ""
 			t.Update(ctx, state.Done)
 		} else {
+			// TODO - should we also add metrics when there are errors?
+			metrics.FilesPerDateHistogram.WithLabelValues("").Observe(float64(fileCount))
+			metrics.FileCount.Add(float64(fileCount))
+			metrics.BytesPerDateHistogram.WithLabelValues("").Observe(float64(byteCount))
+			metrics.ByteCount.Add(float64(byteCount))
 			t.Update(ctx, state.Processing)
 		}
 
@@ -219,21 +224,21 @@ func (rex *ReprocessingExecutor) waitForParsing(ctx context.Context, t *state.Ta
 	return nil
 }
 
-func (rex *ReprocessingExecutor) queue(ctx context.Context, t *state.Task) (int, error) {
+func (rex *ReprocessingExecutor) queue(ctx context.Context, t *state.Task) (int, int64, error) {
 	// Submit all files from the bucket that match the prefix.
 	// Where do we get the bucket?
 	//func (qh *ChannelQueueHandler) handleLoop(next api.BasicPipe, bucketOpts ...option.ClientOption) {
 	qh, err := tq.NewQueueHandler(rex.Config, t.Queue)
 	if err != nil {
 		t.SetError(ctx, err, "NewQueueHandler")
-		return 0, err
+		return 0, 0, err
 	}
 	parts, err := t.ParsePrefix()
 	if err != nil {
 		// If there is a parse error, log and skip request.
 		log.Println(err)
 		t.SetError(ctx, err, "BadPrefix")
-		return 0, err
+		return 0, 0, err
 	}
 	bucketName := parts[0]
 
@@ -244,22 +249,22 @@ func (rex *ReprocessingExecutor) queue(ctx context.Context, t *state.Task) (int,
 	if err != nil {
 		if err == io.EOF && env.TestMode {
 			log.Println("Using fake client, ignoring EOF error")
-			return 0, nil
+			return 0, 0, nil
 		}
 		log.Println(err)
 		t.SetError(ctx, err, "BucketError")
-		return 0, err
+		return 0, 0, err
 	}
 	// NOTE: This does not check the terminate channel, so once started, it will
 	// complete the queuing.
-	n, err := qh.PostDay(ctx, bucket, bucketName, parts[1]+"/"+parts[2]+"/")
+	fileCount, byteCount, err := qh.PostDay(ctx, bucket, bucketName, parts[1]+"/"+parts[2]+"/")
 	if err != nil {
 		log.Println(err)
 		t.SetError(ctx, err, "PostDayError")
-		return n, nil
+		return fileCount, byteCount, nil
 	}
-	log.Println("Added ", n, t.Name, " tasks to ", qh.Queue)
-	return n, nil
+	log.Println("Added ", byteCount, "bytes in", fileCount, t.Name, " tasks to ", qh.Queue)
+	return fileCount, byteCount, nil
 }
 
 func (rex *ReprocessingExecutor) dedup(ctx context.Context, t *state.Task) error {

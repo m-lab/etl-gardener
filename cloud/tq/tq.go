@@ -156,8 +156,9 @@ func (qh *QueueHandler) postWithRetry(bucket, filepath string) error {
 }
 
 // PostAll posts all normal file items in an ObjectIterator into the appropriate queue.
-func (qh *QueueHandler) PostAll(bucket string, it stiface.ObjectIterator) (int, error) {
+func (qh *QueueHandler) PostAll(bucket string, it stiface.ObjectIterator) (int, int64, error) {
 	fileCount := 0
+	byteCount := int64(0)
 	qpErrCount := 0
 	gcsErrCount := 0
 	for o, err := it.Next(); err != iterator.Done; o, err = it.Next() {
@@ -168,7 +169,7 @@ func (qh *QueueHandler) PostAll(bucket string, it stiface.ObjectIterator) (int, 
 			gcsErrCount++
 			if gcsErrCount > 5 {
 				log.Printf("Failed after %d files to %s.\n", fileCount, qh.Queue)
-				return 0, err
+				return fileCount, byteCount, err
 			}
 			continue
 		}
@@ -179,19 +180,20 @@ func (qh *QueueHandler) PostAll(bucket string, it stiface.ObjectIterator) (int, 
 			qpErrCount++
 			if qpErrCount > 5 {
 				log.Printf("Failed after %d files to %s (on %s).\n", fileCount, qh.Queue, o.Name)
-				return 0, err
+				return fileCount, byteCount, err
 			}
 		} else {
 			fileCount++
+			byteCount += o.Size
 		}
 	}
-	return fileCount, nil
+	return fileCount, byteCount, nil
 }
 
 // PostDay fetches an iterator over the objects with ndt/YYYY/MM/DD prefix,
 // and passes the iterator to postDay with appropriate queue.
 // This typically takes about 10 minutes for a 20K task NDT day.
-func (qh *QueueHandler) PostDay(ctx context.Context, bucket stiface.BucketHandle, bucketName, prefix string) (int, error) {
+func (qh *QueueHandler) PostDay(ctx context.Context, bucket stiface.BucketHandle, bucketName, prefix string) (int, int64, error) {
 	log.Println("Adding ", prefix, " to ", qh.Queue)
 	qry := storage.Query{
 		Delimiter: "/",
