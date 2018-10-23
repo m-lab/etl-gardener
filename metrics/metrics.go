@@ -13,8 +13,6 @@ func init() {
 	prometheus.MustRegister(StateDate)
 	prometheus.MustRegister(FilesPerDateHistogram)
 	prometheus.MustRegister(BytesPerDateHistogram)
-	prometheus.MustRegister(FileCount)
-	prometheus.MustRegister(ByteCount)
 }
 
 var (
@@ -164,31 +162,5 @@ var (
 			},
 		},
 		[]string{"year"},
-	)
-
-	// FileCount counts the total number of files submitted to the pipeline.
-	//
-	// Provides metrics:
-	//   gardener_files_total
-	// Example usage:
-	// metrics.FilesCount.Inc()
-	FileCount = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "gardener_files_total",
-			Help: "Total number of files submitted to pipeline.",
-		},
-	)
-
-	// ByteCount counts the total number of bytes submitted to the pipeline.
-	//
-	// Provides metrics:
-	//   gardener_bytes_total
-	// Example usage:
-	// metrics.BytesCount.Inc()
-	ByteCount = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "gardener_bytes_total",
-			Help: "Total number of bytes submitted to pipeline.",
-		},
 	)
 )

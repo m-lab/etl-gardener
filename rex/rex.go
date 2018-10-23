@@ -13,6 +13,7 @@ import (
 	"io"
 	"log"
 	"math/rand"
+	"strconv"
 	"strings"
 	"time"
 
@@ -95,6 +96,9 @@ func (rex *ReprocessingExecutor) Next(ctx context.Context, t *state.Task, termin
 	case state.Queuing:
 		// TODO - handle zero task case.
 		fileCount, byteCount, err := rex.queue(ctx, t)
+		// Update the metrics, even if there is an error, since the files were submitted to the queue already.
+		metrics.FilesPerDateHistogram.WithLabelValues(strconv.Itoa(t.Date.Year())).Observe(float64(fileCount))
+		metrics.BytesPerDateHistogram.WithLabelValues(strconv.Itoa(t.Date.Year())).Observe(float64(byteCount))
 		if err != nil {
 			// SetError also pushes to datastore, like Update(ctx, )
 			t.SetError(ctx, err, "rex.queue")
@@ -106,10 +110,6 @@ func (rex *ReprocessingExecutor) Next(ctx context.Context, t *state.Task, termin
 			t.Update(ctx, state.Done)
 		} else {
 			// TODO - should we also add metrics when there are errors?
-			metrics.FilesPerDateHistogram.WithLabelValues("").Observe(float64(fileCount))
-			metrics.FileCount.Add(float64(fileCount))
-			metrics.BytesPerDateHistogram.WithLabelValues("").Observe(float64(byteCount))
-			metrics.ByteCount.Add(float64(byteCount))
 			t.Update(ctx, state.Processing)
 		}
 
