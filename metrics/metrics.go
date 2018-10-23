@@ -11,6 +11,8 @@ func init() {
 	prometheus.MustRegister(CompletedCount)
 	prometheus.MustRegister(StateTimeSummary)
 	prometheus.MustRegister(StateDate)
+	prometheus.MustRegister(FilesPerDateHistogram)
+	prometheus.MustRegister(BytesPerDateHistogram)
 }
 
 var (
@@ -20,7 +22,7 @@ var (
 	// Provides metrics:
 	//   gardener_started_total{experiment}
 	// Example usage:
-	// metrics.StartCount.WithLabelValues("sidestream").Inc()
+	// metrics.StartedCount.WithLabelValues("sidestream").Inc()
 	StartedCount = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "gardener_started_total",
@@ -109,5 +111,56 @@ var (
 		Help:       "The time spent in each state.",
 		Objectives: map[float64]float64{0.01: 0.001, 0.1: 0.01, 0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
 	}, []string{"state"},
+	)
+
+	// FilesPerDateHistogram provides a histogram of files per date submitted to pipeline.
+	//
+	// Provides metrics:
+	//   gardener_files_bucket{year="...", le="..."}
+	//   ...
+	//   gardener_files_sum{year="...", le="..."}
+	//   gardener_files_count{year="...", le="..."}
+	// Usage example:
+	//   metrics.FilesPerDateHistogram.WithLabelValues(
+	//           "2011").Observe(files)
+	FilesPerDateHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "gardener_files",
+			Help: "Histogram of number of files submitted per date",
+			Buckets: []float64{1, 2, 3, 4, 5, 6, 7, 8, 9,
+				10, 12, 14, 17, 20, 24, 28, 32, 38, 44, 50, 60, 70, 80, 90,
+				100, 120, 140, 170, 200, 240, 280, 320, 380, 440, 500, 600, 700, 800, 900,
+				1000, 1200, 1400, 1700, 2000, 2400, 2800, 3200, 3800, 4400, 5000, 6000, 7000, 8000, 9000,
+				10000, 12000, 14000, 17000, 20000, 24000, 28000, 32000, 38000, 44000, 50000, 60000, 70000, 80000, 90000,
+				100000, 120000, 140000, 170000, 200000, 240000, 280000, 320000, 380000, 440000, 500000, 600000, 700000, 800000, 900000,
+			},
+		},
+		[]string{"year"},
+	)
+
+	// BytesPerDateHistogram provides a histogram of bytes per date submitted to pipeline
+	//
+	// Provides metrics:
+	//   gardener_bytes_bucket{year="...", le="..."}
+	//   ...
+	//   gardener_bytes_sum{year="...", le="..."}
+	//   gardener_bytes_count{year="...", le="..."}
+	// Usage example:
+	//   metrics.BytesPerDateHistogram.WithLabelValues(
+	//           "2011").Observe(bytes)
+	BytesPerDateHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "gardener_bytes",
+			Help: "Histogram of number of bytes submitted per date",
+			Buckets: []float64{
+				100000, 140000, 200000, 280000, 400000, 560000, 800000,
+				1000000, 1400000, 2000000, 2800000, 4000000, 5600000, 8000000,
+				10000000, 14000000, 20000000, 28000000, 40000000, 56000000, 80000000,
+				100000000, 140000000, 200000000, 280000000, 400000000, 560000000, 800000000,
+				1000000000, 1400000000, 2000000000, 2800000000, 4000000000, 5600000000, 8000000000,
+				10000000000, 14000000000, 20000000000, 28000000000, 40000000000, 56000000000, 80000000000,
+			},
+		},
+		[]string{"year"},
 	)
 )
