@@ -47,7 +47,7 @@ spec:
         - name: TASKFILE_BUCKET
           value: "archive-measurement-lab"
         - name: START_DATE
-          value: "20150101"
+          value: "20090218"  # Actual start date.  02/19 and 02/20 have no data.
         - name: EXPERIMENT
           value: "ndt"
         - name: DATASET

@@ -47,7 +47,7 @@ spec:
         - name: TASKFILE_BUCKET
           value: "archive-measurement-lab"
         - name: START_DATE
-          value: "20150101"
+          value: "20090824"
         - name: EXPERIMENT
           value: "sidestream"
         - name: DATASET
