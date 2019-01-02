@@ -114,6 +114,7 @@ func (rex *ReprocessingExecutor) Next(ctx context.Context, t *state.Task, termin
 		}
 
 	case state.Processing: // TODO should this be Parsing?
+		log.Println("Processing:", t)
 		if err := rex.waitForParsing(ctx, t, terminate); err != nil {
 			// SetError also pushes to datastore, like Update(ctx, )
 			t.SetError(ctx, err, "rex.waitForParsing")
@@ -123,6 +124,7 @@ func (rex *ReprocessingExecutor) Next(ctx context.Context, t *state.Task, termin
 		t.Update(ctx, state.Stabilizing)
 
 	case state.Stabilizing:
+		log.Println("Stabilizing:", t)
 		// Wait for the streaming buffer to be nil.
 		ds, err := rex.GetBatchDS(ctx)
 		if err != nil {
@@ -149,6 +151,7 @@ func (rex *ReprocessingExecutor) Next(ctx context.Context, t *state.Task, termin
 		t.Update(ctx, state.Deduplicating)
 
 	case state.Deduplicating:
+		log.Println("Deduplicating:", t)
 		if err := rex.dedup(ctx, t); err != nil {
 			// SetError also pushes to datastore, like Update(ctx, )
 			t.SetError(ctx, err, "rex.dedup")
@@ -157,7 +160,7 @@ func (rex *ReprocessingExecutor) Next(ctx context.Context, t *state.Task, termin
 		t.Update(ctx, state.Finishing)
 
 	case state.Finishing:
-		log.Println("Finishing")
+		log.Println("Finishing:", t)
 		if err := rex.finish(ctx, t, terminate); err != nil {
 			// SetError also pushes to datastore, like Update(ctx, )
 			t.SetError(ctx, err, "rex.finish")
