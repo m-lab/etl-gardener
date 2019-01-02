@@ -395,14 +395,19 @@ func SanityCheckAndCopy(ctx context.Context, src, dest *AnnotatedTable) error {
 	config.Dst = dest.Table
 	config.Srcs = append(config.Srcs, src.Table)
 	copier.SetCopyConfig(config)
-	log.Println("Copying...", src.TableID())
 	job, err := copier.Run(ctx)
 	if err != nil {
-		log.Println("Copy Error:", err)
+		log.Println("Error Copying...", src.TableID(), "error:", err)
 		return err
 	}
+	log.Println("Start Copying...", src.TableID(), "JobID:", job.ID())
 
 	err = WaitForJob(ctx, job, 10*time.Second)
+	if err != nil {
+		log.Println("Error Waiting...", src.TableID(), "JobID:", job.ID(), "error:", err)
+	} else {
+		log.Println("Done Copying...", src.TableID(), "JobID:", job.ID())
+	}
 	log.Println("SanityCheckAndCopy Done")
 	return err
 }
