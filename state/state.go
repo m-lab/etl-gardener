@@ -247,6 +247,7 @@ func (t *Task) SetError(ctx context.Context, err error, info string) error {
 	t.ErrMsg = err.Error()
 	t.ErrInfo = info
 	t.UpdateTime = time.Now()
+	log.Println("SetError:", t)
 	return t.saver.SaveTask(ctx, *t)
 }
 
