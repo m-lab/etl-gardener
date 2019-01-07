@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
 	"strings"
 	"time"
@@ -28,6 +29,7 @@ import (
 var (
 	ErrNilClient        = errors.New("nil http client not allowed")
 	ErrMoreTasks        = errors.New("queue has tasks pending")
+	ErrTerminated       = errors.New("terminated early")
 	ErrInvalidQueueName = errors.New("invalid queue name")
 )
 
@@ -57,9 +59,10 @@ func NewQueueHandler(config cloud.Config, queue string) (*QueueHandler, error) {
 	return &QueueHandler{config, queue}, nil
 }
 
-// IsEmpty checks whether the queue is empty, i.e., all tasks have been successfully
+// IsEmptyBuggy checks whether the queue is empty, i.e., all tasks have been successfully
 // processed.
-func (qh *QueueHandler) IsEmpty() error {
+// NOTE: This is unreliable.  Taskqueue Stats may return an empty stats object.
+func (qh *QueueHandler) IsEmptyBuggy() error {
 	stats, err := GetTaskqueueStats(qh.Config, qh.Queue)
 	if err != nil {
 		return err
@@ -71,6 +74,8 @@ func (qh *QueueHandler) IsEmpty() error {
 }
 
 // GetTaskqueueStats gets stats for a single task queue.
+// NOTE: This is unreliable, possibly returning an empty stats object, when the actual QueueStatistics
+// are not empty.  Caller should not trust empty return value.
 func GetTaskqueueStats(config cloud.Config, name string) (stats taskqueue.QueueStatistics, err error) {
 	// Would prefer to use this, but it does not work from flex![]
 	// stats, err := taskqueue.QueueStats(config.Context, queueNames)
@@ -103,6 +108,64 @@ func GetTaskqueueStats(config cloud.Config, name string) (stats taskqueue.QueueS
 	}
 	stats = statsSlice[0]
 	return
+}
+
+// WaitForEmptyQueue loops checking queue until empty.
+// There is a bug in task queue status (from AppEngine) which causes it to
+// occasionally (a few times a day) return all zeros. This erronious report
+// seems to persist for a minute or more.  This is indistinguishable
+// from an actual empty queue, so we use a slightly different criteria:
+//  1. If queue was most recently 0 pending, >0 in flight, then we trust
+//     the empty queue state.
+//  2. If queue most recently had >0 pending, then we assume a zero state may
+//     be spurious, and check two more times over the next two minutes or so.
+//  3. If the queue appears empty (or errors) for 3 minutes, then we return,
+//     basically assuming it is empty now.
+func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
+	log.Println("Wait for empty queue ", qh.Queue)
+	var lastTrusted taskqueue.QueueStatistics
+	inactiveStartTime := time.Now() // If the queue is actually empty, this allows timeout.
+	nullTime := time.Time{}
+	for {
+		select {
+		case <-terminate:
+			return ErrTerminated
+		default:
+			stats, err := GetTaskqueueStats(qh.Config, qh.Queue)
+			if err != nil {
+				if err == io.EOF {
+					log.Println(err, "GetTaskqueueStats returned EOF - test client?")
+				}
+				return err
+			} else if stats.Tasks > 0 || stats.InFlight > 0 {
+				// Good data, queue is not empty...
+				lastTrusted = stats
+				inactiveStartTime = nullTime
+			} else if stats.Executed1Minute > 0 {
+				log.Printf("Looks good (%s): %+v vs %+v", qh.Queue, stats, lastTrusted)
+				return nil // Likely valid empty queue.
+			} else {
+				// Record the first time we see an apparently empty queue.
+				if inactiveStartTime == nullTime {
+					inactiveStartTime = time.Now()
+				}
+				if lastTrusted.Tasks == 0 {
+					// Most likely we really are done now.  Even if something is still
+					// in flight, we will just assume it is likely to finish.
+					return nil
+				}
+				log.Printf("Suspicious (%s): %+v\n", qh.Queue, stats)
+			}
+			if time.Since(inactiveStartTime) > 180*time.Second {
+				// It's been long enough to assume the queue is really empty.
+				// Or possibly we've just been getting errors all this time.
+				log.Printf("Timeout. (%s) Last trusted was: %+v", qh.Queue, lastTrusted)
+				return nil
+			}
+			// Check about once every minute.
+			time.Sleep(time.Duration(30+rand.Intn(60)) * time.Second)
+		}
+	}
 }
 
 // PostOneTask sends a single https request to the queue pusher to add a task.

@@ -200,29 +200,21 @@ func (rex *ReprocessingExecutor) waitForParsing(ctx context.Context, t *state.Ta
 		return err
 	}
 	log.Println("Wait for empty queue ", qh.Queue)
-	for err := qh.IsEmpty(); err != nil; err = qh.IsEmpty() {
-		select {
-		case <-terminate:
-			t.SetError(ctx, err, "Terminating")
-			return err
-		default:
+	for err := qh.WaitForEmptyQueue(terminate); err != nil; err = qh.WaitForEmptyQueue(terminate) {
+		if err == tq.ErrTerminated {
+			break
 		}
-		if err == tq.ErrMoreTasks {
-			// Wait 5-15 seconds before checking again.
-			time.Sleep(time.Duration(5+rand.Intn(10)) * time.Second)
-		} else if err != nil {
-			if err == io.EOF && env.TestMode {
-				// Expected when using test client.
-				return nil
-			}
-			// We don't expect errors here, so try logging, and a large backoff
-			// in case there is some bad network condition, service failure,
-			// or perhaps the queue_pusher is down.
-			log.Println(err)
-			metrics.WarningCount.WithLabelValues("IsEmptyError").Inc()
-			// TODO update metric
-			time.Sleep(time.Duration(60+rand.Intn(120)) * time.Second)
+		if err == io.EOF && env.TestMode {
+			// Expected when using test client.
+			return nil
 		}
+		// We don't expect errors here, so try logging, and a large backoff
+		// in case there is some bad network condition, service failure,
+		// or perhaps the queue_pusher is down.
+		log.Println(err)
+		metrics.WarningCount.WithLabelValues("IsEmptyError").Inc()
+		// TODO update metric
+		time.Sleep(time.Duration(60+rand.Intn(120)) * time.Second)
 	}
 	return nil
 }
