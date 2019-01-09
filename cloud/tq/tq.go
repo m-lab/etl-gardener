@@ -17,6 +17,7 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/GoogleCloudPlatform/google-cloud-go-testing/storage/stiface"
 	"github.com/m-lab/etl-gardener/cloud"
+	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/api/iterator"
 	"google.golang.org/appengine/taskqueue"
 )
@@ -31,7 +32,24 @@ var (
 	ErrMoreTasks        = errors.New("queue has tasks pending")
 	ErrTerminated       = errors.New("terminated early")
 	ErrInvalidQueueName = errors.New("invalid queue name")
+
+	EmptyStatsRecoveryTimeHistogramSecs = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "gardener_empty_stats_recovery_sec",
+			Help: "empty stats recovery time distributions.",
+			Buckets: []float64{
+				1.0, 1.3, 1.6, 2.0, 2.5, 3.2, 4.0, 5.0, 6.3, 7.9,
+				10, 13, 16, 20, 25, 32, 40, 50, 63, 79,
+				100, 130, 160, 200, 250, 320, 400, 500, 630, 790,
+			},
+		},
+		[]string{"status"},
+	)
 )
+
+func init() {
+	prometheus.MustRegister(EmptyStatsRecoveryTimeHistogramSecs)
+}
 
 // QueueHandler is much like tq.Queuer, but for a single queue.  We want
 // independent single queue handlers to avoid thread safety issues, among
@@ -126,6 +144,7 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 	empty := taskqueue.QueueStatistics{}
 	lastNonEmpty := taskqueue.QueueStatistics{}
 	lastNonEmptyTime := time.Now()
+	lastWasEmpty := false
 
 	// If the last non-empty stats are close to being empty, then we are more trusting
 	// if we see an empty stats.  But if lastNonEmpty is actually empty, then not so much.
@@ -147,6 +166,7 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 			}
 			stats.EnforcedRate = 0
 			if stats == empty {
+				lastWasEmpty = true
 				// Empty stats are not trustworthy, so we do more sanity checking.
 				if lastNonEmpty != empty && lastNonEmpty.Tasks == 0 {
 					// Most likely we really are done now.  Even if something is still
@@ -163,6 +183,7 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 				if time.Since(lastNonEmptyTime) > 5*time.Minute && lastNonEmpty.Tasks <= lastNonEmpty.Executed1Minute {
 					// Its been this way for at least 5 minutes, and at least 7 samples.
 					// Probably OK.
+					EmptyStatsRecoveryTimeHistogramSecs.WithLabelValues("timeout").Observe(time.Since(lastNonEmptyTime).Seconds())
 					log.Printf("%s TIMEOUT:  Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
 					return nil
 				}
@@ -171,12 +192,16 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 				if time.Since(lastNonEmptyTime) > 10*time.Minute {
 					// Its been this way for at least 10 minutes, and at least 15 samples.
 					// Probably OK.
+					EmptyStatsRecoveryTimeHistogramSecs.WithLabelValues("timeout").Observe(time.Since(lastNonEmptyTime).Seconds())
 					log.Printf("%s TIMEOUT:  Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
 					return nil
 				}
 
 				log.Printf("Suspicious (%s): %+v\n", qh.Queue, stats)
 			} else {
+				if lastWasEmpty {
+					EmptyStatsRecoveryTimeHistogramSecs.WithLabelValues("recovered").Observe(time.Since(lastNonEmptyTime).Seconds())
+				}
 				if stats.InFlight+stats.Tasks == 0 {
 					// This is a trusted zero result!
 					log.Printf("%s Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
@@ -184,6 +209,7 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 				}
 				lastNonEmpty = stats
 				lastNonEmptyTime = time.Now()
+				lastWasEmpty = false
 			}
 
 			// At least once a minute.  We want to catch the non-zero Executed1Minute field.
