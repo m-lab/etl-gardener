@@ -123,9 +123,12 @@ func GetTaskqueueStats(config cloud.Config, name string) (stats taskqueue.QueueS
 //     basically assuming it is empty now.
 func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 	log.Println("Wait for empty queue ", qh.Queue)
-	var lastTrusted taskqueue.QueueStatistics
-	inactiveStartTime := time.Now() // If the queue is actually empty, this allows timeout.
-	nullTime := time.Time{}
+	empty := taskqueue.QueueStatistics{}
+	lastNonEmpty := taskqueue.QueueStatistics{}
+	lastNonEmptyTime := time.Now()
+
+	// If the last non-empty stats are close to being empty, then we are more trusting
+	// if we see an empty stats.  But if lsatNonEmpty is actually empty, then not so much.
 	for {
 		select {
 		case <-terminate:
@@ -137,31 +140,36 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 					log.Println(err, "GetTaskqueueStats returned EOF - test client?")
 				}
 				return err
-			} else if stats.Tasks > 0 || stats.InFlight > 0 {
-				// Good data, queue is not empty...
-				lastTrusted = stats
-				inactiveStartTime = nullTime
-			} else if stats.Executed1Minute > 0 {
-				log.Printf("Looks good (%s): %+v vs %+v", qh.Queue, stats, lastTrusted)
-				return nil // Likely valid empty queue.
-			} else {
-				// Record the first time we see an apparently empty queue.
-				if inactiveStartTime == nullTime {
-					inactiveStartTime = time.Now()
-				}
-				if lastTrusted.Tasks == 0 {
-					// Most likely we really are done now.  Even if something is still
-					// in flight, we will just assume it is likely to finish.
+			}
+			if stats.InFlight+stats.Tasks == 0 {
+				if stats != empty {
+					// This is a trusted zero result!
+					log.Printf("%s Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
 					return nil
 				}
+			}
+			if stats != empty {
+				lastNonEmpty = stats
+				lastNonEmptyTime = time.Now()
+			} else {
+				// Empty stats are not trustworthy, so we do more sanity checking.
+				if lastNonEmpty != empty && lastNonEmpty.Tasks == 0 {
+					// Most likely we really are done now.  Even if something is still
+					// in flight, we will just assume it is likely to finish.
+					log.Printf("%s Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
+					return nil
+				}
+
+				if time.Since(lastNonEmptyTime) > 3*time.Minute {
+					// Its been this way for at least 3 minutes, and at least 2 samples.
+					// Probably OK.
+					log.Printf("%s TIMEOUT:  Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
+					return nil
+				}
+
 				log.Printf("Suspicious (%s): %+v\n", qh.Queue, stats)
 			}
-			if time.Since(inactiveStartTime) > 180*time.Second {
-				// It's been long enough to assume the queue is really empty.
-				// Or possibly we've just been getting errors all this time.
-				log.Printf("Timeout. (%s) Last trusted was: %+v", qh.Queue, lastTrusted)
-				return nil
-			}
+
 			// Check about once every minute.
 			time.Sleep(time.Duration(30+rand.Intn(60)) * time.Second)
 		}
