@@ -135,6 +135,8 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 			return ErrTerminated
 		default:
 			stats, err := GetTaskqueueStats(qh.Config, qh.Queue)
+			// Override the EnforcedRate field, which seems to be unconditionally set.  Argh.
+			stats.EnforcedRate = 0
 			if err != nil {
 				if err == io.EOF {
 					log.Println(err, "GetTaskqueueStats returned EOF - test client?")
