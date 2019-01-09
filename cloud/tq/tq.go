@@ -150,7 +150,7 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 					return nil
 				}
 
-				if time.Since(lastNonEmptyTime) > 3*time.Minute {
+				if time.Since(lastNonEmptyTime) > 5*time.Minute && lastNonEmpty.Tasks < 100 {
 					// Its been this way for at least 3 minutes, and at least 2 samples.
 					// Probably OK.
 					log.Printf("%s TIMEOUT:  Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
