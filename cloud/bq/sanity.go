@@ -293,22 +293,24 @@ func (at *AnnotatedTable) checkAlmostAsBig(ctx context.Context, other *Annotated
 
 	// Check that receiver table contains at least 99% as many tasks as
 	// other table.
-	if float32(thisDetail.TaskFileCount) < 0.99*float32(otherDetail.TaskFileCount) {
-		return ErrTooFewTasks
-	} else if thisDetail.TaskFileCount < otherDetail.TaskFileCount {
+	if thisDetail.TaskFileCount < otherDetail.TaskFileCount {
 		log.Printf("Warning - fewer task files: %s(%d) < %s(%d)\n",
 			at.Table.FullyQualifiedName(), thisDetail.TaskFileCount,
 			other.Table.FullyQualifiedName(), otherDetail.TaskFileCount)
 	}
+	if float32(thisDetail.TaskFileCount) < 0.99*float32(otherDetail.TaskFileCount) {
+		return ErrTooFewTasks
+	}
 
 	// Check that receiver table contains at least 95% as many tests as
 	// other table.  This may be fewer if the destination table still has dups.
-	if float32(thisDetail.TestCount) < 0.95*float32(otherDetail.TestCount) {
-		return ErrTooFewTests
-	} else if thisDetail.TestCount < otherDetail.TestCount {
+	if thisDetail.TestCount < otherDetail.TestCount {
 		log.Printf("Warning - fewer tests: %s(%d) < %s(%d)\n",
 			at.Table.FullyQualifiedName(), thisDetail.TestCount,
 			other.Table.FullyQualifiedName(), otherDetail.TestCount)
+	}
+	if float32(thisDetail.TestCount) < 0.95*float32(otherDetail.TestCount) {
+		return ErrTooFewTests
 	}
 	return nil
 }
@@ -324,6 +326,7 @@ func (at *AnnotatedTable) checkModifiedAfter(ctx context.Context, other *Annotat
 	// Note that if other doesn't actually exist, its LastModifiedTime will be the time zero value,
 	// so this will generally work as intended.
 	if thisMeta.LastModifiedTime.Before(other.LastModifiedTime(ctx)) {
+		log.Printf("Warning - existing modified later than replacement")
 		// TODO should perhaps delete the source table?
 		return ErrSrcOlderThanDest
 	}
