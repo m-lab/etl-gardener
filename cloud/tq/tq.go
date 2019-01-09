@@ -118,9 +118,9 @@ func GetTaskqueueStats(config cloud.Config, name string) (stats taskqueue.QueueS
 //  1. If queue was most recently 0 pending, >0 in flight, then we trust
 //     the empty queue state.
 //  2. If queue most recently had >0 pending, then we assume a zero state may
-//     be spurious, and check two more times over the next two minutes or so.
-//  3. If the queue appears empty (or errors) for 3 minutes, then we return,
-//     basically assuming it is empty now.
+//     be spurious, and check several more times over the next 5 to 10 minutes.
+//  3. If the queue appears empty for 5 minutes (or 10 minutes if there were still a lot pending)
+//     then we assume it is actually empty.
 func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 	log.Println("Wait for empty queue ", qh.Queue)
 	empty := taskqueue.QueueStatistics{}
@@ -156,9 +156,11 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 				}
 
 				// These are bit hacky.  Intention is to determine whether it is likely that
-				// the queue has drained.  The first one could cause an infinite loop if we are
-				// unlucky.
-				if time.Since(lastNonEmptyTime) > 5*time.Minute && lastNonEmpty.Tasks < 5 {
+				// the queue has drained.
+				// The first one checks whether the last observed number of tasks could plausibly have completed
+				// in the last minute or so.
+				// However, it could cause an infinite loop if we are unlucky.
+				if time.Since(lastNonEmptyTime) > 5*time.Minute && lastNonEmpty.Tasks <= lastNonEmpty.Executed1Minute {
 					// Its been this way for at least 5 minutes, and at least 7 samples.
 					// Probably OK.
 					log.Printf("%s TIMEOUT:  Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
