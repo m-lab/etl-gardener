@@ -171,39 +171,40 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 					previousWasEmpty = false
 				}
 			} else {
-				// Might be empty, or might be bogus.
+				// Might be empty queue, or might be bogus stats report.
 				if stats.Executed1Minute > 0 {
 					// This is unambiguous signal that the queue is empty.
 					log.Printf("%s Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
 					return nil
-				} else {
-					// This could be a bogus report, so proceed with caution...
-					// First, avoid an infinite loop.
-					if time.Since(lastNonEmptyTime) > 10*time.Minute {
-						// Its been this way for at least 10 minutes, and at least 15 samples.
-						// Safest bet is to assume the queue is really empty.
+				}
+
+				// Tasks == 0 and Executed1Minute == 0, so this may be a bogus stats report.
+				// Proceed with caution.
+				// First, avoid an infinite loop.
+				if time.Since(lastNonEmptyTime) > 10*time.Minute {
+					// Its been this way for at least 10 minutes, and at least 15 samples.
+					// Safest bet is to assume the queue is really empty.
+					EmptyStatsRecoveryTimeHistogramSecs.WithLabelValues("timeout").Observe(time.Since(lastNonEmptyTime).Seconds())
+					log.Printf("%s TIMEOUT:  Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
+					return nil
+				}
+
+				// Check if some of the lastNonEmpty fields are non-zero, and have values that are
+				// consistent with the queue emptying "soon"...
+				if lastNonEmpty.Tasks < lastNonEmpty.Executed1Minute+lastNonEmpty.InFlight {
+					// It is plausible that the queue drained out in within a minute or so.
+					//  Probably safe to assume it is empty if it has been this way for a few minutes.
+					if time.Since(lastNonEmptyTime) > 3*time.Minute {
+						// Its been this way for at least 3 minutes, and at least 4 or 5 samples.
 						EmptyStatsRecoveryTimeHistogramSecs.WithLabelValues("timeout").Observe(time.Since(lastNonEmptyTime).Seconds())
 						log.Printf("%s TIMEOUT:  Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
 						return nil
 					}
-
-					// Check if some of the lastNonEmpty fields are non-zero, and have values that are
-					// consistent with the queue emptying "soon"...
-					if lastNonEmpty.Tasks < lastNonEmpty.Executed1Minute+lastNonEmpty.InFlight {
-						// It is plausible that the queue drained out in within a minute or so.
-						//  Probably safe to assume it is empty if it has been this way for a few minutes.
-						if time.Since(lastNonEmptyTime) > 3*time.Minute {
-							// Its been this way for at least 3 minutes, and at least 4 or 5 samples.
-							EmptyStatsRecoveryTimeHistogramSecs.WithLabelValues("timeout").Observe(time.Since(lastNonEmptyTime).Seconds())
-							log.Printf("%s TIMEOUT:  Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
-							return nil
-						}
-					}
-
-					// This may not be an empty queue, so log some info and try again.
-					log.Printf("Suspicious (%s): %+v\n", qh.Queue, stats)
-					previousWasEmpty = true
 				}
+
+				// This may or may not be an empty queue, so log some info and try again.
+				log.Printf("Suspicious (%s): %+v\n", qh.Queue, stats)
+				previousWasEmpty = true
 			}
 		}
 
