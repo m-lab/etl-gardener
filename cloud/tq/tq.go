@@ -128,7 +128,7 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 	lastNonEmptyTime := time.Now()
 
 	// If the last non-empty stats are close to being empty, then we are more trusting
-	// if we see an empty stats.  But if lsatNonEmpty is actually empty, then not so much.
+	// if we see an empty stats.  But if lastNonEmpty is actually empty, then not so much.
 	for {
 		select {
 		case <-terminate:
@@ -136,13 +136,13 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 		default:
 			stats, err := GetTaskqueueStats(qh.Config, qh.Queue)
 			// Override the EnforcedRate field, which seems to be unconditionally set.  Argh.
-			stats.EnforcedRate = 0
 			if err != nil {
 				if err == io.EOF {
 					log.Println(err, "GetTaskqueueStats returned EOF - test client?")
 				}
 				return err
 			}
+			stats.EnforcedRate = 0
 			if stats == empty {
 				// Empty stats are not trustworthy, so we do more sanity checking.
 				if lastNonEmpty != empty && lastNonEmpty.Tasks == 0 {
@@ -152,8 +152,19 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 					return nil
 				}
 
-				if time.Since(lastNonEmptyTime) > 5*time.Minute && lastNonEmpty.Tasks < 100 {
-					// Its been this way for at least 3 minutes, and at least 2 samples.
+				// These are bit hacky.  Intention is to determine whether it is likely that
+				// the queue has drained.  The first one could cause an infinite loop if we are
+				// unlucky.
+				if time.Since(lastNonEmptyTime) > 5*time.Minute && lastNonEmpty.Tasks < 5 {
+					// Its been this way for at least 5 minutes, and at least 3 samples.
+					// Probably OK.
+					log.Printf("%s TIMEOUT:  Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
+					return nil
+				}
+
+				// This one prevents an infinite loop.
+				if time.Since(lastNonEmptyTime) > 10*time.Minute {
+					// Its been this way for at least 10 minutes, and at least 6 samples.
 					// Probably OK.
 					log.Printf("%s TIMEOUT:  Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
 					return nil
