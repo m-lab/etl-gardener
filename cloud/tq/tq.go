@@ -141,17 +141,7 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 				}
 				return err
 			}
-			if stats.InFlight+stats.Tasks == 0 {
-				if stats != empty {
-					// This is a trusted zero result!
-					log.Printf("%s Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
-					return nil
-				}
-			}
-			if stats != empty {
-				lastNonEmpty = stats
-				lastNonEmptyTime = time.Now()
-			} else {
+			if stats == empty {
 				// Empty stats are not trustworthy, so we do more sanity checking.
 				if lastNonEmpty != empty && lastNonEmpty.Tasks == 0 {
 					// Most likely we really are done now.  Even if something is still
@@ -168,6 +158,14 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 				}
 
 				log.Printf("Suspicious (%s): %+v\n", qh.Queue, stats)
+			} else {
+				if stats.InFlight+stats.Tasks == 0 {
+					// This is a trusted zero result!
+					log.Printf("%s Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
+					return nil
+				}
+				lastNonEmpty = stats
+				lastNonEmptyTime = time.Now()
 			}
 
 			// Check about once every minute.
@@ -227,6 +225,7 @@ func (qh *QueueHandler) postWithRetry(bucket, filepath string) error {
 }
 
 // PostAll posts all normal file items in an ObjectIterator into the appropriate queue.
+// returns (fileCount, byteCount, error)
 func (qh *QueueHandler) PostAll(bucket string, it stiface.ObjectIterator) (int, int64, error) {
 	fileCount := 0
 	byteCount := int64(0)
@@ -273,7 +272,10 @@ func (qh *QueueHandler) PostDay(ctx context.Context, bucket stiface.BucketHandle
 	// TODO - handle timeout errors?
 	// TODO - should we add a deadline?
 	it := bucket.Objects(ctx, &qry)
-	return qh.PostAll(bucketName, it)
+	fileCount, byteCount, err := qh.PostAll(bucketName, it)
+
+	log.Println("Added ", fileCount, "tasks from", prefix, " to ", qh.Queue)
+	return fileCount, byteCount, err
 }
 
 // *******************************************************************
