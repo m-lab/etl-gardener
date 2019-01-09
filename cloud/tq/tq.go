@@ -142,6 +142,9 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 				}
 				return err
 			}
+			if stats.EnforcedRate == 0 {
+				log.Println("Actually saw EnforcedRate == 0")
+			}
 			stats.EnforcedRate = 0
 			if stats == empty {
 				// Empty stats are not trustworthy, so we do more sanity checking.
@@ -156,7 +159,7 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 				// the queue has drained.  The first one could cause an infinite loop if we are
 				// unlucky.
 				if time.Since(lastNonEmptyTime) > 5*time.Minute && lastNonEmpty.Tasks < 5 {
-					// Its been this way for at least 5 minutes, and at least 3 samples.
+					// Its been this way for at least 5 minutes, and at least 7 samples.
 					// Probably OK.
 					log.Printf("%s TIMEOUT:  Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
 					return nil
@@ -164,7 +167,7 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 
 				// This one prevents an infinite loop.
 				if time.Since(lastNonEmptyTime) > 10*time.Minute {
-					// Its been this way for at least 10 minutes, and at least 6 samples.
+					// Its been this way for at least 10 minutes, and at least 15 samples.
 					// Probably OK.
 					log.Printf("%s TIMEOUT:  Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
 					return nil
@@ -181,8 +184,9 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 				lastNonEmptyTime = time.Now()
 			}
 
-			// Check about once every minute.
-			time.Sleep(time.Duration(30+rand.Intn(60)) * time.Second)
+			// At least once a minute.  We want to catch the non-zero Executed1Minute field.
+			// This will average 30 seconds.
+			time.Sleep(time.Duration(20+rand.Intn(20)) * time.Second)
 		}
 	}
 }
