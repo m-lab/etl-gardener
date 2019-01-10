@@ -184,8 +184,8 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 				if time.Since(lastNonEmptyTime) > 10*time.Minute {
 					// Its been this way for at least 10 minutes, and at least 15 samples.
 					// Safest bet is to assume the queue is really empty.
-					EmptyStatsRecoveryTimeHistogramSecs.WithLabelValues("timeout").Observe(time.Since(lastNonEmptyTime).Seconds())
-					log.Printf("%s TIMEOUT:  Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
+					EmptyStatsRecoveryTimeHistogramSecs.WithLabelValues("10 minute timeout").Observe(time.Since(lastNonEmptyTime).Seconds())
+					log.Printf("%s 10 minute timeout:  Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
 					return nil
 				}
 
@@ -196,8 +196,8 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 					//  Probably safe to assume it is empty if it has been this way for a few minutes.
 					if time.Since(lastNonEmptyTime) > 3*time.Minute {
 						// Its been this way for at least 3 minutes, and at least 4 or 5 samples.
-						EmptyStatsRecoveryTimeHistogramSecs.WithLabelValues("timeout").Observe(time.Since(lastNonEmptyTime).Seconds())
-						log.Printf("%s TIMEOUT:  Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
+						EmptyStatsRecoveryTimeHistogramSecs.WithLabelValues("3 minute timeout").Observe(time.Since(lastNonEmptyTime).Seconds())
+						log.Printf("%s 3 minute timeout:  Previous %+v  Current %+v", qh.Queue, lastNonEmpty, stats)
 						return nil
 					}
 				}
