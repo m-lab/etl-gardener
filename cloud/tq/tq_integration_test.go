@@ -80,7 +80,7 @@ func TestIsEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = q.IsEmpty()
+	err = q.IsEmptyBuggy()
 	if err != nil && err != tq.ErrMoreTasks {
 		t.Fatal(err)
 	}
