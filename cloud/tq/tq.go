@@ -277,7 +277,7 @@ func (qh *QueueHandler) PostAll(bucket string, it stiface.ObjectIterator) (int, 
 		}
 
 		// HACK for fast processing
-		if project == "mlab-sandbox" && loopCount%20 != 0 {
+		if project == "mlab-sandbox" && loopCount%10 != 0 {
 			loopCount++
 			continue
 		}
