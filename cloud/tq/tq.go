@@ -11,6 +11,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -252,9 +253,12 @@ func (qh *QueueHandler) postWithRetry(bucket, filepath string) error {
 	return err
 }
 
+var project = os.Getenv("PROJECT")
+
 // PostAll posts all normal file items in an ObjectIterator into the appropriate queue.
 // returns (fileCount, byteCount, error)
 func (qh *QueueHandler) PostAll(bucket string, it stiface.ObjectIterator) (int, int64, error) {
+	loopCount := 0
 	fileCount := 0
 	byteCount := int64(0)
 	qpErrCount := 0
@@ -272,6 +276,11 @@ func (qh *QueueHandler) PostAll(bucket string, it stiface.ObjectIterator) (int, 
 			continue
 		}
 
+		// HACK for fast processing
+		if project == "mlab-sandbox" && loopCount%20 != 0 {
+			loopCount++
+			continue
+		}
 		err = qh.postWithRetry(bucket, o.Name)
 		if err != nil {
 			log.Println(err, "attempting to post", o.Name, "to", qh.Queue)
@@ -284,6 +293,7 @@ func (qh *QueueHandler) PostAll(bucket string, it stiface.ObjectIterator) (int, 
 			fileCount++
 			byteCount += o.Size
 		}
+		loopCount++
 	}
 	return fileCount, byteCount, nil
 }
