@@ -184,7 +184,6 @@ func doDispatchLoop(ctx context.Context, handler *reproc.TaskHandler, startDate 
 	next := startDate
 
 	for {
-
 		prefix := next.Format(fmt.Sprintf("gs://%s/%s/2006/01/02/", bucket, experiment))
 
 		// Note that this blocks until a queue is available.
@@ -196,6 +195,11 @@ func doDispatchLoop(ctx context.Context, handler *reproc.TaskHandler, startDate 
 		}
 
 		next = next.AddDate(0, 0, 1)
+
+		// HACK to make processing really fast.
+		if env.Project == "mlab-sandbox" {
+			next = next.AddDate(0, 0, 5)
+		}
 
 		// If gardener has processed all dates up to two days ago,
 		// start over.
