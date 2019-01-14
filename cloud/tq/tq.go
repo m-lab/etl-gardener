@@ -254,6 +254,7 @@ func (qh *QueueHandler) postWithRetry(bucket, filepath string) error {
 }
 
 var project = os.Getenv("PROJECT")
+var skipFiles = 7 // Process every 7th file.
 
 // PostAll posts all normal file items in an ObjectIterator into the appropriate queue.
 // returns (fileCount, byteCount, error)
@@ -276,8 +277,8 @@ func (qh *QueueHandler) PostAll(bucket string, it stiface.ObjectIterator) (int, 
 			continue
 		}
 
-		// HACK for fast processing
-		if project == "mlab-sandbox" && loopCount%10 != 0 {
+		// HACK for fast processing in sandbox
+		if project == "mlab-sandbox" && loopCount%skipFiles != 0 {
 			loopCount++
 			continue
 		}
