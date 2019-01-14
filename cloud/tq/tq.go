@@ -254,7 +254,7 @@ func (qh *QueueHandler) postWithRetry(bucket, filepath string) error {
 }
 
 var project = os.Getenv("PROJECT")
-var skipFiles = 7 // Process every 7th file.
+var skipFiles = 5 // Process every 5th file.
 
 // PostAll posts all normal file items in an ObjectIterator into the appropriate queue.
 // returns (fileCount, byteCount, error)

@@ -198,7 +198,7 @@ func doDispatchLoop(ctx context.Context, handler *reproc.TaskHandler, startDate 
 
 		// HACK to make processing really fast.
 		if env.Project == "mlab-sandbox" {
-			next = next.AddDate(0, 0, 3) // Process every 4th day.
+			next = next.AddDate(0, 0, 2) // Process every 3rd day.
 		}
 
 		// If gardener has processed all dates up to two days ago,
