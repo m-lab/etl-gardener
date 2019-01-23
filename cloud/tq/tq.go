@@ -158,9 +158,16 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 				}
 				return err
 			}
-			if stats.Tasks > 0 {
+
+			// Verified that Tasks does not include InFlight, e.g.:
+			// etl-ndt-batch-5 Current {Tasks:0 OldestETA:0001-01-01 00:00:00 +0000 UTC Executed1Minute:18 InFlight:28 EnforcedRate:10}
+			// So we have to check both to determine if the queue is empty.
+			if stats.Tasks+stats.InFlight > 0 {
 				// This is a valid stats report.  Record the time for de-glitching.
 				lastNonEmptyTime = time.Now()
+				if stats.Tasks == 0 {
+					log.Println("Inflight > Tasks:", stats)
+				}
 				if previousWasEmpty {
 					EmptyStatsRecoveryTimeHistogramSecs.WithLabelValues("recovered").Observe(time.Since(lastNonEmptyTime).Seconds())
 					previousWasEmpty = false
