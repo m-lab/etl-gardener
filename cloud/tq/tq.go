@@ -158,9 +158,16 @@ func (qh *QueueHandler) WaitForEmptyQueue(terminate <-chan struct{}) error {
 				}
 				return err
 			}
-			if stats.Tasks > 0 {
+
+			// Looks like stats.Tasks may not include stats.InFlight after all, so we add them here...
+			if stats.Tasks+stats.InFlight > 0 {
 				// This is a valid stats report.  Record the time for de-glitching.
 				lastNonEmptyTime = time.Now()
+				if stats.Tasks == 0 {
+					// We aren't completely sure that Tasks includes Inflight, so we log here if we see
+					// non-zero Inflight when Tasks = 0
+					log.Println("Inflight > Tasks:", stats)
+				}
 				if previousWasEmpty {
 					EmptyStatsRecoveryTimeHistogramSecs.WithLabelValues("recovered").Observe(time.Since(lastNonEmptyTime).Seconds())
 					previousWasEmpty = false
