@@ -31,6 +31,7 @@ import (
 )
 
 // Environment provides "global" variables.
+// TODO - use entries in context instead.
 type environment struct {
 	TestMode bool
 }

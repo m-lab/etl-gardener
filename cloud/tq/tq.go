@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -253,18 +254,26 @@ func (qh *QueueHandler) postWithRetry(bucket, filepath string) error {
 	return err
 }
 
-var project = os.Getenv("PROJECT")
-var skipFiles = 5 // Process every 5th file.
-
 // PostAll posts all normal file items in an ObjectIterator into the appropriate queue.
 // returns (fileCount, byteCount, error)
 func (qh *QueueHandler) PostAll(bucket string, it stiface.ObjectIterator) (int, int64, error) {
-	loopCount := 0
+	skipCountString := os.Getenv("TASK_FILE_SKIP")
+	skipCount := 0
+	if skipCountString != "" {
+		var err error
+		skipCount, err = strconv.Atoi(skipCountString)
+		if err != nil {
+			log.Println(err)
+		}
+	}
+
+	loopCount := -1
 	fileCount := 0
 	byteCount := int64(0)
 	qpErrCount := 0
 	gcsErrCount := 0
 	for o, err := it.Next(); err != iterator.Done; o, err = it.Next() {
+		loopCount++
 		if err != nil {
 			// TODO - should this retry?
 			// log the underlying error, with added context
@@ -277,9 +286,9 @@ func (qh *QueueHandler) PostAll(bucket string, it stiface.ObjectIterator) (int, 
 			continue
 		}
 
-		// HACK for fast processing in sandbox
-		if project == "mlab-sandbox" && loopCount%skipFiles != 0 {
-			loopCount++
+		if loopCount%(skipCount+1) != 0 {
+			// Skip some files if TASK_FILE_SKIP > 0.  This allows sampling the entire archive,
+			// e.g. for faster debugging in sandbox.
 			continue
 		}
 		err = qh.postWithRetry(bucket, o.Name)
@@ -294,7 +303,6 @@ func (qh *QueueHandler) PostAll(bucket string, it stiface.ObjectIterator) (int, 
 			fileCount++
 			byteCount += o.Size
 		}
-		loopCount++
 	}
 	return fileCount, byteCount, nil
 }
