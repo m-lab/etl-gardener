@@ -137,7 +137,7 @@ deploy:
 ## Sandbox
 - provider: script
   script:
-    DATE_SKIP="3" TASK_FILE_SKIP="5"
+    DATE_SKIP="2" TASK_FILE_SKIP="4"
     $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-sandbox data-processing-cluster ./apply-cluster.sh
   skip_cleanup: true
   on:
