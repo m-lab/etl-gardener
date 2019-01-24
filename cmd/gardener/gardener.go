@@ -39,11 +39,12 @@ type environment struct {
 	Project      string
 	BatchDataset string // All working data is written to the batch data set.
 	FinalDataset string // Ultimate deduplicated, partitioned output dataset.
-	QueueBase    string
+	QueueBase    string // Base of the queue names.  Will append -0, -1, ...
 	Experiment   string
 	Bucket       string
 	NumQueues    int
-	StartDate    time.Time
+	StartDate    time.Time // The archive date to start reprocessing.
+	DateSkip     int       // Number of dates to skip between PostDay, to allow rapid scanning in sandbox.
 
 	// Vars for Status()
 	Commit  string
@@ -57,13 +58,14 @@ var env environment
 
 // Errors associated with environment.
 var (
-	ErrNoProject    = errors.New("No env var for Project")
-	ErrNoQueueBase  = errors.New("No env var for QueueBase")
-	ErrNoNumQueues  = errors.New("No env var for NumQueues")
-	ErrNoStartDate  = errors.New("No env var for StartDate")
-	ErrBadStartDate = errors.New("Bad StartDate")
-	ErrNoExperiment = errors.New("No env var for Experiment")
-	ErrNoBucket     = errors.New("No env var for Bucket")
+	ErrNoProject       = errors.New("No env var for Project")
+	ErrNoQueueBase     = errors.New("No env var for QueueBase")
+	ErrNoNumQueues     = errors.New("No env var for NumQueues")
+	ErrNoStartDate     = errors.New("No env var for StartDate")
+	ErrInvalidDateSkip = errors.New("Invalid DATE_SKIP value")
+	ErrBadStartDate    = errors.New("Bad StartDate")
+	ErrNoExperiment    = errors.New("No env var for Experiment")
+	ErrNoBucket        = errors.New("No env var for Bucket")
 )
 
 // LoadEnv loads any required environment variables.
@@ -94,6 +96,16 @@ func LoadEnv() {
 		env.StartDate, err = time.Parse("20060102", startString)
 		if !ok {
 			env.Error = ErrBadStartDate
+			log.Println(env.Error)
+		}
+	}
+
+	skipCountString := os.Getenv("DATE_SKIP")
+	if skipCountString != "" {
+		env.DateSkip, err = strconv.Atoi(skipCountString)
+		if err != nil {
+			log.Println(err)
+			env.Error = ErrInvalidDateSkip
 			log.Println(env.Error)
 		}
 	}
@@ -184,7 +196,6 @@ func doDispatchLoop(ctx context.Context, handler *reproc.TaskHandler, startDate 
 	next := startDate
 
 	for {
-
 		prefix := next.Format(fmt.Sprintf("gs://%s/%s/2006/01/02/", bucket, experiment))
 
 		// Note that this blocks until a queue is available.
@@ -195,7 +206,8 @@ func doDispatchLoop(ctx context.Context, handler *reproc.TaskHandler, startDate 
 			return
 		}
 
-		next = next.AddDate(0, 0, 1)
+		// Advance to next date, possibly skipping days if DATE_SKIP env var was set.
+		next = next.AddDate(0, 0, 1+env.DateSkip)
 
 		// If gardener has processed all dates up to two days ago,
 		// start over.
