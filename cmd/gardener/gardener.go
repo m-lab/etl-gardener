@@ -58,14 +58,14 @@ var env environment
 
 // Errors associated with environment.
 var (
-	ErrNoProject           = errors.New("No env var for Project")
-	ErrNoQueueBase         = errors.New("No env var for QueueBase")
-	ErrNoNumQueues         = errors.New("No env var for NumQueues")
-	ErrNoStartDate         = errors.New("No env var for StartDate")
-	ErrInvalidDateSkip     = errors.New("Invalid DATE_SKIP value")
-	ErrBadStartDate        = errors.New("Bad StartDate")
-	ErrNoExperiment        = errors.New("No env var for Experiment")
-	ErrNoBucket            = errors.New("No env var for Bucket")
+	ErrNoProject       = errors.New("No env var for Project")
+	ErrNoQueueBase     = errors.New("No env var for QueueBase")
+	ErrNoNumQueues     = errors.New("No env var for NumQueues")
+	ErrNoStartDate     = errors.New("No env var for StartDate")
+	ErrInvalidDateSkip = errors.New("Invalid DATE_SKIP value")
+	ErrBadStartDate    = errors.New("Bad StartDate")
+	ErrNoExperiment    = errors.New("No env var for Experiment")
+	ErrNoBucket        = errors.New("No env var for Bucket")
 )
 
 // LoadEnv loads any required environment variables.
@@ -100,9 +100,9 @@ func LoadEnv() {
 		}
 	}
 
-	skip, _ := os.LookupEnv("DATE_SKIP")
-	if skip != "" {
-		env.DateSkip, err = strconv.Atoi(skip)
+	skipCountString := os.Getenv("DATE_SKIP")
+	if skipCountString != "" {
+		env.DateSkip, err = strconv.Atoi(skipCountString)
 		if err != nil {
 			log.Println(err)
 			env.Error = ErrInvalidDateSkip
