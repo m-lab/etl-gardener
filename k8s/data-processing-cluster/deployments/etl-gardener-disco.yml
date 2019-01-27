@@ -48,6 +48,10 @@ spec:
           value: "archive-measurement-lab"
         - name: START_DATE
           value: "20160501"  # Actual start date of switch data.
+        - name: DATE_SKIP  # Should be 0 for normal operation
+          value: "{{DATE_SKIP}}"
+        - name: TASK_FILE_SKIP # Should be 0 for normal operation
+          value: "{{TASK_FILE_SKIP}}"
         - name: EXPERIMENT
           value: "switch"
         - name: DATASET
