@@ -288,8 +288,13 @@ loop:
 			}
 		}
 	}
-	metrics.CompletedCount.WithLabelValues("todo - add exp type").Inc()
-	t.Delete(ctx)
+	if t.ErrMsg == "" {
+		// Only delete the state entry if it completed without error.
+		t.Delete(ctx)
+		metrics.CompletedCount.WithLabelValues("todo - add exp type").Inc()
+	} else {
+		metrics.CompletedCount.WithLabelValues(StateNames[t.State] + " Error").Inc()
+	}
 	term.Done()
 }
 
