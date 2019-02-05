@@ -98,10 +98,10 @@ func TestWithTaskQueue(t *testing.T) {
 	if counter.Count() != 9 {
 		t.Error("Wrong number of client calls", counter.Count())
 	}
-	if len(saver.GetDeletes()) != 3 {
-		// TODO - these are no longer deleted, because of change in error handling.
-		// t.Error("Wrong number of task deletes", len(saver.GetDeletes()))
-	}
+
+	// TODO: The tasks currently end in error, so there are no task
+	// deletes.  If we change this behavior, we might want to check the
+	// value of saver.Deletes() here.
 
 	tasks := saver.GetTasks()
 	for _, task := range tasks {
