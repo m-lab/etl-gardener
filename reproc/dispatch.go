@@ -90,6 +90,7 @@ func NewTaskHandler(exec state.Executor, queues []string, saver state.Saver) *Ta
 var ErrTerminating = errors.New("TaskHandler is terminating")
 
 // StartTask starts a single task.  It should be properly initialized except for saver.
+// If the task had previously errored, this should clear the error from datastore.
 func (th *TaskHandler) StartTask(ctx context.Context, t state.Task) {
 	t.SetSaver(th.saver)
 
