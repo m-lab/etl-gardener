@@ -372,19 +372,7 @@ func (rex *ReprocessingExecutor) finish(ctx context.Context, t *state.Task, term
 		return err
 	}
 
-	// Delete dedup source table.
-
-	// Wait for JobID to complete, then delete the template table.
-	log.Println("Completed deduplication, deleting source", src.FullyQualifiedName())
-	// If deduplication was successful, we should delete the source table.
-	delCtx, cf := context.WithTimeout(ctx, time.Minute)
-	defer cf()
-	err = src.Delete(delCtx)
-	if err != nil {
-		log.Println(err)
-		t.SetError(ctx, err, "TableDelete")
-		return err
-	}
+	log.Println("Completed deduplication from", src.FullyQualifiedName())
 
 	// Sanity check and copy things to final DS.
 	// ==========================================================================
@@ -421,5 +409,18 @@ func (rex *ReprocessingExecutor) finish(ctx context.Context, t *state.Task, term
 		t.SetError(ctx, err, "SanityCheckAndCopy")
 		return err
 	}
+
+	// Delete templated dedup source table.
+	log.Println("Completed deduplication, deleting dedup source", src.FullyQualifiedName())
+	// If deduplication was successful, we should delete the source table.
+	delCtx, cf := context.WithTimeout(ctx, time.Minute)
+	defer cf()
+	err = src.Delete(delCtx)
+	if err != nil {
+		log.Println(err)
+		t.SetError(ctx, err, "TableDelete")
+		return err
+	}
+
 	return nil
 }
