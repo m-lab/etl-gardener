@@ -411,7 +411,7 @@ func (rex *ReprocessingExecutor) finish(ctx context.Context, t *state.Task, term
 	}
 
 	// Delete templated dedup source table.
-	log.Println("Completed deduplication, deleting dedup source", src.FullyQualifiedName())
+	log.Println("Deleting dedup source", src.FullyQualifiedName())
 	// If deduplication was successful, we should delete the source table.
 	delCtx, cf := context.WithTimeout(ctx, time.Minute)
 	defer cf()
