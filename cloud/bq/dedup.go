@@ -75,7 +75,8 @@ ErrorTimeout:
 				// Otherwise just wait and check again.
 			} else {
 				if bufferEmptySince != never {
-					log.Println("Streaming buffer was empty for", time.Since(bufferEmptySince), "but now it is not!")
+					log.Println("Streaming buffer was empty for", time.Since(bufferEmptySince),
+						"but now it is not!", tt.FullyQualifiedName())
 					bufferEmptySince = never
 				}
 				// Now wait and check again.
