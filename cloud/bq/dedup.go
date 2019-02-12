@@ -31,6 +31,8 @@ var (
 )
 
 // WaitForStableTable loops checking until table exists and has no streaming buffer.
+// NOTE: We discovered that the StreamingBuffer == nil is not reliable, and must be rechecked for a minimum
+// of 5 minutes to ensure that there is no more buffered data.  (We saw reverts after as long as 4m50s).
 // TODO - refactor this to make it easier to understand.
 // TODO - move these functions to go/bqext package
 func WaitForStableTable(ctx context.Context, tt bqiface.Table) error {
