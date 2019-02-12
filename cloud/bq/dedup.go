@@ -38,7 +38,8 @@ func WaitForStableTable(ctx context.Context, tt bqiface.Table) error {
 	// bufferEmptySince indicates the first time we saw nil StreamingBuffer
 	bufferEmptySince := never
 	// NOTE: This must be larger than the errorTimeout.
-	emptyBufferWaitTime := 5 * time.Minute
+	// We have seen false negatives up to about 2.5 minutes, so 5 minutes might not be enough.
+	emptyBufferWaitTime := 10 * time.Minute
 
 	errorTimeout := 2 * time.Minute
 	if testMode {
