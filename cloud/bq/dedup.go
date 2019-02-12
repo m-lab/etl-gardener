@@ -31,8 +31,16 @@ var (
 )
 
 // WaitForStableTable loops checking until table exists and has no streaming buffer.
+// TODO - refactor this to make it easier to understand.
 // TODO - move these functions to go/bqext package
 func WaitForStableTable(ctx context.Context, tt bqiface.Table) error {
+	never := time.Time{}
+	// bufferEmptySince indicates the first time we saw nil StreamingBuffer
+	bufferEmptySince := never
+	// NOTE: This must be larger than the errorTimeout.
+	// We have seen false negatives up to about 2.5 minutes, so 5 minutes might not be enough.
+	emptyBufferWaitTime := 10 * time.Minute
+
 	errorTimeout := 2 * time.Minute
 	if testMode {
 		errorTimeout = 100 * time.Millisecond
@@ -58,10 +66,22 @@ ErrorTimeout:
 			// Restart the timer whenever Metadata succeeds.
 			errorDeadline = time.Now().Add(errorTimeout)
 			if meta.StreamingBuffer == nil {
-				// Buffer is empty, so we can move on.
-				return nil
+				if bufferEmptySince == never {
+					bufferEmptySince = time.Now()
+				}
+				if time.Since(bufferEmptySince) > emptyBufferWaitTime {
+					// We believe buffer really is empty, so we can move on.
+					return nil
+				}
+				// Otherwise just wait and check again.
+			} else {
+				if bufferEmptySince != never {
+					log.Println("Streaming buffer was empty for", time.Since(bufferEmptySince),
+						"but now it is not!", tt.FullyQualifiedName())
+					bufferEmptySince = never
+				}
+				// Now wait and check again.
 			}
-			// Otherwise just wait and check again.
 		case err == io.EOF:
 			// EOF is usually due to using a fake test client, so
 			// treat it as a success.
