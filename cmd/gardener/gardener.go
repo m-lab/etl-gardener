@@ -331,8 +331,11 @@ func setupService(ctx context.Context) error {
 		return err
 	}
 
-	if maxDate.After(startDate) {
-		startDate = maxDate.AddDate(0, 0, 1)
+	// Move the start date after the max observed date.
+	// Note that if we restart while wrapping back to start date, this will essentially
+	// result in restarting at the original start date, after wrapping.
+	for maxDate.After(startDate) {
+		startDate = startDate.AddDate(0, 0, 1+env.DateSkip)
 	}
 
 	log.Println("Using start date of", startDate)
