@@ -326,7 +326,6 @@ func (at *AnnotatedTable) checkModifiedAfter(ctx context.Context, other *Annotat
 	// Note that if other doesn't actually exist, its LastModifiedTime will be the time zero value,
 	// so this will generally work as intended.
 	if thisMeta.LastModifiedTime.Before(other.LastModifiedTime(ctx)) {
-		log.Printf("Warning - existing modified later than replacement")
 		// TODO should perhaps delete the source table?
 		return ErrSrcOlderThanDest
 	}
@@ -389,6 +388,8 @@ func SanityCheckAndCopy(ctx context.Context, src, dest *AnnotatedTable) error {
 
 	err = src.checkModifiedAfter(ctx, dest)
 	if err != nil {
+		// TODO: Should we delete the source table here?
+		log.Printf("%s modified (%v) after %s (%v)\n", src.FullyQualifiedName(), src.LastModifiedTime(ctx), dest.FullyQualifiedName(), dest.LastModifiedTime(ctx))
 		return err
 	}
 

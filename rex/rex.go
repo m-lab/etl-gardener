@@ -149,6 +149,12 @@ func (rex *ReprocessingExecutor) Next(ctx context.Context, t *state.Task, termin
 			}
 		}
 
+		// Remove this when Gardener is working smoothly.
+		// Log the stabilizing duration.  Some SanityChecks are failing, and they may
+		// be related to premature exit from Stabiliting phase.
+		duration := time.Since(t.UpdateTime)
+		log.Println("Stabilizing", t.Name, "took", duration)
+
 		t.Update(ctx, state.Deduplicating)
 
 	case state.Deduplicating:
