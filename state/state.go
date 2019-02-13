@@ -219,7 +219,9 @@ func (t *Task) Save(ctx context.Context) error {
 
 // Update updates the task state, and saves to the "saver".
 func (t *Task) Update(ctx context.Context, st State) error {
-	duration := t.UpdateTime.Sub(time.Now())
+	duration := time.Since(t.UpdateTime)
+	metrics.StateTimeHistogram.WithLabelValues(StateNames[t.State]).Observe(duration.Seconds())
+	// TODO - remove this once we have some histogram history.
 	metrics.StateTimeSummary.WithLabelValues(StateNames[t.State]).Observe(duration.Seconds())
 	t.State = st
 	t.UpdateTime = time.Now()

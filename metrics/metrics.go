@@ -10,6 +10,7 @@ func init() {
 	prometheus.MustRegister(StartedCount)
 	prometheus.MustRegister(CompletedCount)
 	prometheus.MustRegister(StateTimeSummary)
+	prometheus.MustRegister(StateTimeHistogram)
 	prometheus.MustRegister(StateDate)
 	prometheus.MustRegister(FilesPerDateHistogram)
 	prometheus.MustRegister(BytesPerDateHistogram)
@@ -102,6 +103,7 @@ var (
 	)
 
 	// StateTimeSummary measures the time spent in different task states.
+	// DEPRECATED - remove soon.
 	// Provides metrics:
 	//    gardener_state_time_summary
 	// Example usage:
@@ -112,6 +114,23 @@ var (
 		Objectives: map[float64]float64{0.01: 0.001, 0.1: 0.01, 0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
 	}, []string{"state"},
 	)
+
+	// StateTimeHistogram tracks the time spent in each state.  Not necessary to label data type, as
+	// we currently have separate gardener deployments for each type.
+	// Usage example:
+	//   metrics.StateTimeHistogram.WithLabelValues(
+	//           StateName[state]).Observe(time.Since(start).Seconds())
+	StateTimeHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "gardener_state_time_histogram",
+			Help: "time-in-state distributions.",
+			// These values range from seconds to hours.
+			Buckets: []float64{
+				0.1, 0.3, 1, 3, 10, 30,
+				100, 300, 1000, 1800, 3600, 2 * 3600, 4 * 3600, 8 * 3600, 12 * 3600,
+			},
+		},
+		[]string{"state"})
 
 	// FilesPerDateHistogram provides a histogram of files per date submitted to pipeline.
 	//
