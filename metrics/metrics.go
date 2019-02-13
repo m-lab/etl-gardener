@@ -127,7 +127,7 @@ var (
 			// These values range from seconds to hours.
 			Buckets: []float64{
 				0.1, 0.3, 1, 3, 10, 30,
-				100, 300, 1000, 3000, 10000, 30000, // many hours
+				100, 300, 1000, 1800, 3600, 2 * 3600, 4 * 3600, 8 * 3600, 12 * 3600,
 			},
 		},
 		[]string{"state"})
