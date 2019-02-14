@@ -41,7 +41,7 @@ func WaitForStableTable(ctx context.Context, tt bqiface.Table) error {
 	bufferEmptySince := never
 	// NOTE: This must be larger than the errorTimeout.
 	// We have seen false negatives up to about 2.5 minutes, so 5 minutes might not be enough.
-	emptyBufferWaitTime := 10 * time.Minute
+	emptyBufferWaitTime := 30 * time.Minute
 
 	errorTimeout := 2 * time.Minute
 	if testMode {
