@@ -149,6 +149,12 @@ func (rex *ReprocessingExecutor) Next(ctx context.Context, t *state.Task, termin
 			}
 		}
 
+		// Remove this when Gardener is working smoothly.
+		// Log the stabilizing duration.  Some SanityChecks are failing, and they may
+		// be related to premature exit from Stabiliting phase.
+		duration := time.Since(t.UpdateTime)
+		log.Println("Stabilizing", t.Name, "took", duration)
+
 		t.Update(ctx, state.Deduplicating)
 
 	case state.Deduplicating:
@@ -297,6 +303,7 @@ func (rex *ReprocessingExecutor) dedup(ctx context.Context, t *state.Task) error
 
 // WaitForJob waits for job to complete.  Uses fibonacci backoff until the backoff
 // >= maxBackoff, at which point it continues using same backoff.
+// TODO - why don't we just use job.Wait()?  Just because of terminate?
 // TODO - develop a BQJob interface for wrapping bigquery.Job, and allowing fakes.
 // TODO - move this to go/dataset, since it is bigquery specific and general purpose.
 func waitForJob(ctx context.Context, job bqiface.Job, maxBackoff time.Duration, terminate <-chan struct{}) error {
@@ -362,6 +369,8 @@ func (rex *ReprocessingExecutor) finish(ctx context.Context, t *state.Task, term
 		t.SetError(ctx, err, "waitForJob")
 		return err
 	}
+
+	// This just gets the status.
 	// TODO - should this context have a deadline?
 	status, err := job.Wait(ctx)
 	if err != nil {
@@ -373,6 +382,9 @@ func (rex *ReprocessingExecutor) finish(ctx context.Context, t *state.Task, term
 	}
 
 	log.Println("Completed deduplication from", src.FullyQualifiedName())
+
+	// Clear the job ID.  It won't be pushed to datastore until an error or update.
+	t.JobID = ""
 
 	// Sanity check and copy things to final DS.
 	// ==========================================================================
