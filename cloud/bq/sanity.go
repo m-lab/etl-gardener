@@ -278,6 +278,10 @@ func (at *AnnotatedTable) GetPartitionInfo(ctx context.Context) (*dataset.Partit
 	return &pInfo, nil
 }
 
+// IncludeTaskFileCountCheck temporarily disables the task file count check, to address the problem
+// with 2012.
+const IncludeTaskFileCountCheck = false
+
 // checkAlmostAsBig compares the current and given AnnotatedTable test counts and
 // task file counts. When the current AnnotatedTable has more than 1% fewer task files or 5%
 // fewer rows compare to the given AnnotatedTable, then a descriptive error is returned.
@@ -294,11 +298,16 @@ func (at *AnnotatedTable) checkAlmostAsBig(ctx context.Context, other *Annotated
 	// Check that receiver table contains at least 99% as many tasks as
 	// other table.
 	if thisDetail.TaskFileCount < otherDetail.TaskFileCount {
-		log.Printf("Warning - fewer task files: %s(%d) < %s(%d)\n",
+		log.Printf("Warning - fewer task files: %s(%d) < %s(%d) possibly due to redundant task files.\n",
 			at.Table.FullyQualifiedName(), thisDetail.TaskFileCount,
 			other.Table.FullyQualifiedName(), otherDetail.TaskFileCount)
 	}
-	if float32(thisDetail.TaskFileCount) < 0.99*float32(otherDetail.TaskFileCount) {
+
+	// NOTE: We have discovered that in 2012, some archives contain tests that are entirely
+	// redundant with tests in other archives.  This means that some archives are completely removed
+	// in the dedup process.  Since these archives appear in the original "base_tables", this check
+	// has been causing the sanity check to fail.
+	if IncludeTaskFileCountCheck && float32(thisDetail.TaskFileCount) < 0.99*float32(otherDetail.TaskFileCount) {
 		return ErrTooFewTasks
 	}
 
