@@ -125,9 +125,13 @@ var dedupTemplateNDT = `
 	# Delete all duplicate rows based on test_id, preferring gz over non-gz, later parse_time
 	SELECT * except (row_number, gz, stripped_id)
     from (
-		select *, ROW_NUMBER() OVER (PARTITION BY stripped_id order by gz DESC, parse_time DESC) row_number
+		select *,
+		# Prefer more snapshots, metadata, earlier task names, gzipped, later parse time
+		ROW_NUMBER() OVER (PARTITION BY stripped_id ORDER BY anomalies.num_snaps DESC, anomalies.no_meta, task_filename, gz DESC, parse_time DESC) row_number
         FROM (
-	        SELECT *, regexp_replace(test_id, ".gz$", "") as stripped_id, regexp_extract(test_id, ".*(.gz)$") as gz
+			SELECT *,
+			    REGEXP_REPLACE(test_id, ".gz$", "") AS stripped_id,
+		        REGEXP_EXTRACT(test_id, ".*(.gz)$") AS gz
 	        FROM ` + "`%s`" + `
         )
     )

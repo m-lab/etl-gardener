@@ -168,12 +168,12 @@ func GetTableDetail(ctx context.Context, dsExt *dataset.Dataset, table bqiface.T
 	detail := Detail{}
 	queryString := fmt.Sprintf(`
 		#standardSQL
-		SELECT SUM(tests) AS TestCount, COUNT(task)-1 AS TaskFileCount
+		SELECT SUM(tests) AS TestCount, COUNT(DISTINCT task)-1 AS TaskFileCount
 		FROM (
 			-- This avoids null counts when the partition doesn't exist or is empty.
   		    SELECT 0 AS tests, "fake-task" AS task
   		    UNION ALL
-		  	SELECT COUNT(test_id) AS tests, task_filename AS task
+		  	SELECT COUNT(DISTINCT test_id) AS tests, task_filename AS task
 		  	FROM `+"`%s.%s`"+`
 		  	%s  -- where clause
 		  	GROUP BY task
@@ -281,6 +281,8 @@ func (at *AnnotatedTable) GetPartitionInfo(ctx context.Context) (*dataset.Partit
 // IncludeTaskFileCountCheck temporarily disables the task file count check, to address the problem
 // with 2012.
 const IncludeTaskFileCountCheck = false
+const testCountRequirement = 0.99 // Query updated to count DISTINCT test_ids, so this can now be much tighter.
+const taskCountRequirement = 0.99
 
 // checkAlmostAsBig compares the current and given AnnotatedTable test counts and
 // task file counts. When the current AnnotatedTable has more than 1% fewer task files or 5%
@@ -307,7 +309,7 @@ func (at *AnnotatedTable) checkAlmostAsBig(ctx context.Context, other *Annotated
 	// redundant with tests in other archives.  This means that some archives are completely removed
 	// in the dedup process.  Since these archives appear in the original "base_tables", this check
 	// has been causing the sanity check to fail.
-	if IncludeTaskFileCountCheck && float32(thisDetail.TaskFileCount) < 0.99*float32(otherDetail.TaskFileCount) {
+	if IncludeTaskFileCountCheck && float32(thisDetail.TaskFileCount) < taskCountRequirement*float32(otherDetail.TaskFileCount) {
 		return ErrTooFewTasks
 	}
 
@@ -318,7 +320,8 @@ func (at *AnnotatedTable) checkAlmostAsBig(ctx context.Context, other *Annotated
 			at.Table.FullyQualifiedName(), thisDetail.TestCount,
 			other.Table.FullyQualifiedName(), otherDetail.TestCount)
 	}
-	if float32(thisDetail.TestCount) < 0.95*float32(otherDetail.TestCount) {
+	// We are now using DISTINCT test counts, so we can use a tighter bound.
+	if float32(thisDetail.TestCount) < testCountRequirement*float32(otherDetail.TestCount) {
 		return ErrTooFewTests
 	}
 	return nil
