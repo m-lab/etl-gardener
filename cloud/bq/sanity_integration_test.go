@@ -37,7 +37,7 @@ func TestGetTableDetail(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	} else if detail.TaskFileCount != 2 || detail.TestCount != 4 {
-		t.Error("Wrong number of tasks or tests")
+		t.Errorf("Wrong number of tasks or tests %v\n", detail)
 	}
 
 	srcDS, err := dataset.NewDataset(ctx, "mlab-testing", "src")
@@ -50,8 +50,8 @@ func TestGetTableDetail(t *testing.T) {
 	detail, err = bq.GetTableDetail(ctx, &srcDS, srcDS.Table("DedupTest_19990101"))
 	if err != nil {
 		t.Error(err)
-	} else if detail.TaskFileCount != 2 || detail.TestCount != 6 {
-		t.Error("Wrong number of tasks or tests")
+	} else if detail.TaskFileCount != 2 || detail.TestCount != 4 {
+		t.Errorf("Wrong number of tasks or tests %v\n", detail)
 	}
 }
 
