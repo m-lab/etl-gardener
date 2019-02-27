@@ -20,6 +20,7 @@ import (
 	"github.com/GoogleCloudPlatform/google-cloud-go-testing/storage/stiface"
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"google.golang.org/api/iterator"
 	"google.golang.org/appengine/taskqueue"
 )
@@ -35,7 +36,7 @@ var (
 	ErrTerminated       = errors.New("terminated early")
 	ErrInvalidQueueName = errors.New("invalid queue name")
 
-	EmptyStatsRecoveryTimeHistogramSecs = prometheus.NewHistogramVec(
+	EmptyStatsRecoveryTimeHistogramSecs = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name: "gardener_empty_stats_recovery_sec",
 			Help: "empty stats recovery time distributions.",
@@ -48,10 +49,6 @@ var (
 		[]string{"status"},
 	)
 )
-
-func init() {
-	prometheus.MustRegister(EmptyStatsRecoveryTimeHistogramSecs)
-}
 
 // QueueHandler is much like tq.Queuer, but for a single queue.  We want
 // independent single queue handlers to avoid thread safety issues, among

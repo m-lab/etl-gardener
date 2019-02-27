@@ -1,20 +1,9 @@
 package metrics
 
-import "github.com/prometheus/client_golang/prometheus"
-
-func init() {
-	// Register the metrics defined with Prometheus's default registry.
-	prometheus.MustRegister(FailCount)
-	prometheus.MustRegister(WarningCount)
-	prometheus.MustRegister(TasksInFlight)
-	prometheus.MustRegister(StartedCount)
-	prometheus.MustRegister(CompletedCount)
-	prometheus.MustRegister(StateTimeSummary)
-	prometheus.MustRegister(StateTimeHistogram)
-	prometheus.MustRegister(StateDate)
-	prometheus.MustRegister(FilesPerDateHistogram)
-	prometheus.MustRegister(BytesPerDateHistogram)
-}
+import (
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+)
 
 var (
 	// StartedCount counts the number of date tasks started.  This does not include
@@ -24,7 +13,7 @@ var (
 	//   gardener_started_total{experiment}
 	// Example usage:
 	// metrics.StartedCount.WithLabelValues("sidestream").Inc()
-	StartedCount = prometheus.NewCounterVec(
+	StartedCount = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "gardener_started_total",
 			Help: "Number of date tasks started.",
@@ -38,7 +27,7 @@ var (
 	//   gardener_completed_total{experiment}
 	// Example usage:
 	// metrics.CompletedCount.WithLabelValues("sidestream").Inc()
-	CompletedCount = prometheus.NewCounterVec(
+	CompletedCount = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "gardener_completed_total",
 			Help: "Number of date tasks completed.",
@@ -53,7 +42,7 @@ var (
 	//   gardener_fail_total{status}
 	// Example usage:
 	// metrics.FailCount.WithLabelValues("BadTableName").Inc()
-	FailCount = prometheus.NewCounterVec(
+	FailCount = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "gardener_fail_total",
 			Help: "Number of processing failures.",
@@ -67,7 +56,7 @@ var (
 	//   gardener_warning_total{status}
 	// Example usage:
 	// metrics.WarningCount.WithLabelValues("funny xyz").Inc()
-	WarningCount = prometheus.NewCounterVec(
+	WarningCount = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "gardener_warning_total",
 			Help: "Number of processing warnings.",
@@ -81,7 +70,7 @@ var (
 	//   gardener_tasks_in_flight
 	// Example usage:
 	// metrics.TasksInFlight.Add(1)
-	TasksInFlight = prometheus.NewGauge(
+	TasksInFlight = promauto.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "gardener_tasks_in_flight",
 			Help: "Number of tasks in flight",
@@ -94,7 +83,7 @@ var (
 	//   gardener_state_date
 	// Example usage:
 	// metrics.StateDate.WithLabelValues(StateNames[t.State]).Observe(time.Now())
-	StateDate = prometheus.NewGaugeVec(
+	StateDate = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "gardener_state_date",
 			Help: "Most recent date for each state.",
@@ -108,7 +97,7 @@ var (
 	//    gardener_state_time_summary
 	// Example usage:
 	//    metrics.StateTimeSummary.WithLabelValues("Queuing").observe(float64)
-	StateTimeSummary = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+	StateTimeSummary = promauto.NewSummaryVec(prometheus.SummaryOpts{
 		Name:       "gardener_state_time_summary",
 		Help:       "The time spent in each state.",
 		Objectives: map[float64]float64{0.01: 0.001, 0.1: 0.01, 0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
@@ -120,7 +109,7 @@ var (
 	// Usage example:
 	//   metrics.StateTimeHistogram.WithLabelValues(
 	//           StateName[state]).Observe(time.Since(start).Seconds())
-	StateTimeHistogram = prometheus.NewHistogramVec(
+	StateTimeHistogram = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name: "gardener_state_time_histogram",
 			Help: "time-in-state distributions.",
@@ -142,7 +131,7 @@ var (
 	// Usage example:
 	//   metrics.FilesPerDateHistogram.WithLabelValues(
 	//           "2011").Observe(files)
-	FilesPerDateHistogram = prometheus.NewHistogramVec(
+	FilesPerDateHistogram = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name: "gardener_files",
 			Help: "Histogram of number of files submitted per date",
@@ -167,7 +156,7 @@ var (
 	// Usage example:
 	//   metrics.BytesPerDateHistogram.WithLabelValues(
 	//           "2011").Observe(bytes)
-	BytesPerDateHistogram = prometheus.NewHistogramVec(
+	BytesPerDateHistogram = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name: "gardener_bytes",
 			Help: "Histogram of number of bytes submitted per date",
