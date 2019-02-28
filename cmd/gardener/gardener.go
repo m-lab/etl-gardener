@@ -12,12 +12,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/http/pprof"
 	"os"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/m-lab/go/prometheusx"
 
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/reproc"
@@ -228,23 +229,6 @@ const StartDateRFC3339 = "2017-05-01T00:00:00Z"
 //  Top level service control code.
 // ###############################################################################
 
-func setupPrometheus() {
-	// Define a custom serve mux for prometheus to listen on a separate port.
-	// We listen on a separate port so we can forward this port on the host VM.
-	// We cannot forward port 8080 because it is used by AppEngine.
-	mux := http.NewServeMux()
-	// Assign the default prometheus handler to the standard exporter path.
-	mux.Handle("/metrics", promhttp.Handler())
-	// Assign the pprof handling paths to the external port to access individual
-	// instances.
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	go http.ListenAndServe(":9090", mux)
-}
-
 // Status provides basic information about the service.  For now, it is just
 // configuration and version info.  In future it will likely include more
 // dynamic information.
@@ -289,7 +273,9 @@ func setupService(ctx context.Context) error {
 	// Enable block profiling
 	runtime.SetBlockProfileRate(1000000) // One event per msec.
 
-	setupPrometheus()
+	// Expose prometheus and pprof metrics on a separate port.
+	prometheusx.MustStartPrometheus(":9090")
+
 	// We also setup another prometheus handler on a non-standard path. This
 	// path name will be accessible through the AppEngine service address,
 	// however it will be served by a random instance.
