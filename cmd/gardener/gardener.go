@@ -273,7 +273,9 @@ func setupService(ctx context.Context) error {
 	// Enable block profiling
 	runtime.SetBlockProfileRate(1000000) // One event per msec.
 
+	// Expose prometheus and pprof metrics on a separate port.
 	prometheusx.MustStartPrometheus(":9090")
+
 	// We also setup another prometheus handler on a non-standard path. This
 	// path name will be accessible through the AppEngine service address,
 	// however it will be served by a random instance.
