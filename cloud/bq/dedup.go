@@ -145,7 +145,9 @@ var dedupTemplateSidestream = `
     FROM ( SELECT *, ROW_NUMBER() OVER (
         PARTITION BY CONCAT(test_id, cast(web100_log_entry.snap.StartTimeStamp as string),
             web100_log_entry.connection_spec.local_ip, cast(web100_log_entry.connection_spec.local_port as string),
-            web100_log_entry.connection_spec.remote_ip, cast(web100_log_entry.connection_spec.remote_port as string))
+			web100_log_entry.connection_spec.remote_ip, cast(web100_log_entry.connection_spec.remote_port as string))
+		# Use the most recently parsed row
+		ORDER BY parse_time DESC
 		) row_number
 	    FROM ` + "`%s`" + `)
 	WHERE row_number = 1`
@@ -163,6 +165,8 @@ var dedupTemplateSwitch = `
 		SELECT
 			*, ROW_NUMBER() OVER (
 				PARTITION BY CONCAT(test_id, metric, hostname, experiment)
+			# Use the most recently parsed row
+			ORDER BY parse_time DESC
 			) AS row_number
 		FROM ` + "`%s`" + `
 	)
