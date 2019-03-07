@@ -164,7 +164,9 @@ var dedupTemplateSwitch = `
 	FROM (
 		SELECT
 			*, ROW_NUMBER() OVER (
-				PARTITION BY CONCAT(test_id, metric, hostname, experiment) ORDER BY parse_time
+				PARTITION BY CONCAT(test_id, metric, hostname, experiment)
+			# Use the most recently parsed row
+			ORDER BY parse_time DESC
 			) AS row_number
 		FROM ` + "`%s`" + `
 	)
