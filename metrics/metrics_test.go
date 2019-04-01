@@ -3,7 +3,7 @@ package metrics
 import (
 	"testing"
 
-	"github.com/m-lab/go/prometheusx"
+	"github.com/m-lab/go/prometheusx/promtest"
 )
 
 func TestLintMetrics(t *testing.T) {
@@ -16,5 +16,5 @@ func TestLintMetrics(t *testing.T) {
 	StateTimeHistogram.WithLabelValues("x")
 	FilesPerDateHistogram.WithLabelValues("x")
 	BytesPerDateHistogram.WithLabelValues("x")
-	prometheusx.LintMetrics(t)
+	promtest.LintMetrics(t)
 }
