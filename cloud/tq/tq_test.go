@@ -4,10 +4,9 @@ import (
 	"log"
 	"testing"
 
-	"github.com/m-lab/go/prometheusx"
-
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/cloud/tq"
+	"github.com/m-lab/go/prometheusx/promtest"
 )
 
 func init() {
@@ -33,5 +32,5 @@ func TestPostOneTask(t *testing.T) {
 
 func TestMetrics(t *testing.T) {
 	tq.EmptyStatsRecoveryTimeHistogramSecs.WithLabelValues("x")
-	prometheusx.LintMetrics(t)
+	promtest.LintMetrics(t)
 }
