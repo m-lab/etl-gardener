@@ -1,16 +1,21 @@
-FROM golang:alpine
+FROM golang:1.12 as builder
 
-RUN apk update && apk add bash git
+ENV CGO_ENABLED 0
 
 WORKDIR /go/src/github.com/m-lab/etl-gardener
 COPY . .
 
-# List all of the go imports, excluding any in this repo, and run go get to import them.
-RUN go get -u -v $(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}' ./... | sort | uniq | grep -v etl-gardener)
+# Get the requirements and put the produced binaries in /go/bin
+RUN go get -v -t ./...
+RUN go install \
+      -v \
+      -ldflags "-X github.com/m-lab/go/prometheusx.GitShortCommit=$(git log -1 --format=%h)" \
+      ./...
 
-# Install all go executables.
-RUN go install -v ./...
+FROM alpine
+COPY --from=builder /go/bin/gardener /bin/gardener
 
 EXPOSE 9090 8080
 
-CMD gardener
+WORKDIR /
+ENTRYPOINT [ "/bin/gardener" ]
