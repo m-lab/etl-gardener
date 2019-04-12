@@ -71,7 +71,7 @@ script:
 # repeated, but otherwise we lose some coverage.
 - if [[ -n "$SERVICE_ACCOUNT_mlab_testing" ]] ; then
     go test -v -coverpkg=./... -coverprofile=_integration.cov ./... -tags=integration ;
-  done ;
+  fi
 
 # Combine coverage of unit tests and integration tests and send the results to coveralls.
 - $HOME/gopath/bin/gocovmerge _*.cov > _merge.cov
