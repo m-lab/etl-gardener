@@ -4,7 +4,7 @@ services:
   - docker
 
 go:
-   - 1.9.x
+   - 1.12
 
 ###########################################################################
 before_install:
@@ -49,8 +49,8 @@ install:
 - $TRAVIS_BUILD_DIR/travis/install_gcloud.sh kubectl
 
 # Install dependencies
-- GO_IMPORTS=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}{{join .XTestImports "\n"}}' ./... | sort | uniq | grep -e / | grep -v m-lab/etl-gardener)
-- go get -u -v -d $GO_IMPORTS
+- cd $TRAVIS_BUILD_DIR
+- go get -v -t ./...
 
 before_script:
 # Try removing boto config, recommended for datastore emulator.
@@ -63,45 +63,21 @@ before_script:
 - $(gcloud beta emulators datastore env-init)
 
 script:
-# To start, run all the non-integration tests.
-- MODULES="cloud/bq cloud/tq cmd/gardener reproc rex state"
-- for module in $MODULES; do
-    COVER_PKGS=${COVER_PKGS}./$module/..., ;
-  done
-- COVER_PKGS=${COVER_PKGS::-1}  # Trim the trailing comma
-- EC=0
-# Note that for modules in subdirectories, this replaces separating slashes with _.
-- for module in $MODULES; do
-    go test -v -coverpkg=$COVER_PKGS -coverprofile=${module//\//_}.cov github.com/m-lab/etl-gardener/$module ;
-    EC=$[ $EC || $? ] ;
-  done
-- echo "summary status $EC" ;
-- if [[ $EC != 0 ]]; then false; fi
+# To start, run all the non-integration unit tests.
+- cd $TRAVIS_BUILD_DIR
+- go test -v -coverpkg=./... -coverprofile=_unit.cov ./...
 
-
-# Rerun modules with integration tests.  This means that some tests are repeated, but otherwise
-# we lose some coverage.  The corresponding cov files are overwritten, but that is OK since
-# the non-integration tests are repeated.  If we change the unit tests to NOT run when integration
-# test tag is set, then we would need to have separate cov files.
-# Note: we do not run integration tests from forked PRs b/c the SA is unavailable.
-# Note that for modules in subdirectories, this replaces separating slashes with _.
+# Rerun modules with integration tests.  This means that some tests are
+# repeated, but otherwise we lose some coverage.
 - if [[ -n "$SERVICE_ACCOUNT_mlab_testing" ]] ; then
-  MODULES="cloud/bq cloud/tq cmd/gardener reproc rex state" ;
-  for module in $MODULES; do
-    go test -v -coverpkg=$COVER_PKGS -coverprofile=${module//\//_}.cov github.com/m-lab/etl-gardener/$module -tags=integration ;
-    EC=$[ $EC || $? ] ;
+    go test -v -coverpkg=./... -coverprofile=_integration.cov ./... -tags=integration ;
   done ;
-  echo "summary status $EC" ;
-  if [[ $EC != 0 ]]; then false; fi ;
-  fi
 
-# Coveralls
-# Run "unit tests" with coverage.
-- $HOME/gopath/bin/gocovmerge *.cov > merge.cov
-- $HOME/gopath/bin/goveralls -coverprofile=merge.cov -service=travis-ci
+# Combine coverage of unit tests and integration tests and send the results to coveralls.
+- $HOME/gopath/bin/gocovmerge _*.cov > _merge.cov
+- $HOME/gopath/bin/goveralls -coverprofile=_merge.cov -service=travis-ci
 
 # Clean build and prepare for deployment
-- cd $TRAVIS_BUILD_DIR
 - docker build .
 
 #################################################################################
