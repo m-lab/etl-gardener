@@ -13,6 +13,8 @@ RUN go install \
       ./...
 
 FROM alpine
+RUN apk update && apk add ca-certificates && rm -rf /var/cache/apk/*
+
 COPY --from=builder /go/bin/gardener /bin/gardener
 
 EXPOSE 9090 8080
