@@ -107,8 +107,6 @@ func (at *AnnotatedTable) CachedDetail(ctx context.Context) (*Detail, error) {
 	if ctx == nil {
 		return nil, ErrNilContext
 	}
-	// TODO - use context
-	// TODO - maybe just embed code here.
 	at.detail, at.err = GetTableDetail(ctx, at.dataset, at.Table)
 	if at.err != nil {
 		log.Println(at.FullyQualifiedName(), at.TableID())
@@ -130,8 +128,6 @@ func (at *AnnotatedTable) CachedPartitionInfo(ctx context.Context) (*dataset.Par
 	if ctx == nil {
 		return nil, ErrNilContext
 	}
-	// TODO - use context
-	// TODO - maybe just embed code here.
 	at.pInfo, at.err = at.GetPartitionInfo(ctx)
 	return at.pInfo, at.err
 }
@@ -168,18 +164,11 @@ func GetTableDetail(ctx context.Context, dsExt *dataset.Dataset, table bqiface.T
 	detail := Detail{}
 	queryString := fmt.Sprintf(`
 		#standardSQL
-        SELECT SUM(tests) AS TestCount, COUNT(DISTINCT task)-1 AS TaskFileCount
-        FROM (
-            -- This avoids null counts when the partition doesn't exist or is empty.
-            SELECT 0 AS tests, "fake-task" AS task
-            UNION ALL
-            SELECT COUNT(DISTINCT test_id) AS tests, task_filename AS task
-            FROM `+"`%s.%s`"+`
-            %s  -- where clause
-            GROUP BY task
-        )`, dataset, tableName, where)
+		SELECT COUNT(DISTINCT test_id) AS TestCount, COUNT(DISTINCT task_filename) AS TaskFileCount
+    FROM `+"`%s.%s`"+`
+		%s  -- where clause`,
+		dataset, tableName, where)
 
-	// TODO - this should take a context?
 	err := dsExt.QueryAndParse(ctx, queryString, &detail)
 	if err != nil {
 		log.Println(err)
