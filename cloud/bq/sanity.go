@@ -107,8 +107,6 @@ func (at *AnnotatedTable) CachedDetail(ctx context.Context) (*Detail, error) {
 	if ctx == nil {
 		return nil, ErrNilContext
 	}
-	// TODO - use context
-	// TODO - maybe just embed code here.
 	at.detail, at.err = GetTableDetail(ctx, at.dataset, at.Table)
 	if at.err != nil {
 		log.Println(at.FullyQualifiedName(), at.TableID())
@@ -130,8 +128,6 @@ func (at *AnnotatedTable) CachedPartitionInfo(ctx context.Context) (*dataset.Par
 	if ctx == nil {
 		return nil, ErrNilContext
 	}
-	// TODO - use context
-	// TODO - maybe just embed code here.
 	at.pInfo, at.err = at.GetPartitionInfo(ctx)
 	return at.pInfo, at.err
 }
@@ -173,7 +169,6 @@ func GetTableDetail(ctx context.Context, dsExt *dataset.Dataset, table bqiface.T
 		%s  -- where clause`,
 		dataset, tableName, where)
 
-	// TODO - this should take a context?
 	err := dsExt.QueryAndParse(ctx, queryString, &detail)
 	if err != nil {
 		log.Println(err)
