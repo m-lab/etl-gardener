@@ -170,8 +170,8 @@ func GetTableDetail(ctx context.Context, dsExt *dataset.Dataset, table bqiface.T
 		#standardSQL
 		SELECT COUNT(DISTINCT test_id) AS TestCount, COUNT(DISTINCT task_filename) AS TaskFileCount
     FROM `+"`%s.%s`"+`
-    %s  -- where clause
-    GROUP BY task`, dataset, tableName, where)
+		%s  -- where clause`,
+		dataset, tableName, where)
 
 	// TODO - this should take a context?
 	err := dsExt.QueryAndParse(ctx, queryString, &detail)
