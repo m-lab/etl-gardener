@@ -29,7 +29,7 @@ spec:
       # take longer than the default grace period of 30s.
       terminationGracePeriodSeconds: 300
 
-       # Place the pod into the Guaranteed QoS by setting equal resource
+      # Place the pod into the Guaranteed QoS by setting equal resource
       # requests and limits for *all* containers in the pod.
       # For more background, see:
       # https://github.com/kubernetes/community/blob/master/contributors/design-proposals/resource-qos.md
@@ -63,20 +63,20 @@ spec:
         - name: NUM_QUEUES
           value: "16"
 
-         ports:
+        ports:
         - name: prometheus-port
           containerPort: 9090
         - name: service-port
           containerPort: 8080
 
-         livenessProbe:
+        livenessProbe:
           httpGet:
             path: /alive
             port: service-port
           initialDelaySeconds: 30
           periodSeconds: 60
 
-         resources:
+        resources:
           requests:
             memory: "3Gi"
             cpu: "1"
@@ -84,5 +84,5 @@ spec:
             memory: "3Gi"
             cpu: "1"
 
-       nodeSelector:
+      nodeSelector:
         gardener-node: "true"
