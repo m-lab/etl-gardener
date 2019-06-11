@@ -58,7 +58,7 @@ spec:
         - name: DATASET
           value: "batch"
         - name: FINAL_DATASET
-          value: "ndt"
+          value: "base-tables"
         - name: QUEUE_BASE
           value: "etl-tcpinfo-batch-"
         - name: NUM_QUEUES
@@ -85,5 +85,15 @@ spec:
             memory: "3Gi"
             cpu: "1"
 
+        volumeMounts:
+        - mountPath: /volume-claim
+          name: tcpinfo-storage
+
       nodeSelector:
         gardener-node: "true"
+
+      volumes:
+      - name: ndt-storage
+        persistentVolumeClaim:
+          claimName: gardener-tcpinfo-disk0
+
