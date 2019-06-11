@@ -83,5 +83,14 @@ spec:
             memory: "3Gi"
             cpu: "1"
 
+        volumeMounts:
+        - mountPath: /volume-claim
+          name: switch-storage
+
       nodeSelector:
         gardener-node: "true"
+
+      volumes:
+      - name: switch-storage
+        persistentVolumeClaim:
+          claimName: gardener-switch-disk0

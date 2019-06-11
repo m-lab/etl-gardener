@@ -84,5 +84,15 @@ spec:
             memory: "3Gi"
             cpu: "1"
 
+        volumeMounts:
+        - mountPath: /volume-claim
+          name: sidestream-storage
+
       nodeSelector:
         gardener-node: "true"
+
+      volumes:
+      - name: sidestream-storage
+        persistentVolumeClaim:
+          claimName: gardener-sidestream-disk0
+

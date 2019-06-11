@@ -84,5 +84,15 @@ spec:
             memory: "3Gi"
             cpu: "1"
 
+        volumeMounts:
+        - mountPath: /volume-claim
+          name: ndt-storage
+
       nodeSelector:
         gardener-node: "true"
+
+      volumes:
+      - name: ndt-storage
+        persistentVolumeClaim:
+          claimName: gardener-ndt-disk0
+
