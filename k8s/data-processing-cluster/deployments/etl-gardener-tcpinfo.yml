@@ -93,7 +93,7 @@ spec:
         gardener-node: "true"
 
       volumes:
-      - name: ndt-storage
+      - name: tcpinfo-storage
         persistentVolumeClaim:
           claimName: gardener-tcpinfo-disk0
 
