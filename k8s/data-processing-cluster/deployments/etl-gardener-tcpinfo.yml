@@ -1,0 +1,88 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: etl-gardener-tcpinfo
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      # Used to match pre-existing pods that may be affected during updates.
+      run: etl-gardener-tcpinfo
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  # Pod template.
+  template:
+    metadata:
+      labels:
+        # Note: run=etl-gardener-server should match a service config with a
+        # public IP and port so that it is publicly accessible.
+        run: etl-gardener-tcpinfo
+      annotations:
+        # Tell prometheus service discovery to collect metrics from the containers.
+        prometheus.io/scrape: 'true'
+    spec:
+      # When container receives SIGTERM, it begins a new checkpoint. This can
+      # take longer than the default grace period of 30s.
+      terminationGracePeriodSeconds: 300
+
+      # Place the pod into the Guaranteed QoS by setting equal resource
+      # requests and limits for *all* containers in the pod.
+      # For more background, see:
+      # https://github.com/kubernetes/community/blob/master/contributors/design-proposals/resource-qos.md
+      containers:
+      - image: gcr.io/{{GCLOUD_PROJECT}}/github-m-lab-etl-gardener:{{GIT_COMMIT}}
+        name: etl-gardener
+        env:
+        - name: GARDENER_SERVICE
+          value: "true"
+        - name: GIT_COMMIT
+          value: "{{GIT_COMMIT}}"
+        - name: PROJECT
+          value: "{{GCLOUD_PROJECT}}"
+        # NOTE: We read archives from the public archive for all projects.
+        - name: TASKFILE_BUCKET
+          value: "pusher-{{GCLOUD_PROJECT}}"
+        - name: START_DATE
+          value: "20190501"
+        - name: DATE_SKIP  # Should be 0 for normal operation
+          value: "{{DATE_SKIP}}"
+        - name: TASK_FILE_SKIP # Should be 0 for normal operation
+          value: "{{TASK_FILE_SKIP}}"
+        - name: EXPERIMENT
+          value: "tcpinfo"
+        - name: DATASET
+          value: "batch"
+        - name: FINAL_DATASET
+          value: "ndt"
+        - name: QUEUE_BASE
+          value: "etl-tcpinfo-batch-"
+        - name: NUM_QUEUES
+          value: "2"
+
+        ports:
+        - name: prometheus-port
+          containerPort: 9090
+        - name: service-port
+          containerPort: 8080
+
+        livenessProbe:
+          httpGet:
+            path: /alive
+            port: service-port
+          initialDelaySeconds: 30
+          periodSeconds: 60
+
+        resources:
+          requests:
+            memory: "3Gi"
+            cpu: "1"
+          limits:
+            memory: "3Gi"
+            cpu: "1"
+
+      nodeSelector:
+        gardener-node: "true"
