@@ -187,9 +187,9 @@ type Prefix struct {
 // Path returns the path within the bucket, not including the leading gs://bucket/
 func (p Prefix) Path() string {
 	if p.ExpDir == "" {
-		return p.DataTypeString + "/" + p.DatePath
+		return p.DataTypeString + "/" + p.DatePath + "/"
 	}
-	return p.ExpDir + "/" + p.DataTypeString + "/" + p.DatePath
+	return p.ExpDir + "/" + p.DataTypeString + "/" + p.DatePath + "/"
 }
 
 // ParsePrefix Parses prefix, returning {bucket, experiment, date string}, error
