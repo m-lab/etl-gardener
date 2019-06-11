@@ -235,19 +235,18 @@ func (rex *ReprocessingExecutor) queue(ctx context.Context, t *state.Task) (int,
 		t.SetError(ctx, err, "NewQueueHandler")
 		return 0, 0, err
 	}
-	parts, err := t.ParsePrefix()
+	prefix, err := t.ParsePrefix()
 	if err != nil {
 		// If there is a parse error, log and skip request.
 		log.Println(err)
 		t.SetError(ctx, err, "BadPrefix")
 		return 0, 0, err
 	}
-	bucketName := parts[0]
 
 	// Use a real storage bucket.
 	// TODO - add a persistent storageClient to the rex object?
 	// TODO - try cancelling the context instead?
-	bucket, err := tq.GetBucket(ctx, rex.StorageClient, rex.Project, bucketName, false)
+	bucket, err := tq.GetBucket(ctx, rex.StorageClient, rex.Project, prefix.Bucket, false)
 	if err != nil {
 		if err == io.EOF && env.TestMode {
 			log.Println("Using fake client, ignoring EOF error")
@@ -257,9 +256,10 @@ func (rex *ReprocessingExecutor) queue(ctx context.Context, t *state.Task) (int,
 		t.SetError(ctx, err, "BucketError")
 		return 0, 0, err
 	}
+
 	// NOTE: This does not check the terminate channel, so once started, it will
 	// complete the queuing.
-	fileCount, byteCount, err := qh.PostDay(ctx, bucket, bucketName, parts[1]+"/"+parts[2]+"/")
+	fileCount, byteCount, err := qh.PostDay(ctx, bucket, prefix.Bucket, prefix.Path())
 	if err != nil {
 		log.Println(err)
 		t.SetError(ctx, err, "PostDayError")

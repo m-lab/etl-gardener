@@ -50,6 +50,38 @@ func (s *testSaver) GetDeletes(t state.Task) map[string]struct{} {
 
 func assertSaver() { func(ex state.Saver) {}(&testSaver{}) }
 
+func TestNewPlatformPrefix(t *testing.T) {
+	task := state.Task{Name: "gs://pusher-mlab-sandbox/ndt/tcpinfo/2019/04/01/", State: state.Initializing}
+	saver := testSaver{tasks: make(map[string][]state.Task), delete: make(map[string]struct{})}
+	task.SetSaver(&saver)
+
+	pp, err := task.ParsePrefix()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if pp.DataTypeString != "tcpinfo" {
+		t.Error(pp)
+	}
+
+}
+
+func TestLegacyPrefix(t *testing.T) {
+	task := state.Task{Name: "gs://archive-mlab-sandbox/ndt/2019/04/01/", State: state.Initializing}
+	saver := testSaver{tasks: make(map[string][]state.Task), delete: make(map[string]struct{})}
+	task.SetSaver(&saver)
+
+	pp, err := task.ParsePrefix()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if pp.DataTypeString != "ndt" {
+		t.Error(pp)
+	}
+
+}
+
 func TestTaskBasics(t *testing.T) {
 	ctx := context.Background()
 	task := state.Task{Name: "foobar", State: state.Initializing}
