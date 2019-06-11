@@ -1,9 +1,48 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: auto-etl-gardener-disk0
+  name: gardener-ndt-disk0
   annotations:
-    volume.beta.kubernetes.io/storage-class: "fast"
+    volume.beta.kubernetes.io/storage-class: "slow"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+--
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gardener-switch-disk0
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "slow"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+--
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gardener-sidestream-disk0
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "slow"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+--
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gardener-tcpinfo-disk0
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "slow"
 spec:
   accessModes:
     - ReadWriteOnce
