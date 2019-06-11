@@ -45,9 +45,9 @@ spec:
           value: "{{GCLOUD_PROJECT}}"
         # NOTE: We read archives from the public archive for all projects.
         - name: TASKFILE_BUCKET
-          value: "pusher-{{GCLOUD_PROJECT}}"
+          value: "pusher-{{GCLOUD_PROJECT}}"  # This will work for staging, but prod should use archive-measurement-lab.
         - name: START_DATE
-          value: "20190501"
+          value: "20190329"
         - name: DATE_SKIP  # Should be 0 for normal operation
           value: "{{DATE_SKIP}}"
         - name: TASK_FILE_SKIP # Should be 0 for normal operation
