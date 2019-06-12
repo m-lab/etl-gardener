@@ -162,17 +162,29 @@ func GetTableDetail(ctx context.Context, dsExt *dataset.Dataset, table bqiface.T
 		}
 	}
 	detail := Detail{}
-	queryString := fmt.Sprintf(`
+	legacyQuery := fmt.Sprintf(`
 		#standardSQL
 		SELECT COUNT(DISTINCT test_id) AS TestCount, COUNT(DISTINCT task_filename) AS TaskFileCount
     FROM `+"`%s.%s`"+`
 		%s  -- where clause`,
 		dataset, tableName, where)
 
-	err := dsExt.QueryAndParse(ctx, queryString, &detail)
+	tcpinfoQuery := fmt.Sprintf(`
+		#standardSQL
+		SELECT COUNT(DISTINCT UUID) AS TestCount, COUNT(DISTINCT ParseInfo.TaskFileName) AS TaskFileCount
+    FROM `+"`%s.%s`"+`
+		%s  -- where clause`,
+		dataset, tableName, where)
+
+	// TODO - find a better way to do this.
+	query := legacyQuery
+	if parts[0] == "tcpinfo" {
+		query = tcpinfoQuery
+	}
+	err := dsExt.QueryAndParse(ctx, query, &detail)
 	if err != nil {
 		log.Println(err)
-		log.Println("Query:", queryString)
+		log.Println("Query:", query)
 	}
 	return &detail, err
 }
