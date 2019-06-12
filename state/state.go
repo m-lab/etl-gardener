@@ -141,8 +141,8 @@ func GetExperiment(name string) (string, error) {
 }
 
 // NewTask properly initializes a new task, complete with saver.
-func NewTask(expKey string, name string, queue string, saver Saver) (*Task, error) {
-	t := Task{Name: name, Experiment: expKey, State: Initializing, Queue: queue, saver: saver}
+func NewTask(expName string, name string, queue string, saver Saver) (*Task, error) {
+	t := Task{Name: name, Experiment: expName, State: Initializing, Queue: queue, saver: saver}
 	t.UpdateTime = time.Now()
 	prefix, err := t.ParsePrefix()
 	if err != nil {
@@ -173,19 +173,19 @@ var (
 
 // Prefix is a valid gs:// prefix for either legacy or new platform data.
 type Prefix struct {
-	Bucket         string    // the GCS bucket name.
-	ExpDir         string    // the experiment directory.
-	DataTypeString string    // if empty, this is legacy, and DataType is same as ExpDir
-	DatePath       string    // the YYYY/MM/DD date path.
-	Date           time.Time // the time.Time corresponding to the datepath.
+	Bucket     string    // the GCS bucket name.
+	Experiment string    // the experiment name
+	DataType   string    // if empty, this is legacy, and DataType is same as Experiment
+	DatePath   string    // the YYYY/MM/DD date path.
+	Date       time.Time // the time.Time corresponding to the datepath.
 }
 
 // Path returns the path within the bucket, not including the leading gs://bucket/
 func (p Prefix) Path() string {
-	if p.ExpDir == "" {
-		return p.DataTypeString + "/" + p.DatePath + "/"
+	if p.Experiment == "" {
+		return p.DataType + "/" + p.DatePath + "/"
 	}
-	return p.ExpDir + "/" + p.DataTypeString + "/" + p.DatePath + "/"
+	return p.Experiment + "/" + p.DataType + "/" + p.DatePath + "/"
 }
 
 // ParsePrefix Parses prefix, returning {bucket, experiment, date string}, error
@@ -202,11 +202,11 @@ func (t *Task) ParsePrefix() (*Prefix, error) {
 		return nil, err
 	}
 	p := Prefix{
-		Bucket:         fields[1],
-		ExpDir:         fields[2],
-		DataTypeString: fields[3],
-		DatePath:       fields[4],
-		Date:           date,
+		Bucket:     fields[1],
+		Experiment: fields[2],
+		DataType:   fields[3],
+		DatePath:   fields[4],
+		Date:       date,
 	}
 	// If fields is not nil, then there was a match, and all matches contain 5 fields.
 
@@ -223,7 +223,7 @@ func (t *Task) SourceAndDest(ds *dataset.Dataset) (bqiface.Table, bqiface.Table,
 		return nil, nil, err
 	}
 
-	tableName := etl.DirToTablename(prefix.DataTypeString)
+	tableName := etl.DirToTablename(prefix.DataType)
 
 	src := ds.Table(tableName + "_" + strings.Join(strings.Split(prefix.DatePath, "/"), ""))
 	dest := ds.Table(tableName + "$" + strings.Join(strings.Split(prefix.DatePath, "/"), ""))

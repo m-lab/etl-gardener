@@ -60,7 +60,7 @@ func TestNewPlatformPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if pp.DataTypeString != "tcpinfo" {
+	if pp.DataType != "tcpinfo" {
 		t.Error(pp)
 	}
 
@@ -76,7 +76,7 @@ func TestLegacyPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if pp.DataTypeString != "ndt" {
+	if pp.DataType != "ndt" {
 		t.Error(pp)
 	}
 

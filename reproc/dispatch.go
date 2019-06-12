@@ -67,7 +67,7 @@ func NewTerminator() *Terminator {
 // It is responsible for starting tasks, recycling queues, and handling the
 // termination signal.
 type TaskHandler struct {
-	expKey     string         // The key used for task.Experiment
+	expName    string         // The string used for task.Experiment, which is used in Datastore queries.
 	exec       state.Executor // Executor passed to new tasks
 	taskQueues chan string    // Channel through which queues recycled.
 	saver      state.Saver    // The Saver used to save task states.
@@ -121,7 +121,7 @@ func (th *TaskHandler) AddTask(ctx context.Context, prefix string) error {
 	select {
 	// Wait until there is an available task queue.
 	case queue := <-th.taskQueues:
-		t, err := state.NewTask(th.expKey, prefix, queue, th.saver)
+		t, err := state.NewTask(th.expName, prefix, queue, th.saver)
 		if err != nil {
 			log.Println(err)
 			return err
