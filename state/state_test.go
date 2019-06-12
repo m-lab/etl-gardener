@@ -151,18 +151,18 @@ func TestTaskBasics(t *testing.T) {
 }
 
 func TestSourceAndDest(t *testing.T) {
-	if _, err := state.NewTask("gs://task1", "Q1", nil); err == nil {
+	if _, err := state.NewTask("exp", "gs://task1", "Q1", nil); err == nil {
 		t.Fatal("Should have had an error here")
 	}
-	if _, err := state.NewTask("gs://foo/ndt/2000/ab/01/task1", "Q1", nil); err == nil {
+	if _, err := state.NewTask("exp", "gs://foo/ndt/2000/ab/01/task1", "Q1", nil); err == nil {
 		t.Fatal("Should have had an error here")
 	}
-	if _, err := state.NewTask("gs://foo/ndt/2000/13/01/task1", "Q1", nil); err == nil {
+	if _, err := state.NewTask("exp", "gs://foo/ndt/2000/13/01/task1", "Q1", nil); err == nil {
 		t.Fatal("Should have had an error here")
 	}
 
 	ctx := context.Background()
-	task, err := state.NewTask("gs://foo/ndt/2000/01/01/task1", "Q1", nil)
+	task, err := state.NewTask("exp", "gs://foo/ndt/2000/01/01/task1", "Q1", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

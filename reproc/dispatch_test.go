@@ -115,7 +115,7 @@ func TestBasic(t *testing.T) {
 	// Start tracker with no queues.
 	exec := Exec{}
 	saver := NewTestSaver()
-	th := reproc.NewTaskHandler(&exec, []string{}, saver)
+	th := reproc.NewTaskHandler("exp", &exec, []string{}, saver)
 
 	// This will block because there are no queues.
 	go th.AddTask(ctx, "foobar")
@@ -135,7 +135,7 @@ func TestWithTaskQueue(t *testing.T) {
 	// Start tracker with one queue.
 	exec := Exec{}
 	saver := NewTestSaver()
-	th := reproc.NewTaskHandler(&exec, []string{"queue-1"}, saver)
+	th := reproc.NewTaskHandler("exp", &exec, []string{"queue-1"}, saver)
 
 	th.AddTask(ctx, "gs://fake/ndt/2017/09/22/")
 
@@ -151,10 +151,10 @@ func TestRestart(t *testing.T) {
 	ctx := context.Background()
 	exec := Exec{}
 	saver := NewTestSaver()
-	th := reproc.NewTaskHandler(&exec, []string{"queue-1", "queue-2"}, saver)
+	th := reproc.NewTaskHandler("exp", &exec, []string{"queue-1", "queue-2"}, saver)
 
 	taskName := "gs://foobar/exp/2001/02/03/"
-	t1, err := state.NewTask(taskName, "queue-1", nil)
+	t1, err := state.NewTask("exp", taskName, "queue-1", nil)
 	t1.State = state.Processing
 	if err != nil {
 		t.Fatal(err)

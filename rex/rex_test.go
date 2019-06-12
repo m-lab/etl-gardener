@@ -81,7 +81,7 @@ func TestWithTaskQueue(t *testing.T) {
 	exec := &rex.ReprocessingExecutor{BQConfig: bqConfig, StorageClient: fc}
 	defer exec.StorageClient.Close()
 	saver := newTestSaver()
-	th := reproc.NewTaskHandler(exec, []string{"queue-1"}, saver)
+	th := reproc.NewTaskHandler("exp", exec, []string{"queue-1"}, saver)
 
 	th.AddTask(ctx, "gs://foo/bar/2001/01/01/")
 
@@ -179,7 +179,7 @@ func TestBadPrefix(t *testing.T) {
 	defer exec.StorageClient.Close()
 
 	saver := newTestSaver()
-	th := reproc.NewTaskHandler(exec, []string{"queue-1"}, saver)
+	th := reproc.NewTaskHandler("exp", exec, []string{"queue-1"}, saver)
 
 	err := th.AddTask(ctx, "gs://foo/bar/badprefix/01/01/")
 	if err == nil {
@@ -203,7 +203,7 @@ func TestZeroFiles(t *testing.T) {
 	defer exec.StorageClient.Close()
 
 	saver := newTestSaver()
-	th := reproc.NewTaskHandler(exec, []string{"queue-1"}, saver)
+	th := reproc.NewTaskHandler("exp", exec, []string{"queue-1"}, saver)
 
 	err := th.AddTask(ctx, "gs://foo/bar/2001/01/01/")
 	if err != nil {

@@ -141,12 +141,8 @@ func GetExperiment(name string) (string, error) {
 }
 
 // NewTask properly initializes a new task, complete with saver.
-func NewTask(name string, queue string, saver Saver) (*Task, error) {
-	expt, err := GetExperiment(name)
-	if err != nil {
-		return nil, err
-	}
-	t := Task{Name: name, Experiment: expt, State: Initializing, Queue: queue, saver: saver}
+func NewTask(expKey string, name string, queue string, saver Saver) (*Task, error) {
+	t := Task{Name: name, Experiment: expKey, State: Initializing, Queue: queue, saver: saver}
 	t.UpdateTime = time.Now()
 	prefix, err := t.ParsePrefix()
 	if err != nil {

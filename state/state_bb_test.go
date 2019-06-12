@@ -47,7 +47,7 @@ func TestStatus(t *testing.T) {
 		log.Println(saver)
 		t.Fatal(err)
 	}
-	task, err := state.NewTask("gs://foo/bar/2000/01/01/task1", "Q1", saver)
+	task, err := state.NewTask("exp", "gs://foo/bar/2000/01/01/task1", "Q1", saver)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestStatus(t *testing.T) {
 	}
 
 	ExpectedTasks := 2
-	tasks := waitForNTasks(t, saver, ExpectedTasks, "bar")
+	tasks := waitForNTasks(t, saver, ExpectedTasks, "exp")
 	if len(tasks) != ExpectedTasks {
 		t.Errorf("Saw %d tasks instead of %d (see notes on consistency)", len(tasks), ExpectedTasks)
 		for _, t := range tasks {
@@ -86,7 +86,7 @@ func TestWriteStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	task, err := state.NewTask("gs://foo/bar/2000/01/01/task1", "Q1", saver)
+	task, err := state.NewTask("bar", "gs://foo/bar/2000/01/01/task1", "Q1", saver)
 	if err != nil {
 		t.Fatal(err)
 	}
