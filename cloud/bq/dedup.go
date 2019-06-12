@@ -189,9 +189,9 @@ var dedupTemplateTraceroute = `
 var dedupTemplateTCPInfo = `
 	#standardSQL
 	# Delete all duplicate rows based on uuid, preferring "later" task filename, later parse_time
-	SELECT * except (row_number)
-    from (
-		select *,
+	SELECT * EXCEPT (row_number)
+    FROM (
+		SELECT *,
 		# Prefer more snapshots, earlier task names, later parse time
 		ROW_NUMBER() OVER (PARTITION BY uuid ORDER BY ARRAY_LENGTH(Snapshots) DESC, ParseInfo.TaskFileName, ParseInfo.ParseTime DESC) row_number
         FROM (
