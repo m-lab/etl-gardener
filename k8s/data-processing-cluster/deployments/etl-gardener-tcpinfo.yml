@@ -58,7 +58,7 @@ spec:
         - name: DATASET
           value: "batch"
         - name: FINAL_DATASET
-          value: "base-tables"
+          value: "base_tables"
         - name: QUEUE_BASE
           value: "etl-tcpinfo-batch-"
         - name: NUM_QUEUES
