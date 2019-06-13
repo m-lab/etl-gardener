@@ -116,7 +116,7 @@ func (ds *DatastoreSaver) DeleteTask(ctx context.Context, t Task) error {
 // is written to datastore means that it can not be an interface and instead
 // must be a struct.
 type Task struct {
-	Name       string // e.g. gs://archive-mlab-oti/ndt/2017/06/01/
+	Name       string // e.g. gs://archive-mlab-oti/ndt/2017/06/01/ or gs://pusher-mlab-sandbox/ndt/tcpinfo/2019/04/01/
 	Experiment string // e.g. ndt, sidestream, etc.
 	Date       time.Time
 	State      State
@@ -141,18 +141,14 @@ func GetExperiment(name string) (string, error) {
 }
 
 // NewTask properly initializes a new task, complete with saver.
-func NewTask(name string, queue string, saver Saver) (*Task, error) {
-	expt, err := GetExperiment(name)
-	if err != nil {
-		return nil, err
-	}
-	t := Task{Name: name, Experiment: expt, State: Initializing, Queue: queue, saver: saver}
+func NewTask(expName string, name string, queue string, saver Saver) (*Task, error) {
+	t := Task{Name: name, Experiment: expName, State: Initializing, Queue: queue, saver: saver}
 	t.UpdateTime = time.Now()
-	parts, err := t.ParsePrefix()
+	prefix, err := t.ParsePrefix()
 	if err != nil {
 		return nil, err
 	}
-	date, err := time.Parse("2006/01/02", parts[2])
+	date, err := time.Parse("2006/01/02", prefix.DatePath)
 	if err != nil {
 		return nil, err
 	}
@@ -160,42 +156,77 @@ func NewTask(name string, queue string, saver Saver) (*Task, error) {
 	return &t, nil
 }
 
-const start = `^gs://(?P<bucket>.*)/(?P<exp>[^/]*)/`
-const datePath = `(?P<datepath>\d{4}/[01]\d/[0123]\d)/`
+// These are common with code in etl/etl/globals.go
+const (
+	bucket   = `gs://([^/]*)/`
+	expType  = `(?:([a-z-]+)/)?([a-z-]+)/` // experiment OR experiment/type
+	datePath = `(\d{4}/[01]\d/[0123]\d)/`
+)
 
 // These are here to facilitate use across queue-pusher and parsing components.
 var (
 	// This matches any valid test file name, and some invalid ones.
-	prefixPattern = regexp.MustCompile(start + // #1 #2
-		datePath) // #3 - YYYY/MM/DD
+	prefixPattern = regexp.MustCompile(bucket + // #1
+		expType + // #2 #3
+		datePath) // #4 - YYYY/MM/DD
 )
+
+// Prefix is a valid gs:// prefix for either legacy or new platform data.
+type Prefix struct {
+	Bucket     string    // the GCS bucket name.
+	Experiment string    // the experiment name
+	DataType   string    // if empty, this is legacy, and DataType is same as Experiment
+	DatePath   string    // the YYYY/MM/DD date path.
+	Date       time.Time // the time.Time corresponding to the datepath.
+}
+
+// Path returns the path within the bucket, not including the leading gs://bucket/
+func (p Prefix) Path() string {
+	if p.Experiment == "" {
+		return p.DataType + "/" + p.DatePath + "/"
+	}
+	return p.Experiment + "/" + p.DataType + "/" + p.DatePath + "/"
+}
 
 // ParsePrefix Parses prefix, returning {bucket, experiment, date string}, error
 // Unless it returns error, the result will be exactly length 3.
-func (t *Task) ParsePrefix() ([]string, error) {
+func (t *Task) ParsePrefix() (*Prefix, error) {
 	fields := prefixPattern.FindStringSubmatch(t.Name)
 
 	if fields == nil {
 		return nil, errors.New("Invalid test path: " + t.Name)
 	}
-	// If fields is not nil, then there was a match, and all matches contain 4 fields.
-	return fields[1:], nil
+
+	date, err := time.Parse("2006/01/02", fields[4])
+	if err != nil {
+		return nil, err
+	}
+	p := Prefix{
+		Bucket:     fields[1],
+		Experiment: fields[2],
+		DataType:   fields[3],
+		DatePath:   fields[4],
+		Date:       date,
+	}
+	// If fields is not nil, then there was a match, and all matches contain 5 fields.
+
+	return &p, nil
 }
 
 // SourceAndDest creates BQ Table entities for the source templated table, and destination partition.
 func (t *Task) SourceAndDest(ds *dataset.Dataset) (bqiface.Table, bqiface.Table, error) {
 	// Launch the dedup request, and save the JobID
-	parts, err := t.ParsePrefix()
+	prefix, err := t.ParsePrefix()
 	if err != nil {
 		// If there is a parse error, log and skip request.
 		metrics.FailCount.WithLabelValues("BadDedupPrefix")
 		return nil, nil, err
 	}
 
-	tableName := etl.DirToTablename(parts[1])
+	tableName := etl.DirToTablename(prefix.DataType)
 
-	src := ds.Table(tableName + "_" + strings.Join(strings.Split(parts[2], "/"), ""))
-	dest := ds.Table(tableName + "$" + strings.Join(strings.Split(parts[2], "/"), ""))
+	src := ds.Table(tableName + "_" + strings.Join(strings.Split(prefix.DatePath, "/"), ""))
+	dest := ds.Table(tableName + "$" + strings.Join(strings.Split(prefix.DatePath, "/"), ""))
 	return src, dest, nil
 }
 

@@ -16,13 +16,13 @@ import (
 func waitForNTasks(t *testing.T, saver *state.DatastoreSaver, expectedTaskCount int, expt string) []state.Task {
 	var tasks []state.Task
 	var err error
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 50; i++ {
 		// Real datastore takes about 100 msec or more before consistency.
 		// In travis, we use the emulator, which should provide consistency
 		// much more quickly.  We use a modest number here that usually
 		// is sufficient for running on workstation, and rarely fail with emulator.
-		// Then we retry up to 10 times, before actually failing.
-		time.Sleep(200 * time.Millisecond)
+		// Then we retry up to 50 times, before actually failing.
+		time.Sleep(100 * time.Millisecond)
 		ctx := context.Background()
 		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		defer cancel()
@@ -33,7 +33,7 @@ func waitForNTasks(t *testing.T, saver *state.DatastoreSaver, expectedTaskCount 
 		if ctx.Err() != nil {
 			t.Fatal(ctx.Err())
 		}
-		if len(tasks) == expectedTaskCount {
+		if len(tasks) >= expectedTaskCount {
 			break
 		}
 	}
@@ -47,7 +47,7 @@ func TestStatus(t *testing.T) {
 		log.Println(saver)
 		t.Fatal(err)
 	}
-	task, err := state.NewTask("gs://foo/bar/2000/01/01/task1", "Q1", saver)
+	task, err := state.NewTask("exp", "gs://foo/bar/2000/01/01/task1", "Q1", saver)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestStatus(t *testing.T) {
 	}
 
 	ExpectedTasks := 2
-	tasks := waitForNTasks(t, saver, ExpectedTasks, "bar")
+	tasks := waitForNTasks(t, saver, ExpectedTasks, "exp")
 	if len(tasks) != ExpectedTasks {
 		t.Errorf("Saw %d tasks instead of %d (see notes on consistency)", len(tasks), ExpectedTasks)
 		for _, t := range tasks {
@@ -86,7 +86,7 @@ func TestWriteStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	task, err := state.NewTask("gs://foo/bar/2000/01/01/task1", "Q1", saver)
+	task, err := state.NewTask("bar", "gs://foo/bar/2000/01/01/task1", "Q1", saver)
 	if err != nil {
 		t.Fatal(err)
 	}

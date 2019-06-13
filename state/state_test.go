@@ -50,6 +50,38 @@ func (s *testSaver) GetDeletes(t state.Task) map[string]struct{} {
 
 func assertSaver() { func(ex state.Saver) {}(&testSaver{}) }
 
+func TestNewPlatformPrefix(t *testing.T) {
+	task := state.Task{Name: "gs://pusher-mlab-sandbox/ndt/tcpinfo/2019/04/01/", State: state.Initializing}
+	saver := testSaver{tasks: make(map[string][]state.Task), delete: make(map[string]struct{})}
+	task.SetSaver(&saver)
+
+	pp, err := task.ParsePrefix()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if pp.DataType != "tcpinfo" {
+		t.Error(pp)
+	}
+
+}
+
+func TestLegacyPrefix(t *testing.T) {
+	task := state.Task{Name: "gs://archive-mlab-sandbox/ndt/2019/04/01/", State: state.Initializing}
+	saver := testSaver{tasks: make(map[string][]state.Task), delete: make(map[string]struct{})}
+	task.SetSaver(&saver)
+
+	pp, err := task.ParsePrefix()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if pp.DataType != "ndt" {
+		t.Error(pp)
+	}
+
+}
+
 func TestTaskBasics(t *testing.T) {
 	ctx := context.Background()
 	task := state.Task{Name: "foobar", State: state.Initializing}
@@ -119,18 +151,18 @@ func TestTaskBasics(t *testing.T) {
 }
 
 func TestSourceAndDest(t *testing.T) {
-	if _, err := state.NewTask("gs://task1", "Q1", nil); err == nil {
+	if _, err := state.NewTask("exp", "gs://task1", "Q1", nil); err == nil {
 		t.Fatal("Should have had an error here")
 	}
-	if _, err := state.NewTask("gs://foo/ndt/2000/ab/01/task1", "Q1", nil); err == nil {
+	if _, err := state.NewTask("exp", "gs://foo/ndt/2000/ab/01/task1", "Q1", nil); err == nil {
 		t.Fatal("Should have had an error here")
 	}
-	if _, err := state.NewTask("gs://foo/ndt/2000/13/01/task1", "Q1", nil); err == nil {
+	if _, err := state.NewTask("exp", "gs://foo/ndt/2000/13/01/task1", "Q1", nil); err == nil {
 		t.Fatal("Should have had an error here")
 	}
 
 	ctx := context.Background()
-	task, err := state.NewTask("gs://foo/ndt/2000/01/01/task1", "Q1", nil)
+	task, err := state.NewTask("exp", "gs://foo/ndt/2000/01/01/task1", "Q1", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -186,6 +186,21 @@ var dedupTemplateTraceroute = `
 	    FROM ` + "`%s`" + `)
 	WHERE row_number = 1`
 
+var dedupTemplateTCPInfo = `
+	#standardSQL
+	# Delete all duplicate rows based on uuid, preferring "later" task filename, later parse_time
+	SELECT * EXCEPT (row_number)
+    FROM (
+		SELECT *,
+		# Prefer more snapshots, earlier task names, later parse time
+		ROW_NUMBER() OVER (PARTITION BY uuid ORDER BY ARRAY_LENGTH(Snapshots) DESC, ParseInfo.TaskFileName, ParseInfo.ParseTime DESC) row_number
+        FROM (
+			SELECT *
+    		FROM ` + "`%s`" + `
+        )
+    )
+	WHERE row_number = 1`
+
 // Dedup executes a query that dedups and writes to destination partition.
 // This function is alpha status.  The interface may change without notice
 // or major version number change.
@@ -217,6 +232,8 @@ func Dedup(ctx context.Context, dsExt *dataset.Dataset, src string, destTable bq
 		queryString = fmt.Sprintf(dedupTemplateSwitch, src)
 	case strings.HasPrefix(destTable.TableID(), "traceroute"):
 		queryString = fmt.Sprintf(dedupTemplateTraceroute, src)
+	case strings.HasPrefix(destTable.TableID(), "tcpinfo"):
+		queryString = fmt.Sprintf(dedupTemplateTCPInfo, src)
 	default:
 		log.Println("Only handles sidestream, ndt, switch, traceroute, not " + destTable.TableID())
 		return nil, errors.New("Unknown table type")

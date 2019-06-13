@@ -186,7 +186,7 @@ func taskHandlerFromEnv(ctx context.Context, client *http.Client) (*reproc.TaskH
 	if err != nil {
 		return nil, err
 	}
-	return reproc.NewTaskHandler(exec, queues, saver), nil
+	return reproc.NewTaskHandler(env.Experiment, exec, queues, saver), nil
 }
 
 // doDispatchLoop just sequences through archives in date order.
