@@ -184,6 +184,7 @@ func GetTableDetail(ctx context.Context, dsExt *dataset.Dataset, table bqiface.T
 		dataset, tableName, where)
 
 	// TODO - find a better way to do this.
+	// https://github.com/m-lab/etl-gardener/issues/158
 	query := legacyQuery
 	if parts[0] == "tcpinfo" {
 		query = tcpinfoQuery
