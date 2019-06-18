@@ -203,15 +203,9 @@ var dedupTemplateTCPInfo = `
 
 var dedupTemplateNDTLegacy = `
 	#standardSQL
-	SELECT
-		* EXCEPT (row_number)
+	SELECT * EXCEPT (row_number)
 	FROM (
-		SELECT
-			*, ROW_NUMBER() OVER (
-				PARTITION BY CONCAT(test_id)
-			    # Use the most recently parsed row
-			    ORDER BY parse_time DESC
-			) AS row_number
+		SELECT *, ROW_NUMBER() OVER (PARTITION BY CONCAT(test_id) ORDER BY ParseInfo.ParseTime DESC) AS row_number
 		FROM ` + "`%s`" + `
 	)
 	WHERE
