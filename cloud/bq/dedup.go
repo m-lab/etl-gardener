@@ -205,7 +205,7 @@ var dedupTemplateNDTLegacy = `
 	#standardSQL
 	SELECT * EXCEPT (row_number)
 	FROM (
-		SELECT *, ROW_NUMBER() OVER (PARTITION BY CONCAT(test_id) ORDER BY ParseInfo.ParseTime DESC) AS row_number
+		SELECT *, ROW_NUMBER() OVER (PARTITION BY test_id ORDER BY ParseInfo.ParseTime DESC) AS row_number
 		FROM ` + "`%s`" + `
 	)
 	WHERE
