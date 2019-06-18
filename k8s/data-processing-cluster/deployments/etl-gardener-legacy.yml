@@ -60,7 +60,7 @@ spec:
         - name: FINAL_DATASET
           value: "base_tables"
         - name: QUEUE_BASE
-          value: "etl-ndt-batch-"
+          value: "etl-legacy-batch-"
         - name: NUM_QUEUES
           value: "2"
 
