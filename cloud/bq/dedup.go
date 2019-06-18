@@ -201,6 +201,22 @@ var dedupTemplateTCPInfo = `
     )
 	WHERE row_number = 1`
 
+var dedupTemplateNDTLegacy = `
+	#standardSQL
+	SELECT
+		* EXCEPT (row_number)
+	FROM (
+		SELECT
+			*, ROW_NUMBER() OVER (
+				PARTITION BY CONCAT(test_id)
+			    # Use the most recently parsed row
+			    ORDER BY parse_time DESC
+			) AS row_number
+		FROM ` + "`%s`" + `
+	)
+	WHERE
+		row_number = 1`
+
 // Dedup executes a query that dedups and writes to destination partition.
 // This function is alpha status.  The interface may change without notice
 // or major version number change.
@@ -234,6 +250,8 @@ func Dedup(ctx context.Context, dsExt *dataset.Dataset, src string, destTable bq
 		queryString = fmt.Sprintf(dedupTemplateTraceroute, src)
 	case strings.HasPrefix(destTable.TableID(), "tcpinfo"):
 		queryString = fmt.Sprintf(dedupTemplateTCPInfo, src)
+	case strings.HasPrefix(destTable.TableID(), "legacy"):
+		queryString = fmt.Sprintf(dedupTemplateNDTLegacy, src)
 	default:
 		log.Println("Only handles sidestream, ndt, switch, traceroute, not " + destTable.TableID())
 		return nil, errors.New("Unknown table type")
