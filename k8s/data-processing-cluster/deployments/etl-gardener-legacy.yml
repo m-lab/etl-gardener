@@ -50,9 +50,9 @@ spec:
         - name: START_DATE
           value: "20190329"
         - name: DATE_SKIP  # Should be 0 for normal operation
-          value: 0
+          value: "0"
         - name: TASK_FILE_SKIP # Should be 0 for normal operation
-          value: 0
+          value: "0"
         - name: EXPERIMENT
           value: "ndt/legacy"
         - name: DATASET
