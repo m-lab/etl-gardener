@@ -176,10 +176,20 @@ func GetTableDetail(ctx context.Context, dsExt *dataset.Dataset, table bqiface.T
 		%s  -- where clause`,
 		dataset, tableName, where)
 
+	legacyNDTQuery := fmt.Sprintf(`
+		#standardSQL
+		SELECT COUNT(DISTINCT test_id) AS TestCount, COUNT(DISTINCT ParseInfo.TaskFileName) AS TaskFileCount
+    FROM `+"`%s.%s`"+`
+		%s  -- where clause`,
+		dataset, tableName, where)
+
 	// TODO - find a better way to do this.
+	// https://github.com/m-lab/etl-gardener/issues/158
 	query := legacyQuery
 	if parts[0] == "tcpinfo" {
 		query = tcpinfoQuery
+	} else if parts[0] == "legacy" {
+		query = legacyNDTQuery
 	}
 	err := dsExt.QueryAndParse(ctx, query, &detail)
 	if err != nil {

@@ -6,7 +6,6 @@
 [![Waffle.io](https://badge.waffle.io/m-lab/etl-gardener.svg?title=Ready)](http://waffle.io/m-lab/etl-gardener)
 
 
-
 ## Gardener provides services for maintaining and reprocessing mlab data.
 
 ## Unit Testing
