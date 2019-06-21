@@ -360,7 +360,7 @@ func (ds *DatastoreSaver) GetStatus(ctx context.Context, expt string) ([]Task, e
 
 // GetTask fetches state of requested experiment/task from Datastore.
 func (ds *DatastoreSaver) GetTask(ctx context.Context, expt string, name string) (Task, error) {
-	q := datastore.NewQuery("task").Namespace(ds.Namespace).Filter("Experiment =", expt).Filter("Name", name)
+	q := datastore.NewQuery("task").Namespace(ds.Namespace).Filter("Experiment =", expt).Filter("Name =", name)
 	tasks := make([]Task, 0, 1)
 	_, err := ds.Client.GetAll(ctx, q, &tasks)
 	if err != nil {
