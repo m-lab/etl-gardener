@@ -111,6 +111,22 @@ func (th *TaskHandler) StartTask(ctx context.Context, t state.Task) {
 	go t.Process(ctx, th.exec, doneWithQueue, th.Terminator)
 }
 
+func (th *TaskHandler) startTask(ctx context.Context, t state.Task) error {
+	select {
+	// Wait until there is an available task queue.
+	case queue := <-th.taskQueues:
+		t.Queue = queue
+		log.Println("Adding:", t.Name)
+		th.StartTask(ctx, t)
+		return nil
+
+	// Or until we start termination.
+	case <-th.GetNotifyChannel():
+		// If we are terminating, do nothing.
+		return ErrTerminating
+	}
+}
+
 // AddTask adds a new task, blocking until the task has been accepted.
 // This will typically be repeated called by another goroutine responsible
 // for driving the reprocessing.
@@ -136,31 +152,18 @@ func (th *TaskHandler) AddTask(ctx context.Context, prefix string) error {
 				return err
 			}
 			switch {
+			case taskStatus.State == state.Invalid || taskStatus.State == state.Done:
+				return th.startTask(ctx, *t)
 			case taskStatus.ErrMsg != "":
 				log.Printf("Restarting task that errored: %+v", taskStatus)
-				fallthrough
-			case taskStatus.State == state.Invalid:
-				fallthrough
-			case taskStatus.State == state.Done:
-				if taskStatus.State == state.Invalid || taskStatus.State == state.Done || taskStatus.ErrMsg != "" {
-					select {
-					// Wait until there is an available task queue.
-					case queue := <-th.taskQueues:
-						t.Queue = queue
-						log.Println("Adding:", t.Name)
-						th.StartTask(ctx, *t)
-						return nil
-
-					// Or until we start termination.
-					case <-th.GetNotifyChannel():
-						// If we are terminating, do nothing.
-						return ErrTerminating
-					}
-				}
+				return th.startTask(ctx, *t)
+			case time.Since(taskStatus.UpdateTime) > 24*time.Hour:
+				log.Printf("Restarting task more than 24 hours old: %+v", taskStatus)
+				return th.startTask(ctx, *t)
 			default:
 				log.Println("Delaying restart of", prefix, "in state", state.StateNames[taskStatus.State])
-				time.Sleep(5 * time.Minute)
 			}
+			time.Sleep(5 * time.Minute)
 		}
 	}
 }
