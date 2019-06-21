@@ -55,8 +55,7 @@ var (
 )
 
 // Executor describes an object that can do all the required steps to execute a Task.
-// Used for mocking.
-// Interface must update the task in place, so that state changes are all visible.
+// Implementation must update the task in place, so that state changes are all visible.
 type Executor interface {
 	Next(ctx context.Context, task *Task, terminate <-chan struct{}) error
 }
@@ -284,6 +283,21 @@ func (t *Task) SetError(ctx context.Context, err error, info string) error {
 	return t.saver.SaveTask(ctx, *t)
 }
 
+// GetTaskStatus checks the PersistentStore to see if task is in flight or errored.
+// TODO: This should be folded into the Saver interface.
+func (t *Task) GetTaskStatus(ctx context.Context) (State, error) {
+	ds, ok := t.saver.(*DatastoreSaver)
+	if !ok {
+		// If the saver isn't a DatastoreSaver, then just return Invalid, which will allow continuation.
+		return Invalid, nil
+	}
+	t, err := ds.GetTask(ctx, t.Experiment, t.Name)
+	if err != nil {
+		return Invalid, err
+	}
+	return t.State, nil
+}
+
 // SetSaver sets the value of the saver to be used for all other calls.
 func (t *Task) SetSaver(saver Saver) {
 	t.saver = saver
@@ -342,6 +356,21 @@ func (ds *DatastoreSaver) GetStatus(ctx context.Context, expt string) ([]Task, e
 		// Handle error.
 	}
 	return tasks, nil
+}
+
+// GetTask fetches state of requested experiment/task from Datastore.
+func (ds *DatastoreSaver) GetTask(ctx context.Context, expt string, name string) (*Task, error) {
+	q := datastore.NewQuery("task").Namespace(ds.Namespace).Filter("Experiment =", expt).Filter("Name", name)
+	tasks := make([]Task, 0, 1)
+	_, err := ds.Client.GetAll(ctx, q, &tasks)
+	if err != nil {
+		return nil, err
+		// Handle error.
+	}
+	if len(tasks) > 0 {
+		return &tasks[0], nil
+	}
+	return nil, nil
 }
 
 // WriteHTMLStatusTo writes HTML formatted task status.

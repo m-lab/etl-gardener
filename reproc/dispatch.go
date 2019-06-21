@@ -118,22 +118,39 @@ func (th *TaskHandler) StartTask(ctx context.Context, t state.Task) {
 // TODO: Add prometheus metrics.
 func (th *TaskHandler) AddTask(ctx context.Context, prefix string) error {
 	log.Println("Waiting for a queue")
-	select {
-	// Wait until there is an available task queue.
-	case queue := <-th.taskQueues:
-		t, err := state.NewTask(th.expName, prefix, queue, th.saver)
-		if err != nil {
-			log.Println(err)
-			return err
-		}
-		log.Println("Adding:", t.Name)
-		th.StartTask(ctx, *t)
-		return nil
+	t, err := state.NewTask(th.expName, prefix, "No queue yet", th.saver)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	for {
+		select {
+		case <-th.GetNotifyChannel():
+			// If we are terminating, do nothing.
+			return ErrTerminating
+		default:
+			st, err := t.GetTaskStatus(ctx)
+			if err != nil {
+				log.Println(err)
+				return err
+			}
+			if st == state.Invalid || st == state.Done {
+				select {
+				// Wait until there is an available task queue.
+				case queue := <-th.taskQueues:
+					t.Queue = queue
+					log.Println("Adding:", t.Name)
+					th.StartTask(ctx, *t)
+					return nil
 
-	// Or until we start termination.
-	case <-th.GetNotifyChannel():
-		// If we are terminating, do nothing.
-		return ErrTerminating
+				// Or until we start termination.
+				case <-th.GetNotifyChannel():
+					// If we are terminating, do nothing.
+					return ErrTerminating
+				}
+			}
+			time.Sleep(time.Minute)
+		}
 	}
 }
 
