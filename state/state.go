@@ -285,17 +285,17 @@ func (t *Task) SetError(ctx context.Context, err error, info string) error {
 
 // GetTaskStatus checks the PersistentStore to see if task is in flight or errored.
 // TODO: This should be folded into the Saver interface.
-func (t *Task) GetTaskStatus(ctx context.Context) (State, error) {
+func (t *Task) GetTaskStatus(ctx context.Context) (Task, error) {
 	ds, ok := t.saver.(*DatastoreSaver)
 	if !ok {
-		// If the saver isn't a DatastoreSaver, then just return Invalid, which will allow continuation.
-		return Invalid, nil
+		// If the saver isn't a DatastoreSaver, then just return empty Task, which will allow continuation.
+		return Task{}, nil
 	}
-	t, err := ds.GetTask(ctx, t.Experiment, t.Name)
+	status, err := ds.GetTask(ctx, t.Experiment, t.Name)
 	if err != nil {
-		return Invalid, err
+		return Task{}, err
 	}
-	return t.State, nil
+	return status, nil
 }
 
 // SetSaver sets the value of the saver to be used for all other calls.
@@ -359,18 +359,18 @@ func (ds *DatastoreSaver) GetStatus(ctx context.Context, expt string) ([]Task, e
 }
 
 // GetTask fetches state of requested experiment/task from Datastore.
-func (ds *DatastoreSaver) GetTask(ctx context.Context, expt string, name string) (*Task, error) {
+func (ds *DatastoreSaver) GetTask(ctx context.Context, expt string, name string) (Task, error) {
 	q := datastore.NewQuery("task").Namespace(ds.Namespace).Filter("Experiment =", expt).Filter("Name", name)
 	tasks := make([]Task, 0, 1)
 	_, err := ds.Client.GetAll(ctx, q, &tasks)
 	if err != nil {
-		return nil, err
+		return Task{}, err
 		// Handle error.
 	}
 	if len(tasks) > 0 {
-		return &tasks[0], nil
+		return tasks[0], nil
 	}
-	return nil, nil
+	return Task{}, nil
 }
 
 // WriteHTMLStatusTo writes HTML formatted task status.

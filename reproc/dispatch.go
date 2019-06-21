@@ -129,27 +129,38 @@ func (th *TaskHandler) AddTask(ctx context.Context, prefix string) error {
 			// If we are terminating, do nothing.
 			return ErrTerminating
 		default:
-			st, err := t.GetTaskStatus(ctx)
+			taskStatus, err := t.GetTaskStatus(ctx)
 			if err != nil {
 				log.Println(err)
+				// TODO handle these errors properly.
 				return err
 			}
-			if st == state.Invalid || st == state.Done {
-				select {
-				// Wait until there is an available task queue.
-				case queue := <-th.taskQueues:
-					t.Queue = queue
-					log.Println("Adding:", t.Name)
-					th.StartTask(ctx, *t)
-					return nil
+			switch {
+			case taskStatus.ErrMsg != "":
+				log.Printf("Restarting task that errored: %+v", taskStatus)
+				fallthrough
+			case taskStatus.State == state.Invalid:
+				fallthrough
+			case taskStatus.State == state.Done:
+				if taskStatus.State == state.Invalid || taskStatus.State == state.Done || taskStatus.ErrMsg != "" {
+					select {
+					// Wait until there is an available task queue.
+					case queue := <-th.taskQueues:
+						t.Queue = queue
+						log.Println("Adding:", t.Name)
+						th.StartTask(ctx, *t)
+						return nil
 
-				// Or until we start termination.
-				case <-th.GetNotifyChannel():
-					// If we are terminating, do nothing.
-					return ErrTerminating
+					// Or until we start termination.
+					case <-th.GetNotifyChannel():
+						// If we are terminating, do nothing.
+						return ErrTerminating
+					}
 				}
+			default:
+				log.Println("Delaying restart of", prefix, "in state", state.StateNames[taskStatus.State])
+				time.Sleep(5 * time.Minute)
 			}
-			time.Sleep(time.Minute)
 		}
 	}
 }
