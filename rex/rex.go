@@ -307,7 +307,7 @@ func (rex *ReprocessingExecutor) dedup(ctx context.Context, t *state.Task) error
 // TODO - develop a BQJob interface for wrapping bigquery.Job, and allowing fakes.
 // TODO - move this to go/dataset, since it is bigquery specific and general purpose.
 func waitForJob(ctx context.Context, job bqiface.Job, maxBackoff time.Duration, terminate <-chan struct{}) error {
-	backoff := 10 * time.Millisecond
+	backoff := 10 * time.Second // Some jobs finish much quicker, but we don't really care that much.
 	previous := backoff
 	for {
 		select {
