@@ -71,7 +71,7 @@ func (s *testSaver) DeleteTask(ctx context.Context, t state.Task) error {
 	return nil
 }
 
-func assertSaver() { func(ex state.Saver) {}(&testSaver{}) }
+func assertPersistentStore() { func(ex state.PersistentStore) {}(&testSaver{}) }
 
 type Exec struct{}
 

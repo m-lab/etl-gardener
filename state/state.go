@@ -60,8 +60,8 @@ type Executor interface {
 	Next(ctx context.Context, task *Task, terminate <-chan struct{}) error
 }
 
-// Saver provides API for saving Task state.
-type Saver interface {
+// PersistentStore provides API for saving Task state.
+type PersistentStore interface {
 	SaveTask(ctx context.Context, t Task) error
 	DeleteTask(ctx context.Context, t Task) error
 }
@@ -126,7 +126,7 @@ type Task struct {
 
 	UpdateTime time.Time
 
-	saver Saver // Saver is used for Save operations. Stored locally, but not persisted.
+	saver PersistentStore // Saver is used for Save operations. Stored locally, but not persisted.
 }
 
 // GetExperiment parses the input string like "gs://archive-mlab-oti/ndt/2017/06/01/"
@@ -140,7 +140,7 @@ func GetExperiment(name string) (string, error) {
 }
 
 // NewTask properly initializes a new task, complete with saver.
-func NewTask(expName string, name string, queue string, saver Saver) (*Task, error) {
+func NewTask(expName string, name string, queue string, saver PersistentStore) (*Task, error) {
 	t := Task{Name: name, Experiment: expName, State: Initializing, Queue: queue, saver: saver}
 	t.UpdateTime = time.Now()
 	prefix, err := t.ParsePrefix()
@@ -291,7 +291,7 @@ func (t *Task) GetTaskStatus(ctx context.Context) (Task, error) {
 		// If the saver isn't a DatastoreSaver, then just return empty Task, which will allow continuation.
 		return Task{}, nil
 	}
-	status, err := ds.GetTask(ctx, t.Experiment, t.Name)
+	status, err := ds.FetchTask(ctx, t.Experiment, t.Name)
 	if err != nil {
 		return Task{}, err
 	}
@@ -299,7 +299,7 @@ func (t *Task) GetTaskStatus(ctx context.Context) (Task, error) {
 }
 
 // SetSaver sets the value of the saver to be used for all other calls.
-func (t *Task) SetSaver(saver Saver) {
+func (t *Task) SetSaver(saver PersistentStore) {
 	t.saver = saver
 }
 
@@ -345,9 +345,9 @@ loop:
 	term.Done()
 }
 
-// GetStatus fetches all Task state of request experiment from Datastore.
+// FetchAllTasks fetches all Task state of request experiment from Datastore.
 // If expt is empty string, return all tasks.
-func (ds *DatastoreSaver) GetStatus(ctx context.Context, expt string) ([]Task, error) {
+func (ds *DatastoreSaver) FetchAllTasks(ctx context.Context, expt string) ([]Task, error) {
 	q := datastore.NewQuery("task").Namespace(ds.Namespace).Filter("Experiment =", expt)
 	tasks := make([]Task, 0, 100)
 	_, err := ds.Client.GetAll(ctx, q, &tasks)
@@ -358,8 +358,8 @@ func (ds *DatastoreSaver) GetStatus(ctx context.Context, expt string) ([]Task, e
 	return tasks, nil
 }
 
-// GetTask fetches state of requested experiment/task from Datastore.
-func (ds *DatastoreSaver) GetTask(ctx context.Context, expt string, name string) (Task, error) {
+// FetchTask fetches state of requested experiment/task from Datastore.
+func (ds *DatastoreSaver) FetchTask(ctx context.Context, expt string, name string) (Task, error) {
 	q := datastore.NewQuery("task").Namespace(ds.Namespace).Filter("Experiment =", expt).Filter("Name =", name)
 	tasks := make([]Task, 0, 1)
 	_, err := ds.Client.GetAll(ctx, q, &tasks)
@@ -383,7 +383,7 @@ func WriteHTMLStatusTo(ctx context.Context, w io.Writer, project string, expt st
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tasks, err := ds.GetStatus(ctx, expt)
+	tasks, err := ds.FetchAllTasks(ctx, expt)
 	if err != nil {
 		fmt.Fprintln(w, "Error executing Datastore query:", err)
 		fmt.Fprintln(w, "Project:", project)

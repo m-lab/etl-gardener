@@ -26,7 +26,7 @@ func waitForNTasks(t *testing.T, saver *state.DatastoreSaver, expectedTaskCount 
 		ctx := context.Background()
 		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		defer cancel()
-		tasks, err = saver.GetStatus(ctx, expt)
+		tasks, err = saver.FetchAllTasks(ctx, expt)
 		if err != nil {
 			t.Fatal(err)
 		}

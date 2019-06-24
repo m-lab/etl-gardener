@@ -304,7 +304,7 @@ func setupService(ctx context.Context) error {
 
 	// Move the timeout into GetStatus?
 	taskCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	tasks, err := ds.GetStatus(taskCtx, env.Experiment)
+	tasks, err := ds.FetchAllTasks(taskCtx, env.Experiment)
 	cancel()
 
 	if err != nil {
