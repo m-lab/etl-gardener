@@ -86,3 +86,8 @@ spec:
 
       nodeSelector:
         gardener-node: "true"
+
+      volumes:
+      - name: traceroute-storage
+        persistentVolumeClaim:
+          claimName: gardener-traceroute-disk0
