@@ -284,7 +284,7 @@ func (t *Task) SetError(ctx context.Context, err error, info string) error {
 }
 
 // GetTaskStatus checks the PersistentStore to see if task is in flight or errored.
-// TODO: This should be folded into the Saver interface.
+// If t.saver is not a DatastoreSaver, this returns empty/nil
 func (t *Task) GetTaskStatus(ctx context.Context) (Task, error) {
 	ds, ok := t.saver.(*DatastoreSaver)
 	if !ok {

@@ -40,7 +40,7 @@ func waitForNTasks(t *testing.T, saver *state.DatastoreSaver, expectedTaskCount 
 	return tasks
 }
 
-func TestStatus(t *testing.T) {
+func TestTaskState(t *testing.T) {
 	ctx := context.Background()
 	saver, err := state.NewDatastoreSaver(ctx, "mlab-testing")
 	if err != nil {
@@ -69,6 +69,34 @@ func TestStatus(t *testing.T) {
 		t.Errorf("Saw %d tasks instead of %d (see notes on consistency)", len(tasks), ExpectedTasks)
 		for _, t := range tasks {
 			log.Println(t)
+		}
+	}
+
+	// Check the tasks individually:
+	for _, oneTask := range tasks {
+		task, err := saver.FetchTask(ctx, "exp", oneTask.Name)
+		if err != nil {
+			t.Error(err)
+		} else {
+			if task.State != oneTask.State {
+				t.Error("State doesn't match", task, oneTask)
+			}
+			// task doesn't have a saver, so this should return an empty task.
+			t2, err := task.GetTaskStatus(ctx)
+			if err != nil {
+				t.Error("Shouldn't return an error", err)
+			}
+			if t2.State != state.Invalid {
+				t.Error("Unexpected state in ", t2)
+			}
+			task.SetSaver(saver)
+			t2, err = task.GetTaskStatus(ctx)
+			if err != nil {
+				t.Error("Shouldn't return an error", err)
+			}
+			if t2.State != task.State {
+				t.Error("Expected", task, "but got", t2)
+			}
 		}
 	}
 
