@@ -240,7 +240,7 @@ func Dedup(ctx context.Context, dsExt *dataset.Dataset, src string, destTable bq
 		queryString = fmt.Sprintf(dedupTemplateNDT, src)
 	case strings.HasPrefix(destTable.TableID(), "switch"):
 		queryString = fmt.Sprintf(dedupTemplateSwitch, src)
-	case strings.HasPrefix(destTable.TableID(), "traceroute"):
+	case strings.HasPrefix(destTable.TableID(), "scamper"):
 		queryString = fmt.Sprintf(dedupTemplateTraceroute, src)
 	case strings.HasPrefix(destTable.TableID(), "tcpinfo"):
 		queryString = fmt.Sprintf(dedupTemplateTCPInfo, src)
