@@ -154,6 +154,9 @@ func (th *TaskHandler) waitForPreviousTask(ctx context.Context, t state.Task) er
 			log.Printf("Restarting task that errored: %+v", taskStatus)
 			return nil
 		case time.Since(taskStatus.UpdateTime) > 12*time.Hour:
+			// If > 12 hours in Processing, then task queue tasks will have expired.
+			// If > 12 hours in Stabilizing, then something has gone horribly wrong.
+			// Other states only take a couple minutes.
 			log.Printf("Restarting task that has been idle more than 12 hour: %+v", taskStatus)
 			return nil
 		default:
