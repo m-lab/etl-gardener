@@ -111,22 +111,21 @@ func (th *TaskHandler) StartTask(ctx context.Context, t state.Task) {
 	go t.Process(ctx, th.exec, doneWithQueue, th.Terminator)
 }
 
-func (th *TaskHandler) getQueueAndStartTask(ctx context.Context, t state.Task) error {
+// This waits for a queue or termination notice.
+func (th *TaskHandler) waitForQueue(ctx context.Context, t state.Task) (string, error) {
 	select {
 	// Wait until there is an available task queue.
 	case queue := <-th.taskQueues:
-		t.Queue = queue
-		log.Println("Adding:", t.Name)
-		th.StartTask(ctx, t)
-		return nil
+		return queue, nil
 
 	// Or until we start termination.
 	case <-th.GetNotifyChannel():
 		// If we are terminating, do nothing.
-		return ErrTerminating
+		return "", ErrTerminating
 	}
 }
 
+// The sleeps for the requested time, but will break if the termination channel is closed.
 func (th *TaskHandler) sleepWithTerminationCheck(delay time.Duration) error {
 	// Check whether we are terminating.
 	ticker := time.NewTicker(delay)
@@ -140,20 +139,7 @@ func (th *TaskHandler) sleepWithTerminationCheck(delay time.Duration) error {
 	}
 }
 
-// AddTask adds a new task, blocking until the task has been accepted.
-// This will typically be repeated called by another goroutine responsible
-// for driving the reprocessing.
-// May return ErrTerminating, if th has started termination.
-// TODO: Add prometheus metrics.
-func (th *TaskHandler) AddTask(ctx context.Context, prefix string) error {
-	log.Println("Waiting for a queue")
-	t, err := state.NewTask(th.expName, prefix, "No queue yet", th.saver)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-
-READY:
+func (th *TaskHandler) waitForPreviousTask(ctx context.Context, t state.Task) error {
 	for {
 		taskStatus, err := t.GetTaskStatus(ctx)
 		if err != nil {
@@ -163,24 +149,58 @@ READY:
 		}
 		switch {
 		case taskStatus.State == state.Invalid || taskStatus.State == state.Done:
-			break READY
+			return nil
 		case taskStatus.ErrMsg != "":
 			log.Printf("Restarting task that errored: %+v", taskStatus)
-			break READY
-		case time.Since(taskStatus.UpdateTime) > 24*time.Hour:
-			log.Printf("Restarting task more than 24 hours old: %+v", taskStatus)
-			break READY
+			return nil
+		case time.Since(taskStatus.UpdateTime) > 12*time.Hour:
+			log.Printf("Restarting task that has been idle more than 12 hour: %+v", taskStatus)
+			return nil
 		default:
 		}
 
-		log.Println("Delaying restart of", prefix, "in state", state.StateNames[taskStatus.State])
+		log.Println("Delaying restart of", t.Name, "in state", state.StateNames[taskStatus.State])
 		if err = th.sleepWithTerminationCheck(5 * time.Minute); err != nil {
 			return err
 		}
 	}
+}
+
+// AddTask adds a new task, blocking until the task has been accepted.
+// This will typically be repeated called by another goroutine responsible
+// for driving the reprocessing.
+// May return ErrTerminating, if th has started termination.
+// TODO: Add prometheus metrics.
+//
+// More detail:
+//   This call will block until two criteria are met:
+//    1. The previous instance of the task must have completed, errored, or
+//       been idle more than 12 hours.
+//    2. A queue must be allocated.
+//   No queue is allocated until #1 is satisfied.  While waiting for either condition,
+//   the termination notice is also respected, causing ErrTerminating to be returned.
+func (th *TaskHandler) AddTask(ctx context.Context, prefix string) error {
+	log.Println("Waiting for a queue")
+	t, err := state.NewTask(th.expName, prefix, "No queue yet", th.saver)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	// Wait until the previous instance of the task has completed,
+	// errored, or been idle for 24 hours.
+	if err = th.waitForPreviousTask(ctx, *t); err != nil {
+		return err
+	}
 
 	// Now wait for a queue and start the task.
-	return th.getQueueAndStartTask(ctx, *t)
+	queue, err := th.waitForQueue(ctx, *t)
+	if err == nil {
+		t.Queue = queue
+		log.Println("Adding:", t.Name)
+		th.StartTask(ctx, *t)
+	}
+	return err
 }
 
 // RestartTasks restarts all the tasks, allocating queues as needed.
