@@ -48,7 +48,7 @@ func (s *testSaver) GetDeletes(t state.Task) map[string]struct{} {
 	return s.delete
 }
 
-func assertSaver() { func(ex state.Saver) {}(&testSaver{}) }
+func assertSaver() { func(ex state.PersistentStore) {}(&testSaver{}) }
 
 func TestNewPlatformPrefix(t *testing.T) {
 	task := state.Task{Name: "gs://pusher-mlab-sandbox/ndt/tcpinfo/2019/04/01/", State: state.Initializing}

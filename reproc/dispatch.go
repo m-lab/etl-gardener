@@ -67,17 +67,17 @@ func NewTerminator() *Terminator {
 // It is responsible for starting tasks, recycling queues, and handling the
 // termination signal.
 type TaskHandler struct {
-	expName    string         // The string used for task.Experiment, which is used in Datastore queries.
-	exec       state.Executor // Executor passed to new tasks
-	taskQueues chan string    // Channel through which queues recycled.
-	saver      state.Saver    // The Saver used to save task states.
+	expName    string                // The string used for task.Experiment, which is used in Datastore queries.
+	exec       state.Executor        // Executor passed to new tasks
+	taskQueues chan string           // Channel through which queues recycled.
+	saver      state.PersistentStore // The Saver used to save task states.
 
 	// For managing termination.
 	*Terminator
 }
 
 // NewTaskHandler creates a new TaskHandler.
-func NewTaskHandler(expKey string, exec state.Executor, queues []string, saver state.Saver) *TaskHandler {
+func NewTaskHandler(expKey string, exec state.Executor, queues []string, saver state.PersistentStore) *TaskHandler {
 	// Create taskQueue channel, and preload with queues.
 	taskQueues := make(chan string, len(queues))
 	for _, q := range queues {
@@ -111,30 +111,99 @@ func (th *TaskHandler) StartTask(ctx context.Context, t state.Task) {
 	go t.Process(ctx, th.exec, doneWithQueue, th.Terminator)
 }
 
+// This waits for a queue or termination notice.
+func (th *TaskHandler) waitForQueue(ctx context.Context, t state.Task) (string, error) {
+	select {
+	// Wait until there is an available task queue.
+	case queue := <-th.taskQueues:
+		return queue, nil
+
+	// Or until we start termination.
+	case <-th.GetNotifyChannel():
+		// If we are terminating, do nothing.
+		return "", ErrTerminating
+	}
+}
+
+// The sleeps for the requested time, but will break if the termination channel is closed.
+func (th *TaskHandler) sleepWithTerminationCheck(delay time.Duration) error {
+	// Check whether we are terminating.
+	ticker := time.NewTicker(delay)
+	select {
+	case <-th.GetNotifyChannel():
+		// If we are terminating, do nothing.
+		ticker.Stop()
+		return ErrTerminating
+	case <-ticker.C:
+		return nil
+	}
+}
+
+func (th *TaskHandler) waitForPreviousTask(ctx context.Context, t state.Task) error {
+	for {
+		taskStatus, err := t.GetTaskStatus(ctx)
+		if err != nil {
+			log.Println(err)
+			// TODO handle these errors properly.
+			return err
+		}
+		switch {
+		case taskStatus.State == state.Invalid || taskStatus.State == state.Done:
+			return nil
+		case taskStatus.ErrMsg != "":
+			log.Printf("Restarting task that errored: %+v", taskStatus)
+			return nil
+		case time.Since(taskStatus.UpdateTime) > 12*time.Hour:
+			// If > 12 hours in Processing, then task queue tasks will have expired.
+			// If > 12 hours in Stabilizing, then something has gone horribly wrong.
+			// Other states only take a couple minutes.
+			log.Printf("Restarting task that has been idle more than 12 hour: %+v", taskStatus)
+			return nil
+		default:
+		}
+
+		log.Println("Delaying restart of", t.Name, "in state", state.StateNames[taskStatus.State])
+		if err = th.sleepWithTerminationCheck(5 * time.Minute); err != nil {
+			return err
+		}
+	}
+}
+
 // AddTask adds a new task, blocking until the task has been accepted.
 // This will typically be repeated called by another goroutine responsible
 // for driving the reprocessing.
 // May return ErrTerminating, if th has started termination.
 // TODO: Add prometheus metrics.
+//
+// More detail:
+//   This call will block until two criteria are met:
+//    1. The previous instance of the task must have completed, errored, or
+//       been idle more than 12 hours.
+//    2. A queue must be allocated.
+//   No queue is allocated until #1 is satisfied.  While waiting for either condition,
+//   the termination notice is also respected, causing ErrTerminating to be returned.
 func (th *TaskHandler) AddTask(ctx context.Context, prefix string) error {
 	log.Println("Waiting for a queue")
-	select {
-	// Wait until there is an available task queue.
-	case queue := <-th.taskQueues:
-		t, err := state.NewTask(th.expName, prefix, queue, th.saver)
-		if err != nil {
-			log.Println(err)
-			return err
-		}
+	t, err := state.NewTask(th.expName, prefix, "No queue yet", th.saver)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	// Wait until the previous instance of the task has completed,
+	// errored, or been idle for 24 hours.
+	if err = th.waitForPreviousTask(ctx, *t); err != nil {
+		return err
+	}
+
+	// Now wait for a queue and start the task.
+	queue, err := th.waitForQueue(ctx, *t)
+	if err == nil {
+		t.Queue = queue
 		log.Println("Adding:", t.Name)
 		th.StartTask(ctx, *t)
-		return nil
-
-	// Or until we start termination.
-	case <-th.GetNotifyChannel():
-		// If we are terminating, do nothing.
-		return ErrTerminating
 	}
+	return err
 }
 
 // RestartTasks restarts all the tasks, allocating queues as needed.

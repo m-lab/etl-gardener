@@ -307,7 +307,7 @@ func (rex *ReprocessingExecutor) dedup(ctx context.Context, t *state.Task) error
 // TODO - develop a BQJob interface for wrapping bigquery.Job, and allowing fakes.
 // TODO - move this to go/dataset, since it is bigquery specific and general purpose.
 func waitForJob(ctx context.Context, job bqiface.Job, maxBackoff time.Duration, terminate <-chan struct{}) error {
-	backoff := 10 * time.Millisecond
+	backoff := 10 * time.Second // Some jobs finish much quicker, but we don't really care that much.
 	previous := backoff
 	for {
 		select {
@@ -319,6 +319,7 @@ func waitForJob(ctx context.Context, job bqiface.Job, maxBackoff time.Duration, 
 		if err != nil {
 			log.Println(err)
 		} else if status.Err() != nil {
+			// NOTE we are getting rate limit exceeded errors here.
 			log.Println(job.ID(), status.Err())
 			if strings.Contains(status.Err().Error(), "Not found: Table") {
 				return state.ErrTableNotFound
@@ -327,7 +328,8 @@ func waitForJob(ctx context.Context, job bqiface.Job, maxBackoff time.Duration, 
 				return state.ErrRowsFromOtherPartition
 			}
 			if backoff == maxBackoff {
-				return status.Err()
+				log.Println("reached max backoff")
+				// return status.Err()
 			}
 		} else if status.Done() {
 			break
@@ -363,7 +365,7 @@ func (rex *ReprocessingExecutor) finish(ctx context.Context, t *state.Task, term
 		return err
 	}
 	// TODO - should loop, and check terminate channel
-	err = waitForJob(ctx, job, 60*time.Second, terminate)
+	err = waitForJob(ctx, job, 300*time.Second, terminate)
 	if err != nil {
 		log.Println(err, src.FullyQualifiedName())
 		t.SetError(ctx, err, "waitForJob")
