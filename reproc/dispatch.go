@@ -111,7 +111,7 @@ func (th *TaskHandler) StartTask(ctx context.Context, t state.Task) {
 	go t.Process(ctx, th.exec, doneWithQueue, th.Terminator)
 }
 
-func (th *TaskHandler) startTask(ctx context.Context, t state.Task) error {
+func (th *TaskHandler) getQueueAndStartTask(ctx context.Context, t state.Task) error {
 	select {
 	// Wait until there is an available task queue.
 	case queue := <-th.taskQueues:
@@ -127,6 +127,19 @@ func (th *TaskHandler) startTask(ctx context.Context, t state.Task) error {
 	}
 }
 
+func (th *TaskHandler) sleepWithTerminationCheck(delay time.Duration) error {
+	// Check whether we are terminating.
+	ticker := time.NewTicker(delay)
+	select {
+	case <-th.GetNotifyChannel():
+		// If we are terminating, do nothing.
+		ticker.Stop()
+		return ErrTerminating
+	case <-ticker.C:
+		return nil
+	}
+}
+
 // AddTask adds a new task, blocking until the task has been accepted.
 // This will typically be repeated called by another goroutine responsible
 // for driving the reprocessing.
@@ -139,33 +152,35 @@ func (th *TaskHandler) AddTask(ctx context.Context, prefix string) error {
 		log.Println(err)
 		return err
 	}
+
+READY:
 	for {
-		select {
-		case <-th.GetNotifyChannel():
-			// If we are terminating, do nothing.
-			return ErrTerminating
+		taskStatus, err := t.GetTaskStatus(ctx)
+		if err != nil {
+			log.Println(err)
+			// TODO handle these errors properly.
+			return err
+		}
+		switch {
+		case taskStatus.State == state.Invalid || taskStatus.State == state.Done:
+			break READY
+		case taskStatus.ErrMsg != "":
+			log.Printf("Restarting task that errored: %+v", taskStatus)
+			break READY
+		case time.Since(taskStatus.UpdateTime) > 24*time.Hour:
+			log.Printf("Restarting task more than 24 hours old: %+v", taskStatus)
+			break READY
 		default:
-			taskStatus, err := t.GetTaskStatus(ctx)
-			if err != nil {
-				log.Println(err)
-				// TODO handle these errors properly.
-				return err
-			}
-			switch {
-			case taskStatus.State == state.Invalid || taskStatus.State == state.Done:
-				return th.startTask(ctx, *t)
-			case taskStatus.ErrMsg != "":
-				log.Printf("Restarting task that errored: %+v", taskStatus)
-				return th.startTask(ctx, *t)
-			case time.Since(taskStatus.UpdateTime) > 24*time.Hour:
-				log.Printf("Restarting task more than 24 hours old: %+v", taskStatus)
-				return th.startTask(ctx, *t)
-			default:
-				log.Println("Delaying restart of", prefix, "in state", state.StateNames[taskStatus.State])
-			}
-			time.Sleep(5 * time.Minute)
+		}
+
+		log.Println("Delaying restart of", prefix, "in state", state.StateNames[taskStatus.State])
+		if err = th.sleepWithTerminationCheck(5 * time.Minute); err != nil {
+			return err
 		}
 	}
+
+	// Now wait for a queue and start the task.
+	return th.getQueueAndStartTask(ctx, *t)
 }
 
 // RestartTasks restarts all the tasks, allocating queues as needed.

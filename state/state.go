@@ -360,17 +360,11 @@ func (ds *DatastoreSaver) FetchAllTasks(ctx context.Context, expt string) ([]Tas
 
 // FetchTask fetches state of requested experiment/task from Datastore.
 func (ds *DatastoreSaver) FetchTask(ctx context.Context, expt string, name string) (Task, error) {
-	q := datastore.NewQuery("task").Namespace(ds.Namespace).Filter("Experiment =", expt).Filter("Name =", name)
-	tasks := make([]Task, 0, 1)
-	_, err := ds.Client.GetAll(ctx, q, &tasks)
-	if err != nil {
-		return Task{}, err
-		// Handle error.
-	}
-	if len(tasks) > 0 {
-		return tasks[0], nil
-	}
-	return Task{}, nil
+	var task Task
+	key := datastore.Key{Kind: "task", Name: name, Namespace: ds.Namespace}
+	err := ds.Client.Get(ctx, &key, &task)
+	// TODO: any errors we should retry?
+	return task, err
 }
 
 // WriteHTMLStatusTo writes HTML formatted task status.
