@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"cloud.google.com/go/datastore"
 	"github.com/m-lab/etl-gardener/state"
 )
 
@@ -105,6 +106,68 @@ func TestTaskState(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
+	}
+}
+
+func TestFetchTask(t *testing.T) {
+	ctx := context.Background()
+	saver, err := state.NewDatastoreSaver(ctx, "mlab-testing")
+	if err != nil {
+		log.Println(saver)
+		t.Fatal(err)
+	}
+
+	_, err = saver.FetchTask(ctx, "exp", "no-such-entity")
+	if err != datastore.ErrNoSuchEntity {
+		t.Error("Expected ErrNoSuchEntity", err)
+	}
+
+	noSuchEntity, err := state.NewTask("exp,", "gs://foo/bar/0001/01/01/no-such-entity", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// task doesn't have a saver - should return an empty task.
+	_, err = noSuchEntity.GetTaskStatus(ctx)
+	if err != nil {
+		t.Error("Shouldn't return an error", err)
+	}
+
+	// with a saver - still should return an empty task without error.
+	noSuchEntity.SetSaver(saver)
+	_, err = noSuchEntity.GetTaskStatus(ctx)
+	if err != nil {
+		t.Error("Shouldn't return an error", err)
+	}
+
+	// Now save a real test.
+	task, err := state.NewTask("exp", "gs://foo/bar/2000/01/01/task1", "Q1", saver)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	log.Println("saving")
+	err = task.Save(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = saver.FetchTask(ctx, task.Experiment, task.Name)
+	if err != nil {
+		t.Error(err)
+	}
+
+	saved, err := task.GetTaskStatus(ctx)
+	if err != nil {
+		t.Error("Shouldn't return an error", err)
+	}
+	if saved.Name != task.Name {
+		t.Error("Unexpected state", saved)
+	}
+
+	err = saver.DeleteTask(ctx, *task)
+	if err != nil {
+		t.Error(err)
 	}
 }
 
