@@ -293,7 +293,10 @@ func (t *Task) GetTaskStatus(ctx context.Context) (Task, error) {
 	}
 	status, err := ds.FetchTask(ctx, t.Experiment, t.Name)
 	if err != nil {
-		return Task{}, err
+		if err == datastore.ErrNoSuchEntity {
+			return status, nil
+		}
+		return status, err
 	}
 	return status, nil
 }
