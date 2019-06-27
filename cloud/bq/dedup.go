@@ -180,7 +180,7 @@ var dedupTemplateTraceroute = `
 	# Select single row based on TestTime, client_ip, server_ip
 	SELECT * EXCEPT (row_number)
     FROM ( SELECT *, ROW_NUMBER() OVER (
-        PARTITION BY CONCAT(TestTime, Source.IP, DESTINATION.IP)
+        PARTITION BY CONCAT(STRING(TestTime), Source.IP, DESTINATION.IP)
 		) row_number
 	    FROM ` + "`%s`" + `)
 	WHERE row_number = 1`
