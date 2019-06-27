@@ -179,7 +179,7 @@ func GetTableDetail(ctx context.Context, dsExt *dataset.Dataset, table bqiface.T
 	
 	tracerouteQuery := fmt.Sprintf(`
 		#standardSQL
-		SELECT COUNT(DISTINCT ParseInfo.TaskFileName) AS TaskFileCount
+		SELECT COUNT(DISTINCT ParseInfo.TaskFileName) AS TestCount, COUNT(DISTINCT ParseInfo.TaskFileName) AS TaskFileCount
     FROM `+"`%s.%s`"+`
 		%s  -- where clause`,
 		dataset, tableName, where)
