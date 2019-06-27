@@ -147,7 +147,8 @@ func (at *AnnotatedTable) CheckIsRegular(ctx context.Context) error {
 }
 
 // GetTableDetail fetches more detailed info about a partition or table.
-// Expects table to have test_id, and task_filename fields.
+// Expects table to have test_id, and task_filename fields for legacy tables,
+// but it is not true for new traceroute tables.
 func GetTableDetail(ctx context.Context, dsExt *dataset.Dataset, table bqiface.Table) (*Detail, error) {
 	// If table is a partition, then we have to separate out the partition part for the query.
 	parts := strings.Split(table.TableID(), "$")
@@ -175,6 +176,13 @@ func GetTableDetail(ctx context.Context, dsExt *dataset.Dataset, table bqiface.T
     FROM `+"`%s.%s`"+`
 		%s  -- where clause`,
 		dataset, tableName, where)
+	
+	tracerouteQuery := fmt.Sprintf(`
+		#standardSQL
+		SELECT COUNT(DISTINCT ParseInfo.TaskFileName) AS TaskFileCount
+    FROM `+"`%s.%s`"+`
+		%s  -- where clause`,
+		dataset, tableName, where)
 
 	legacyNDTQuery := fmt.Sprintf(`
 		#standardSQL
@@ -190,6 +198,8 @@ func GetTableDetail(ctx context.Context, dsExt *dataset.Dataset, table bqiface.T
 		query = tcpinfoQuery
 	} else if parts[0] == "legacy" {
 		query = legacyNDTQuery
+	} else if parts[0] == "scamper" {
+		query = tracerouteQuery
 	}
 	err := dsExt.QueryAndParse(ctx, query, &detail)
 	if err != nil {
