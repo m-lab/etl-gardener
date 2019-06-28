@@ -177,11 +177,10 @@ var dedupTemplateSwitch = `
 // as mlab-oti:batch.traceroute_20170601.
 var dedupTemplateTraceroute = `
 	#standardSQL
-	# Select single row based on test_id, client_ip, server_ip, src_ip, dest_ip
+	# Select single row based on TestTime, client_ip, server_ip
 	SELECT * EXCEPT (row_number)
     FROM ( SELECT *, ROW_NUMBER() OVER (
-        PARTITION BY CONCAT(test_id, connection_spec.client_ip, connection_spec.server_ip,
-            paris_traceroute_hop.src_ip, paris_traceroute_hop.dest_ip)
+        PARTITION BY CONCAT(STRING(TestTime), Source.IP, DESTINATION.IP)
 		) row_number
 	    FROM ` + "`%s`" + `)
 	WHERE row_number = 1`
