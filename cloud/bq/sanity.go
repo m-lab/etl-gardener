@@ -198,7 +198,7 @@ func GetTableDetail(ctx context.Context, dsExt *dataset.Dataset, table bqiface.T
 		query = tcpinfoQuery
 	} else if parts[0] == "legacy" {
 		query = legacyNDTQuery
-	} else if parts[0] == "scamper" {
+	} else if parts[0] == "traceroute" {
 		query = tracerouteQuery
 	}
 	err := dsExt.QueryAndParse(ctx, query, &detail)
