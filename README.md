@@ -29,7 +29,7 @@ that if you do, you'll want to clean up the `DATASTORE_` environment variables.
 
 ## Node Pools
 
-Gardener runs in the GKE data-processing-cluster.
+Gardener runs in the GKE data-processing-cluster. 
 
 Each cluster includes a node-pool reserved for Gardener deployments, created
 using the following command line:
