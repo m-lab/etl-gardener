@@ -204,7 +204,6 @@ func doDispatchLoop(ctx context.Context, handler *reproc.TaskHandler, startDate 
 		if err != nil {
 			// Only error expected here is ErrTerminating
 			log.Println(err)
-			return
 		}
 
 		// Advance to next date, possibly skipping days if DATE_SKIP env var was set.
