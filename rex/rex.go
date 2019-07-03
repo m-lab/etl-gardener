@@ -284,6 +284,8 @@ func (rex *ReprocessingExecutor) dedup(ctx context.Context, t *state.Task) error
 
 	log.Println("Dedupping", src.FullyQualifiedName())
 	// TODO move Dedup??
+	// TODO - these sometimes fail with rateLimitExceeded.  Need to increase quota,
+	// or implement a backoff.
 	job, err := bq.Dedup(ctx, &ds, src.TableID(), dest)
 	if err != nil {
 		if err == io.EOF {
@@ -321,6 +323,9 @@ func waitForJob(ctx context.Context, job bqiface.Job, maxBackoff time.Duration, 
 		} else if status.Err() != nil {
 			// NOTE we are getting rate limit exceeded errors here.
 			log.Println(job.ID(), status.Err())
+			if strings.Contains(status.Err().Error(), "rateLimitExceeded") {
+				return state.ErrBQRateLimitExceeded
+			}
 			if strings.Contains(status.Err().Error(), "Not found: Table") {
 				return state.ErrTableNotFound
 			}
