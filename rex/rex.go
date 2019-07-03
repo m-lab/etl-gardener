@@ -377,7 +377,10 @@ func (rex *ReprocessingExecutor) finish(ctx context.Context, t *state.Task, term
 	status, err := job.Wait(ctx)
 	if err != nil {
 		if err != state.ErrTaskSuspended {
-			log.Println(status.Err(), src.FullyQualifiedName())
+			log.Println(err, src.FullyQualifiedName())
+			if status != nil {
+				log.Println(status.Err(), src.FullyQualifiedName())
+			}
 			t.SetError(ctx, err, "job.Wait")
 		}
 		return err
