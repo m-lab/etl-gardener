@@ -51,6 +51,7 @@ var (
 	ErrInvalidQueue           = errors.New("invalid queue")
 	ErrTaskSuspended          = errors.New("task suspended")
 	ErrTableNotFound          = errors.New("Not found: Table")
+	ErrBQRateLimitExceeded    = errors.New("Bigquery rateLimitExceeded")
 	ErrRowsFromOtherPartition = errors.New("Rows belong to different partition")
 )
 

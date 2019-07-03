@@ -211,9 +211,6 @@ var dedupTemplateNDTLegacy = `
 		row_number = 1`
 
 // Dedup executes a query that dedups and writes to destination partition.
-// This function is alpha status.  The interface may change without notice
-// or major version number change.
-//
 // `src` is relative to the project:dataset of dsExt.
 // `destTable` specifies the table to write to, typically created with
 //   dsExt.BqClient.DatasetInProject(...).Table(...)
@@ -221,7 +218,6 @@ var dedupTemplateNDTLegacy = `
 // NOTE: If destination table is partitioned, destTable MUST include the partition
 // suffix to avoid accidentally overwriting the entire table.
 // TODO - move these functions to go/bqext package
-// TODO - should we get the context from the dsExt?
 func Dedup(ctx context.Context, dsExt *dataset.Dataset, src string, destTable bqiface.Table) (bqiface.Job, error) {
 	if !strings.Contains(destTable.TableID(), "$") {
 		meta, err := destTable.Metadata(ctx)
