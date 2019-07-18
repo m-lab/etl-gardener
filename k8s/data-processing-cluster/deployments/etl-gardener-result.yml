@@ -1,14 +1,14 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: etl-gardener-legacy
+  name: etl-gardener-result
   namespace: default
 spec:
   replicas: 1
   selector:
     matchLabels:
       # Used to match pre-existing pods that may be affected during updates.
-      run: etl-gardener-legacy
+      run: etl-gardener-result
   strategy:
     rollingUpdate:
       maxSurge: 1
@@ -20,7 +20,7 @@ spec:
       labels:
         # Note: run=etl-gardener-server should match a service config with a
         # public IP and port so that it is publicly accessible.
-        run: etl-gardener-legacy
+        run: etl-gardener-result
       annotations:
         # Tell prometheus service discovery to collect metrics from the containers.
         prometheus.io/scrape: 'true'
@@ -54,7 +54,7 @@ spec:
         - name: TASK_FILE_SKIP # Should be 0 for normal operation
           value: "0"
         - name: EXPERIMENT
-          value: "ndt/legacy"
+          value: "ndt/result"
         - name: DATASET
           value: "batch"
         - name: FINAL_DATASET
@@ -87,13 +87,13 @@ spec:
 
         volumeMounts:
         - mountPath: /volume-claim
-          name: legacy-storage
+          name: result-storage
 
       nodeSelector:
         gardener-node: "true"
 
       volumes:
-      - name: legacy-storage
+      - name: result-storage
         persistentVolumeClaim:
-          claimName: gardener-legacy-disk0
+          claimName: gardener-result-disk0
 
