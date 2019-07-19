@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: etl-gardener-legacy-service
+  name: etl-gardener-result-service
   namespace: default
 spec:
   ports:
@@ -9,6 +9,6 @@ spec:
     protocol: TCP
     targetPort: 8080
   selector:
-    run: etl-gardener-legacy
+    run: etl-gardener-result
   sessionAffinity: None
   type: LoadBalancer

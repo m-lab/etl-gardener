@@ -197,7 +197,7 @@ func doDispatchLoop(ctx context.Context, handler *reproc.TaskHandler, startDate 
 	next := startDate
 
 	for {
-		prefix := next.Format(fmt.Sprintf("gs://%s/%s/2006/01/02/", bucket, experiment))
+		prefix := fmt.Sprintf("gs://%s/%s/", bucket, experiment) + next.Format("2006/01/02/")
 
 		// Note that this blocks until a queue is available.
 		err := handler.AddTask(ctx, prefix)

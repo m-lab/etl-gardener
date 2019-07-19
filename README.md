@@ -5,15 +5,16 @@
 
 [![Waffle.io](https://badge.waffle.io/m-lab/etl-gardener.svg?title=Ready)](http://waffle.io/m-lab/etl-gardener)
 
-
-## Gardener provides services for maintaining and reprocessing mlab data.
+Gardener provides services for maintaining and reprocessing M-Lab data.
 
 ## Unit Testing
+
 Travis now uses the datastore emulator to better support unit tests.
 Tests continue to use mlab-testing, so that they can be run manually from
 workstation without configuring the emulator.
 
 To start the emulator, .travis.yml now includes:
+
 ```base
 - gcloud components install beta
 - gcloud components install cloud-datastore-emulator

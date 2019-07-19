@@ -200,7 +200,7 @@ var dedupTemplateTCPInfo = `
     )
 	WHERE row_number = 1`
 
-var dedupTemplateNDTLegacy = `
+var dedupTemplateNDTResult = `
 	#standardSQL
 	SELECT * EXCEPT (row_number)
 	FROM (
@@ -239,8 +239,8 @@ func Dedup(ctx context.Context, dsExt *dataset.Dataset, src string, destTable bq
 		queryString = fmt.Sprintf(dedupTemplateTraceroute, src)
 	case strings.HasPrefix(destTable.TableID(), "tcpinfo"):
 		queryString = fmt.Sprintf(dedupTemplateTCPInfo, src)
-	case strings.HasPrefix(destTable.TableID(), "legacy"):
-		queryString = fmt.Sprintf(dedupTemplateNDTLegacy, src)
+	case strings.HasPrefix(destTable.TableID(), "result"):
+		queryString = fmt.Sprintf(dedupTemplateNDTResult, src)
 	default:
 		log.Println("Only handles sidestream, ndt, switch, traceroute, not " + destTable.TableID())
 		return nil, errors.New("Unknown table type")
