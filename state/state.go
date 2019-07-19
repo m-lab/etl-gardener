@@ -159,7 +159,7 @@ func NewTask(expName string, name string, queue string, saver PersistentStore) (
 // These are common with code in etl/etl/globals.go
 const (
 	bucket   = `gs://([^/]*)/`
-	expType  = `(?:([a-z-]+)/)?([a-z-]+)/` // experiment OR experiment/type
+	expType  = `(?:([a-z-]+)/)?([a-z0-9-]+)/` // experiment OR experiment/type
 	datePath = `(\d{4}/[01]\d/[0123]\d)/`
 )
 
