@@ -54,7 +54,7 @@ spec:
         - name: TASK_FILE_SKIP # Should be 0 for normal operation
           value: "0"
         - name: EXPERIMENT
-          value: "ndt/result"
+          value: "ndt/ndt5"
         - name: DATASET
           value: "batch"
         - name: FINAL_DATASET
