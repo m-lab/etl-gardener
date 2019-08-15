@@ -49,9 +49,9 @@ spec:
         - name: START_DATE
           value: "20130508"
         - name: DATE_SKIP  # Should be 0 for normal operation
-          value: "{{DATE_SKIP}}"
+          value: "0"
         - name: TASK_FILE_SKIP # Should be 0 for normal operation
-          value: "{{TASK_FILE_SKIP}}"
+          value: "0"
         - name: EXPERIMENT
           value: "paris-traceroute"
         - name: DATASET
