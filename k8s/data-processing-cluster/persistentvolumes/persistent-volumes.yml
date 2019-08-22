@@ -53,7 +53,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: gardener-result-disk0
+  name: gardener-ndt5-disk0
   annotations:
     volume.beta.kubernetes.io/storage-class: "slow"
 spec:

@@ -1,14 +1,14 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: etl-gardener-result
+  name: etl-gardener-ndt5
   namespace: default
 spec:
   replicas: 1
   selector:
     matchLabels:
       # Used to match pre-existing pods that may be affected during updates.
-      run: etl-gardener-result
+      run: etl-gardener-ndt5
   strategy:
     rollingUpdate:
       maxSurge: 1
@@ -20,7 +20,7 @@ spec:
       labels:
         # Note: run=etl-gardener-server should match a service config with a
         # public IP and port so that it is publicly accessible.
-        run: etl-gardener-result
+        run: etl-gardener-ndt5
       annotations:
         # Tell prometheus service discovery to collect metrics from the containers.
         prometheus.io/scrape: 'true'
@@ -60,7 +60,7 @@ spec:
         - name: FINAL_DATASET
           value: "base_tables"
         - name: QUEUE_BASE
-          value: "etl-legacy-batch-"
+          value: "etl-ndt5-batch-"
         - name: NUM_QUEUES
           value: "2"
 
@@ -87,13 +87,13 @@ spec:
 
         volumeMounts:
         - mountPath: /volume-claim
-          name: result-storage
+          name: ndt5-storage
 
       nodeSelector:
         gardener-node: "true"
 
       volumes:
-      - name: result-storage
+      - name: ndt5-storage
         persistentVolumeClaim:
-          claimName: gardener-result-disk0
+          claimName: gardener-ndt5-disk0
 
