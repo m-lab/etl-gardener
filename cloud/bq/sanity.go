@@ -196,7 +196,7 @@ func GetTableDetail(ctx context.Context, dsExt *dataset.Dataset, table bqiface.T
 	query := legacyQuery
 	if parts[0] == "tcpinfo" {
 		query = tcpinfoQuery
-	} else if parts[0] == "result" {
+	} else if (parts[0] == "ndt5") || (parts[0] == "ndt7") {
 		query = resultNDTQuery
 	} else if parts[0] == "traceroute" {
 		query = tracerouteQuery
