@@ -231,7 +231,7 @@ func Dedup(ctx context.Context, dsExt *dataset.Dataset, src string, destTable bq
 	switch {
 	case strings.HasPrefix(destTable.TableID(), "sidestream"):
 		queryString = fmt.Sprintf(dedupTemplateSidestream, src)
-	case strings.HasPrefix(destTable.TableID(), "ndt5"):
+	case strings.HasPrefix(destTable.TableID(), "ndt5") || strings.HasPrefix(destTable.TableID(), "ndt7"):
 		queryString = fmt.Sprintf(dedupTemplateNDTResult, src)
 	case strings.HasPrefix(destTable.TableID(), "ndt"):
 		queryString = fmt.Sprintf(dedupTemplateNDT, src)
