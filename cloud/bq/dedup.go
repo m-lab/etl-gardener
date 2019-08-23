@@ -245,7 +245,6 @@ func Dedup(ctx context.Context, dsExt *dataset.Dataset, src string, destTable bq
 		log.Println("Only handles sidestream, ndt, switch, traceroute, not " + destTable.TableID())
 		return nil, errors.New("Unknown table type")
 	}
-	log.Println(queryString)
 	query := dsExt.DestQuery(queryString, destTable, bigquery.WriteTruncate)
 
 	job, err := query.Run(ctx)
