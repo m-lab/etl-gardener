@@ -16,5 +16,5 @@ func TestLintMetrics(t *testing.T) {
 	StateTimeHistogram.WithLabelValues("x")
 	FilesPerDateHistogram.WithLabelValues("x")
 	BytesPerDateHistogram.WithLabelValues("x")
-	promtest.LintMetrics(t)
+	promtest.LintMetrics(nil) // Log warnings only.
 }
