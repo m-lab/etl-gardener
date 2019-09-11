@@ -45,6 +45,11 @@ type environment struct {
 	Commit  string
 	Release string
 
+	// Determines what kind of service to run.
+	// "manager" will cause loading of config, and passive management.
+	// "legacy" will cause legacy behavior based on additional environment variables.
+	ServiceMode string
+
 	Bucket string
 
 	// These are only used for the "legacy" service mode.
@@ -139,8 +144,24 @@ func LoadEnv() {
 		log.Println(env.Error)
 	}
 
-	// load variables required for task queue based operation.
-	loadEnvVarsForTaskQueue()
+	env.ServiceMode, ok = os.LookupEnv("SERVICE_MODE")
+	if !ok {
+		env.ServiceMode = "legacy"
+	}
+
+	switch env.ServiceMode {
+	case "manager":
+		bucket := os.Getenv("ARCHIVE_BUCKET")
+		if bucket == "" {
+			log.Println("Error: ARCHIVE_BUCKET environment variable not set.")
+			env.Error = ErrNoBucket
+		} else {
+			env.Bucket = bucket
+		}
+	case "legacy":
+		// load variables required for task queue based operation.
+		loadEnvVarsForTaskQueue()
+	}
 }
 
 // ###############################################################################
@@ -234,6 +255,12 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func jobServer(w http.ResponseWriter, r *http.Request) {
+	// This is a real hardcoded task to return.
+	log.Println(r.RequestURI)
+	fmt.Fprint(w, "archive-measurement-lab/ndt/tcpinfo/2019/10/01")
+}
+
 // ###############################################################################
 //  Main
 // ###############################################################################
@@ -261,9 +288,15 @@ func main() {
 	http.HandleFunc("/alive", healthCheck)
 	http.HandleFunc("/ready", healthCheck)
 
-	// Check if invoked as a service.
-	isService, _ := strconv.ParseBool(os.Getenv("GARDENER_SERVICE"))
-	if isService {
+	switch env.ServiceMode {
+	case "manager":
+		// This is new new "manager" mode, in which Gardener provides /job and /update apis
+		// for parsers to get work and report progress.
+		http.HandleFunc("/job", jobServer) // healthCheck works correctly
+		healthy = true
+		log.Println("Running as manager service")
+	case "legacy":
+		// This is the "legacy" mode, that manages work through task queues.
 		// TODO - this creates a storage client, which should be closed on termination.
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -285,11 +318,10 @@ func main() {
 			healthy = true
 			log.Println("Running as task-queue dispatcher service")
 		}
-		log.Fatal(http.ListenAndServe(":8080", nil))
-		return
+	default:
+		log.Println("Unrecognized SERVICE_MODE.  Expected manager or legacy")
+		os.Exit(1)
 	}
 
-	// Otherwise this is a command line invocation...
-	// TODO add implementation (see code in etl repo)
-	log.Println("Command line not implemented")
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
