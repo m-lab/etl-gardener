@@ -209,9 +209,8 @@ func doDispatchLoop(ctx context.Context, handler *reproc.TaskHandler, startDate 
 		// Advance to next date, possibly skipping days if DATE_SKIP env var was set.
 		next = next.AddDate(0, 0, 1+env.DateSkip)
 
-		// If gardener has processed all dates up to two days ago,
-		// start over.
-		if next.Add(48 * time.Hour).After(time.Now()) {
+		// If gardener has processed all dates up now, then start over.
+		if next.After(time.Now()) {
 			// TODO - load this from DataStore
 			log.Println("Starting over at", restartDate)
 			next = restartDate
