@@ -90,4 +90,4 @@ spec:
       volumes:
       - name: traceroute-storage
         persistentVolumeClaim:
-          claimName: gardener-traceroute-disk0
+          claimName: gardener-traceroutejson-disk0
