@@ -79,7 +79,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: gardener-traceroutejson-disk0
+  name: gardener-scamper-disk0
   annotations:
     volume.beta.kubernetes.io/storage-class: "slow"
 spec:
