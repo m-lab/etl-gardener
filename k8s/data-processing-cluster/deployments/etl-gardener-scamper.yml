@@ -88,6 +88,6 @@ spec:
         gardener-node: "true"
 
       volumes:
-      - name: traceroute-storage
+      - name: scamper-storage
         persistentVolumeClaim:
-          claimName: gardener-traceroutejson-disk0
+          claimName: gardener-scamper-disk0
