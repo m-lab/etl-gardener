@@ -1,14 +1,14 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: etl-gardener-traceroute
+  name: etl-gardener-scamper
   namespace: default
 spec:
   replicas: 1
   selector:
     matchLabels:
       # Used to match pre-existing pods that may be affected during updates.
-      run: etl-gardener-traceroute
+      run: etl-gardener-scamper
   strategy:
     rollingUpdate:
       maxSurge: 1
@@ -20,7 +20,7 @@ spec:
       labels:
         # Note: run=etl-gardener-server should match a service config with a
         # public IP and port so that it is publicly accessible.
-        run: etl-gardener-traceroute
+        run: etl-gardener-scamper
       annotations:
         # Tell prometheus service discovery to collect metrics from the containers.
         prometheus.io/scrape: 'true'
