@@ -46,7 +46,7 @@ spec:
         # NOTE: We read archives from the public archive for all projects.
         # TODO: Update when we address https://github.com/m-lab/dev-tracker/issues/369
         - name: TASKFILE_BUCKET
-          value: "archive-{{GCLOUD_PROJECT}}"  # This will work for sandbox/staging, but prod should use archive-measurement-lab.
+          value: "archive-measurement-lab"
         - name: START_DATE
           value: "20190329"
         - name: DATE_SKIP  # Should be 0 for normal operation
