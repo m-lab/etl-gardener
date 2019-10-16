@@ -159,7 +159,7 @@ func NewBQConfig(config cloud.Config) cloud.BQConfig {
 // It uses PROJECT, QUEUE_BASE, and NUM_QUEUES.
 // NOTE: ctx should only be used within the function scope, and not reused later.
 // Not currently clear if that is true.
-func taskHandlerFromEnv(ctx context.Context, client *http.Client) (*reproc.TaskHandler, error) {
+func taskHandlerFromEnv(ctx context.Context, client *http.Client, expt string) (*reproc.TaskHandler, error) {
 	if env.Error != nil {
 		log.Println(env.Error)
 		log.Println(env)
@@ -186,7 +186,7 @@ func taskHandlerFromEnv(ctx context.Context, client *http.Client) (*reproc.TaskH
 	if err != nil {
 		return nil, err
 	}
-	return reproc.NewTaskHandler(env.Experiment, exec, queues, saver), nil
+	return reproc.NewTaskHandler(expt, exec, queues, saver), nil
 }
 
 // doDispatchLoop just sequences through archives in date order.
@@ -244,7 +244,10 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "</br></br>\n")
 
 	// TODO - attach the environment to the context.
-	state.WriteHTMLStatusTo(r.Context(), w, env.Project, env.Experiment)
+	s := strings.Split(env.Experiment, ",")
+	for _, expt := range s {
+		state.WriteHTMLStatusTo(r.Context(), w, env.Project, expt)
+	}
 	fmt.Fprintf(w, "</br>\n")
 
 	env := os.Environ()
@@ -285,46 +288,49 @@ func setupService(ctx context.Context) error {
 	http.HandleFunc("/ready", healthCheck)
 
 	// TODO - this creates a storage client, which should be closed on termination.
-	handler, err := taskHandlerFromEnv(ctx, http.DefaultClient)
+	s := strings.Split(env.Experiment, ",")
+	for _, expt := range s {
+		handler, err := taskHandlerFromEnv(ctx, http.DefaultClient, expt)
 
-	if err != nil {
-		log.Println(err)
-		return err
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+
+		startDate := env.StartDate
+
+		ds, err := state.NewDatastoreSaver(ctx, env.Project)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+
+		// Move the timeout into GetStatus?
+		taskCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+
+		tasks, err := ds.FetchAllTasks(taskCtx, expt)
+		cancel()
+
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+		maxDate, err := handler.RestartTasks(ctx, tasks)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+
+		// Move the start date after the max observed date.
+		// Note that if we restart while wrapping back to start date, this will essentially
+		// result in restarting at the original start date, after wrapping.
+		for !maxDate.Before(startDate) {
+			startDate = startDate.AddDate(0, 0, 1+env.DateSkip)
+		}
+
+		log.Println("Using start date of", startDate)
+		go doDispatchLoop(ctx, handler, startDate, env.StartDate, env.Bucket, expt)
 	}
-
-	startDate := env.StartDate
-
-	ds, err := state.NewDatastoreSaver(ctx, env.Project)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-
-	// Move the timeout into GetStatus?
-	taskCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	tasks, err := ds.FetchAllTasks(taskCtx, env.Experiment)
-	cancel()
-
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-	maxDate, err := handler.RestartTasks(ctx, tasks)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-
-	// Move the start date after the max observed date.
-	// Note that if we restart while wrapping back to start date, this will essentially
-	// result in restarting at the original start date, after wrapping.
-	for !maxDate.Before(startDate) {
-		startDate = startDate.AddDate(0, 0, 1+env.DateSkip)
-	}
-
-	log.Println("Using start date of", startDate)
-	go doDispatchLoop(ctx, handler, startDate, env.StartDate, env.Bucket, env.Experiment)
-
 	return nil
 }
 

@@ -53,7 +53,7 @@ spec:
         - name: TASK_FILE_SKIP # Should be 0 for normal operation
           value: "0"
         - name: EXPERIMENT
-          value: "ndt/traceroute"
+          value: "ndt/traceroute,host/traceroute,bismark/traceroute,neubot/traceroute"
         - name: DATASET
           value: "batch"
         - name: FINAL_DATASET
