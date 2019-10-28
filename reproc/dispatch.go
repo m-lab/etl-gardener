@@ -301,6 +301,9 @@ func doDispatchLoop(ctx context.Context, handler *TaskHandler, bucket string, ex
 }
 
 // RunDispatchLoop sets up dispatch loop.
+// TODO inject DatastoreSaver to allow unit testing??  TaskHandler would require a fake task queue.
+// However, this code will be replaced soon.  Replacement code should have better unit tests, but it might
+// be wasted effort to improve coverage on this code.
 func RunDispatchLoop(ctx context.Context, th *TaskHandler, project string, bucket string, exp string, startDate time.Time, dateSkip int) error {
 	ds, err := state.NewDatastoreSaver(ctx, project)
 	if err != nil {
