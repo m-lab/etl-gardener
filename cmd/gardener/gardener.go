@@ -231,6 +231,7 @@ var healthy = false
 // healthCheck, for now, used for both /ready and /alive.
 func healthCheck(w http.ResponseWriter, r *http.Request) {
 	if !healthy {
+		log.Println("Reporting unhealthy for", r.RequestURI)
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, `{"message": "Internal server error."}`)
 	} else {
