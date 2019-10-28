@@ -36,6 +36,7 @@ spec:
       containers:
       - image: gcr.io/{{GCLOUD_PROJECT}}/github-m-lab-etl-gardener:{{GIT_COMMIT}}
         name: etl-gardener
+        args: ["--prometheusx.listen-address=:9090"]
         env:
         - name: GARDENER_SERVICE
           value: "true"

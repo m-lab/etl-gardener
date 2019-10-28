@@ -271,9 +271,6 @@ func setupService(ctx context.Context) error {
 	// Enable block profiling
 	runtime.SetBlockProfileRate(1000000) // One event per msec.
 
-	// Expose prometheus and pprof metrics on a separate port.
-	prometheusx.MustStartPrometheus(":9090")
-
 	// We also setup another prometheus handler on a non-standard path. This
 	// path name will be accessible through the AppEngine service address,
 	// however it will be served by a random instance.
@@ -338,8 +335,23 @@ func init() {
 }
 
 func main() {
+	flag.Parse()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if env.Error != nil {
+		log.Println(env.Error)
+		log.Println(env)
+		os.Exit(1)
+	}
+
+	// Enable block profiling
+	runtime.SetBlockProfileRate(1000000) // One event per msec.
+
+	// Expose prometheus and pprof metrics on a separate port.
+	prometheusx.MustServeMetrics()
+
 
 	// Check if invoked as a service.
 	isService, _ := strconv.ParseBool(os.Getenv("GARDENER_SERVICE"))
