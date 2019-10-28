@@ -190,35 +190,6 @@ func taskHandlerFromEnv(ctx context.Context, client *http.Client) (*reproc.TaskH
 	return reproc.NewTaskHandler(env.Experiment, exec, queues, saver), nil
 }
 
-// doDispatchLoop just sequences through archives in date order.
-// It will generally be blocked on the queues.
-// It will start processing at startDate, and when it catches up to "now" it will restart at restartDate.
-func doDispatchLoop(ctx context.Context, handler *reproc.TaskHandler, startDate time.Time, restartDate time.Time, bucket string, experiment string) {
-	log.Println("(Re)starting at", startDate)
-	next := startDate
-
-	for {
-		prefix := fmt.Sprintf("gs://%s/%s/", bucket, experiment) + next.Format("2006/01/02/")
-
-		// Note that this blocks until a queue is available.
-		err := handler.AddTask(ctx, prefix)
-		if err != nil {
-			// Only error expected here is ErrTerminating
-			log.Println(err)
-		}
-
-		// Advance to next date, possibly skipping days if DATE_SKIP env var was set.
-		next = next.AddDate(0, 0, 1+env.DateSkip)
-
-		// If gardener has processed all dates up now, then start over.
-		if next.After(time.Now()) {
-			// TODO - load this from DataStore
-			log.Println("Starting over at", restartDate)
-			next = restartDate
-		}
-	}
-}
-
 // StartDateRFC3339 is the date at which reprocessing will start when it catches
 // up to present.  For now, we are making this the beginning of the ETL timeframe,
 // until we get annotation fixed to use the actual data date instead of NOW.
@@ -267,53 +238,6 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// setupLegacyService prepares the setting for a service.
-// The configuration info comes from environment variables.
-func setupLegacyService(ctx context.Context) error {
-	// TODO - this creates a storage client, which should be closed on termination.
-	handler, err := taskHandlerFromEnv(ctx, http.DefaultClient)
-
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-
-	startDate := env.StartDate
-
-	ds, err := state.NewDatastoreSaver(ctx, env.Project)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-
-	// Move the timeout into GetStatus?
-	taskCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	tasks, err := ds.FetchAllTasks(taskCtx, env.Experiment)
-	cancel()
-
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-	maxDate, err := handler.RestartTasks(ctx, tasks)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-
-	// Move the start date after the max observed date.
-	// Note that if we restart while wrapping back to start date, this will essentially
-	// result in restarting at the original start date, after wrapping.
-	for !maxDate.Before(startDate) {
-		startDate = startDate.AddDate(0, 0, 1+env.DateSkip)
-	}
-
-	log.Println("Using start date of", startDate)
-	go doDispatchLoop(ctx, handler, startDate, env.StartDate, env.Bucket, env.Experiment)
-
-	return nil
-}
-
 // ###############################################################################
 //  Main
 // ###############################################################################
@@ -351,9 +275,17 @@ func main() {
 	// Check if invoked as a service.
 	isService, _ := strconv.ParseBool(os.Getenv("GARDENER_SERVICE"))
 	if isService {
-		// If setupService() returns an err instead of nil, healthy will be
+		// TODO - this creates a storage client, which should be closed on termination.
+		th, err := taskHandlerFromEnv(ctx, http.DefaultClient)
+
+		if err != nil {
+			log.Println(err)
+			os.Exit(1)
+		}
+
+		// If RunDispatchLoop() returns an err instead of nil, healthy will be
 		// set as false and eventually it will cause kubernetes to roll back.
-		err := setupLegacyService(ctx)
+		err = reproc.RunDispatchLoop(ctx, th, env.Project, env.Bucket, env.Experiment, env.StartDate, env.DateSkip)
 		if err != nil {
 			healthy = false
 			log.Println("Running as unhealthy service")

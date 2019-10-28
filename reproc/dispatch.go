@@ -11,6 +11,7 @@ package reproc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 	"sync"
@@ -268,4 +269,70 @@ queueLoop:
 	}
 
 	return maxDate, nil
+}
+
+// doDispatchLoop just sequences through archives in date order.
+// It will generally be blocked on the queues.
+// It will start processing at startDate, and when it catches up to "now" it will restart at restartDate.
+func doDispatchLoop(ctx context.Context, handler *TaskHandler, bucket string, exp string, startDate time.Time, restartDate time.Time, dateSkip int) {
+	log.Println("(Re)starting at", startDate)
+	next := startDate
+
+	for {
+		prefix := fmt.Sprintf("gs://%s/%s/", bucket, exp) + next.Format("2006/01/02/")
+
+		// Note that this blocks until a queue is available.
+		err := handler.AddTask(ctx, prefix)
+		if err != nil {
+			// Only error expected here is ErrTerminating
+			log.Println(err)
+		}
+
+		// Advance to next date, possibly skipping days if DATE_SKIP env var was set.
+		next = next.AddDate(0, 0, 1+dateSkip)
+
+		// If gardener has processed all dates up now, then start over.
+		if next.After(time.Now()) {
+			// TODO - load this from DataStore
+			log.Println("Starting over at", restartDate)
+			next = restartDate
+		}
+	}
+}
+
+// RunDispatchLoop sets up dispatch loop.
+func RunDispatchLoop(ctx context.Context, th *TaskHandler, project string, bucket string, exp string, startDate time.Time, dateSkip int) error {
+	ds, err := state.NewDatastoreSaver(ctx, project)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	// Move the timeout into GetStatus?
+	taskCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	tasks, err := ds.FetchAllTasks(taskCtx, exp)
+	cancel()
+
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	maxDate, err := th.RestartTasks(ctx, tasks)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	restartDate := startDate
+	// Move the start date after the max observed date.
+	// Note that if we restart while wrapping back to start date, this will essentially
+	// result in restarting at the original start date, after wrapping.
+	for !maxDate.Before(startDate) {
+		restartDate = startDate.AddDate(0, 0, 1+dateSkip)
+	}
+
+	log.Println("Using start date of", startDate)
+	go doDispatchLoop(ctx, th, bucket, exp, restartDate, startDate, dateSkip)
+
+	return nil
 }
