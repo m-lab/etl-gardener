@@ -330,8 +330,8 @@ func RunDispatchLoop(ctx context.Context, th *TaskHandler, project string, bucke
 	// Move the start date after the max observed date.
 	// Note that if we restart while wrapping back to start date, this will essentially
 	// result in restarting at the original start date, after wrapping.
-	for !maxDate.Before(startDate) {
-		restartDate = startDate.AddDate(0, 0, 1+dateSkip)
+	for !maxDate.Before(restartDate) {
+		restartDate = restartDate.AddDate(0, 0, 1+dateSkip)
 	}
 
 	log.Println("Using start date of", startDate)
