@@ -21,6 +21,7 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
+// NOTE: This depends on actual app engine queue_pusher service.
 func TestGetTaskqueueStats(t *testing.T) {
 	config := cloud.Config{Client: http.DefaultClient, Project: "mlab-sandbox"}
 	stats, err := tq.GetTaskqueueStats(config, "test-queue")
