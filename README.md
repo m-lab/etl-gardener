@@ -15,7 +15,11 @@ workstation without configuring the emulator.
 
 To start the emulator, .travis.yml now includes:
 
-```base
+```yaml
+before_script:
+# Try removing boto config, recommended for datastore emulator.
+- sudo rm -f /etc/boto.cfg
+
 - gcloud components install beta
 - gcloud components install cloud-datastore-emulator
 - gcloud beta emulators datastore start --no-store-on-disk &
@@ -34,27 +38,33 @@ Gardener will soon provide a job allocation service to the ETL parsers.  To do
 this, we run gardener in a cluster that uses a custom internal network, and
 reserve a static ip address at 10.100.1.2 for the Gardener service.
 
-The network is set up like this (after setting up the kubectl config
-appropriately):
+The network is set up like this:
 
-```
-gcloud compute networks subnets create default-gardener --network=default \
---range=10.100.0.0/16
-```
-
-```
-gcloud --project=mlab-sandbox compute addresses create \
-default-gardener-etl-gardener --region=us-east1 --subnet=default-gardener \
---addresses=10.100.1.2
+```bash
+gcloud --project=mlab-sandbox \
+compute networks create data-processing --subnet-mode=custom \
+--description="Network for communication among backend processing services."
 ```
 
+```bash
+gcloud --project=mlab-sandbox \
+compute networks subnets create dp-gardener \
+--network=data-processing --range=10.100.0.0/16 \
+--enable-private-ip-google-access --region=us-east1 \
+--description="Subnet for gardener,etl,annotation-service. Subnet has the same name and address range across projects, but each is in a distinct (data-processing) VPC network."
 ```
-gcloud container clusters create data-processing \
---region=us-east1 --num-nodes 2 \
+
+```bash
+gcloud --project=mlab-sandbox compute addresses create etl-gardener --region=us-east1 --subnet=dp-gardener --addresses=10.100.1.2
+```
+
+```bash
+gcloud --project=mlab-sandbox container clusters create data-processing \
+--region=us-east1 --enable-autorepair --enable-autoupgrade \
+--network=data-processing --subnetwork=dp-gardener \
 --scopes=bigquery,taskqueue,compute-rw,storage-ro,service-control,service-management,datastore \
---node-labels=gardener-node=true --enable-autorepair --enable-autoupgrade \
---image-type=cos --machine-type=n1-standard-4 --labels=data-processing=true \
---subnetwork=default-gardener
+--num-nodes 2 --image-type=cos --machine-type=n1-standard-4 \
+ --node-labels=gardener-node=true --labels=data-processing=true
 ```
 
 ### Accessing from ETL parser instances
