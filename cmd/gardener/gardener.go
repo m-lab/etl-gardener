@@ -30,6 +30,11 @@ import (
 	_ "expvar"
 )
 
+func init() {
+	// Always prepend the filename and line number.
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
 // Environment provides "global" variables.
 // Any env vars that we want to read only at startup should be stored here.
 type environment struct {
@@ -40,8 +45,9 @@ type environment struct {
 	Commit  string
 	Release string
 
-	// Variables controlling reprocessing.
-	Bucket       string
+	Bucket string
+
+	// These are only used for the "legacy" service mode.
 	BatchDataset string // All working data is written to the batch data set.
 	FinalDataset string // Ultimate deduplicated, partitioned output dataset.
 	QueueBase    string // Base of the queue names.  Will append -0, -1, ...
@@ -49,9 +55,6 @@ type environment struct {
 	NumQueues    int
 	StartDate    time.Time // The archive date to start reprocessing.
 	DateSkip     int       // Number of dates to skip between PostDay, to allow rapid scanning in sandbox.
-
-	// TestMode is used to change behavior for unit tests.
-	TestMode bool
 }
 
 // env provides environment vars.
@@ -138,14 +141,6 @@ func LoadEnv() {
 
 	// load variables required for task queue based operation.
 	loadEnvVarsForTaskQueue()
-}
-
-func init() {
-	// HACK This allows some modified behavior when running unit tests.
-	if flag.Lookup("test.v") != nil {
-		env.TestMode = true
-	}
-	LoadEnv()
 }
 
 // ###############################################################################
@@ -243,17 +238,10 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 //  Main
 // ###############################################################################
 
-func init() {
-	// Always prepend the filename and line number.
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-}
-
 func main() {
-	flag.Parse()
+	flag.Parse() // For prometheus listen address.
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
+	LoadEnv()
 	if env.Error != nil {
 		log.Println(env.Error)
 		log.Println(env)
@@ -277,6 +265,9 @@ func main() {
 	isService, _ := strconv.ParseBool(os.Getenv("GARDENER_SERVICE"))
 	if isService {
 		// TODO - this creates a storage client, which should be closed on termination.
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
 		th, err := taskHandlerFromEnv(ctx, http.DefaultClient)
 
 		if err != nil {
@@ -292,7 +283,7 @@ func main() {
 			log.Println("Running as unhealthy service")
 		} else {
 			healthy = true
-			log.Println("Running as service")
+			log.Println("Running as task-queue dispatcher service")
 		}
 		log.Fatal(http.ListenAndServe(":8080", nil))
 		return
