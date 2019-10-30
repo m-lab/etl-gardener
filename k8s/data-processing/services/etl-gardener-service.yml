@@ -5,9 +5,6 @@ metadata:
   namespace: default
   annotations:
     cloud.google.com/load-balancer-type: "Internal"
-    #cloud.google.com/neg: '{"exposed_ports":{"8080":{}}}'
-    # INGRESS seems to persist even after commenting this out!
-    # kubernetes.io/ingress.regional-static-ip-name: mlab-etl-gardener
 spec:
   ports:
   - port: 8080
