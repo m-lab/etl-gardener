@@ -142,8 +142,6 @@ deploy:
 - provider: script
   script:
     $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-oti data-processing-cluster ./apply-cluster.sh
-    &&
-    $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-oti data-processing ./apply-cluster.sh
   skip_cleanup: true
   on:
     repo: m-lab/etl-gardener
