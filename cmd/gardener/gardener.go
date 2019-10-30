@@ -255,7 +255,7 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func jobServer(w http.ResponseWriter, r *http.Request) {
+func jobHandler(w http.ResponseWriter, r *http.Request) {
 	// This is a real hardcoded task to return.
 	log.Println(r.RequestURI)
 	fmt.Fprint(w, "archive-measurement-lab/ndt/tcpinfo/2019/10/01")
@@ -292,7 +292,7 @@ func main() {
 	case "manager":
 		// This is new new "manager" mode, in which Gardener provides /job and /update apis
 		// for parsers to get work and report progress.
-		http.HandleFunc("/job", jobServer) // healthCheck works correctly
+		http.HandleFunc("/job", jobHandler) // healthCheck works correctly
 		healthy = true
 		log.Println("Running as manager service")
 	case "legacy":
