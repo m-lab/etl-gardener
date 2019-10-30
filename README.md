@@ -30,20 +30,31 @@ that if you do, you'll want to clean up the `DATASTORE_` environment variables.
 
 ## k8s cluster and network
 
-Gardener will soon provide a job allocation service to the ETL parsers.  To do this, we run gardener in a cluster that uses a custom internal network, and reserve a static ip address at 10.100.1.2 for the Gardener service.
+Gardener will soon provide a job allocation service to the ETL parsers.  To do
+this, we run gardener in a cluster that uses a custom internal network, and
+reserve a static ip address at 10.100.1.2 for the Gardener service.
 
-The network is set up like this (after setting up the kubectl config appropriately):
-
-```
-gcloud compute networks subnets create default-gardener --network=default --range=10.100.0.0/16
-```
-
-```
-gcloud --project=mlab-sandbox compute addresses create default-gardener-etl-gardener --region=us-east1 --subnet=default-gardener --addresses=10.100.1.2
-```
+The network is set up like this (after setting up the kubectl config
+appropriately):
 
 ```
-gcloud container clusters create data-processing --region=us-east1 --num-nodes 2 --scopes=bigquery,taskqueue,compute-rw,storage-ro,service-control,service-management,datastore   --node-labels=gardener-node=true   --enable-autorepair   --enable-autoupgrade   --image-type=cos   --machine-type=n1-standard-4 --labels=data-processing=true --subnetwork=default-gardener
+gcloud compute networks subnets create default-gardener --network=default \
+--range=10.100.0.0/16
+```
+
+```
+gcloud --project=mlab-sandbox compute addresses create \
+default-gardener-etl-gardener --region=us-east1 --subnet=default-gardener \
+--addresses=10.100.1.2
+```
+
+```
+gcloud container clusters create data-processing \
+--region=us-east1 --num-nodes 2 \
+--scopes=bigquery,taskqueue,compute-rw,storage-ro,service-control,service-management,datastore \
+--node-labels=gardener-node=true --enable-autorepair --enable-autoupgrade \
+--image-type=cos --machine-type=n1-standard-4 --labels=data-processing=true \
+--subnetwork=default-gardener
 ```
 
 ### Accessing from ETL parser instances
@@ -54,7 +65,9 @@ network:
   subnetwork_name: default-gardener
 ```
 
-NOTE: In addition to adding the subnetwork_name to the config, the app engine instances must run in the same region as the data-processing cluster, i.e. us-east1.
+NOTE: In addition to adding the subnetwork_name to the config, the app engine
+instances must run in the same region as the data-processing cluster, i.e.
+us-east1.
 
 ## Node Pools (deprecated)
 
