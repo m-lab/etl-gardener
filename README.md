@@ -42,35 +42,37 @@ The network is set up like this:
 
 ```bash
 gcloud --project=mlab-sandbox \
-compute networks create data-processing --subnet-mode=custom \
---description="Network for communication among backend processing services."
+  compute networks create data-processing --subnet-mode=custom \
+  --description="Network for communication among backend processing services."
 ```
 
 ```bash
 gcloud --project=mlab-sandbox \
-compute networks subnets create dp-gardener \
---network=data-processing --range=10.100.0.0/16 \
---enable-private-ip-google-access --region=us-east1 \
---description="Subnet for gardener,etl,annotation-service. Subnet has the same name and address range across projects, but each is in a distinct (data-processing) VPC network."
+  compute networks subnets create dp-gardener \
+  --network=data-processing --range=10.100.0.0/16 \
+  --enable-private-ip-google-access --region=us-east1 \
+  --description="Subnet for gardener,etl,annotation-service. Subnet has the same name and address range across projects, but each is in a distinct (data-processing) VPC network."
 ```
 
 ```bash
-gcloud --project=mlab-sandbox compute addresses create etl-gardener --region=us-east1 --subnet=dp-gardener --addresses=10.100.1.2
+gcloud --project=mlab-sandbox compute addresses create etl-gardener \
+  --region=us-east1 --subnet=dp-gardener --addresses=10.100.1.2
 ```
 
 ```bash
 gcloud --project=mlab-sandbox container clusters create data-processing \
---region=us-east1 --enable-autorepair --enable-autoupgrade \
---network=data-processing --subnetwork=dp-gardener \
---scopes=bigquery,taskqueue,compute-rw,storage-ro,service-control,service-management,datastore \
---num-nodes 2 --image-type=cos --machine-type=n1-standard-4 \
- --node-labels=gardener-node=true --labels=data-processing=true
+  --region=us-east1 --enable-autorepair --enable-autoupgrade \
+  --network=data-processing --subnetwork=dp-gardener \
+  --scopes=bigquery,taskqueue,compute-rw,storage-ro,service-control,service-management,datastore \
+  --num-nodes 2 --image-type=cos --machine-type=n1-standard-4 \
+  --node-labels=gardener-node=true --labels=data-processing=true
 ```
 
 ### Accessing from ETL parser instances
 
 ETL Parsers will access the Gardener service through the custom subnetwork.  This requires adding to the network section of the App Engine Flex config:
-```
+
+```yaml
 network:
   subnetwork_name: default-gardener
 ```
@@ -86,7 +88,7 @@ Gardener runs in the GKE data-processing-cluster.
 Each cluster includes a node-pool reserved for Gardener deployments, created
 using the following command line:
 
-```
+```bash
 gcloud --project=mlab-sandbox container node-pools create gardener-pool \
   --cluster=data-processing-cluster \
   --num-nodes=3 \
