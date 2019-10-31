@@ -38,13 +38,27 @@ Gardener will soon provide a job allocation service to the ETL parsers.  To do
 this, we run gardener in a cluster that uses a custom internal network, and
 reserve a static ip address at 10.100.1.2 for the Gardener service.
 
-The network is set up like this:
+The network and firewall rules are set up like this:
+(TODO - what about prometheus metrics and app engine logs)
 
 ```bash
 gcloud --project=mlab-sandbox \
   compute networks create data-processing --subnet-mode=custom \
   --description="Network for communication among backend processing services."
+
+gcloud --project=mlab-sandbox compute firewall-rules create dp-allow-ssh \
+  --network=data-processing --allow=tcp:22 --direction=INGRESS \
+  --description='Allow SSH from anywhere'
+
+gcloud --project=mlab-sandbox compute firewall-rules create \
+dp-allow-internal --network=data-processing \
+--allow=tcp:0-65535,udp:0-65535,icmp --direction=INGRESS \
+--source-ranges=10.128.0.0/9,10.100.0.0/16 \
+--description='Allow internal traffic from anywhere'
+
 ```
+
+Then the subnet and the static IP address...
 
 ```bash
 gcloud --project=mlab-sandbox \
