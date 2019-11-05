@@ -29,13 +29,14 @@ func NewBase(name string) Base {
 	return Base{name: name}
 }
 
-// PersistentStore provides API for saving state objects.
-type PersistentStore interface {
+// Saver provides API for saving and retrieving StateObjects.
+type Saver interface {
 	Save(ctx context.Context, o StateObject) error
 	Delete(ctx context.Context, o StateObject) error
+	Fetch(ctx context.Context, o StateObject) error
 }
 
-// DatastoreSaver will implement a Saver that stores state objects in Datastore.
+// DatastoreSaver implements a Saver that stores state objects in Datastore.
 type DatastoreSaver struct {
 	Client    *datastore.Client
 	Namespace string
@@ -49,7 +50,7 @@ func NewDatastoreSaver(ctx context.Context, project string) (*DatastoreSaver, er
 	if err != nil {
 		return nil, err
 	}
-	return &DatastoreSaver{client, "scoreboard"}, nil
+	return &DatastoreSaver{Client: client, Namespace: "scoreboard"}, nil
 }
 
 func (ds *DatastoreSaver) key(o StateObject) *datastore.Key {
@@ -80,7 +81,7 @@ func (ds *DatastoreSaver) Delete(ctx context.Context, o StateObject) error {
 	return ctx.Err()
 }
 
-// Fetch fetches state of requested StateObject from Datastore.
+// Fetch implements Saver.Fetch to fetch state of requested StateObject from Datastore.
 func (ds *DatastoreSaver) Fetch(ctx context.Context, o StateObject) error {
 	key := datastore.Key{Kind: o.Kind(), Name: o.Name(), Namespace: ds.Namespace}
 	return ds.Client.Get(ctx, &key, o)
