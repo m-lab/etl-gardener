@@ -2,6 +2,8 @@ package persistence_test
 
 import (
 	"context"
+	"fmt"
+	"log"
 	"reflect"
 	"testing"
 
@@ -11,6 +13,11 @@ import (
 	"github.com/m-lab/go/rtx"
 )
 
+func init() {
+	// Always prepend the filename and line number.
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
 type O1 struct {
 	persistence.Base
 
@@ -18,7 +25,7 @@ type O1 struct {
 }
 
 // Kind implements StateObject.Kind
-func (o O1) Kind() string {
+func (o O1) GetKind() string {
 	return reflect.TypeOf(o).Name()
 }
 
@@ -58,4 +65,40 @@ func TestDatastoreSaver(t *testing.T) {
 	if err != datastore.ErrNoSuchEntity {
 		t.Fatal("Should have errored")
 	}
+}
+
+func TestFetchAll(t *testing.T) {
+	o := NewO1("foo")
+	o.Integer = 1234
+
+	ctx := context.Background()
+	ds, err := persistence.NewDatastoreSaver(ctx, "mlab-testing")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = ds.Save(ctx, &o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 20; i++ {
+		o := NewO1(fmt.Sprint("foo", i))
+		o.Integer = (int32)(i)
+		err = ds.Save(ctx, &o)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	keys, objs, err := ds.FetchAll(ctx, O1{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	so := objs.([]O1)
+	if len(so) != 21 {
+		t.Error("Should be 21 items, but got", len(so))
+	}
+
+	err = ds.Client.DeleteMulti(ctx, keys)
+	rtx.Must(err, "Delete error")
 }
