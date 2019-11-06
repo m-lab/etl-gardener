@@ -62,7 +62,7 @@ spec:
         - name: QUEUE_BASE
           value: "etl-sidestream-batch-"
         - name: NUM_QUEUES
-          value: "16"
+          value: "8"  # There are actually 16 but we don't need so many now.
 
         ports:
         - name: prometheus-port
