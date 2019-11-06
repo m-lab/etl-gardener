@@ -106,7 +106,11 @@ func (s *testSaver) GetTask(name string) []Task {
 func (s *testSaver) GetDeletes(t Task) map[string]struct{} {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	return s.delete
+	d := make(map[string]struct{}, len(s.delete))
+	for k, v := range s.delete {
+		d[k] = v
+	}
+	return d
 }
 
 func assertPersistentStore() { func(ex state.PersistentStore) {}(&testSaver{}) }

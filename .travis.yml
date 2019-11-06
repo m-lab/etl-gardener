@@ -75,6 +75,9 @@ script:
     go test -v -coverprofile=_integration.cov ./... -tags=integration ;
   fi
 
+# Also run some concurrency sensitive tests with -race
+- go test -v ./tracker/... -race
+
 # Combine coverage of unit tests and integration tests and send the results to coveralls.
 - $HOME/gopath/bin/gocovmerge _*.cov > _merge.cov
 - $HOME/gopath/bin/goveralls -coverprofile=_merge.cov -service=travis-ci
