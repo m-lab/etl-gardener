@@ -51,10 +51,10 @@ gcloud --project=mlab-sandbox compute firewall-rules create dp-allow-ssh \
   --description='Allow SSH from anywhere'
 
 gcloud --project=mlab-sandbox compute firewall-rules create \
-dp-allow-internal --network=data-processing \
---allow=tcp:0-65535,udp:0-65535,icmp --direction=INGRESS \
---source-ranges=10.128.0.0/9,10.100.0.0/16 \
---description='Allow internal traffic from anywhere'
+  dp-allow-internal --network=data-processing \
+  --allow=tcp:0-65535,udp:0-65535,icmp --direction=INGRESS \
+  --source-ranges=10.128.0.0/9,10.100.0.0/16 \
+  --description='Allow internal traffic from anywhere'
 
 ```
 
