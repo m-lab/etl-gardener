@@ -88,20 +88,23 @@ func (ds *DatastoreSaver) Fetch(ctx context.Context, o StateObject) error {
 	return ds.Client.Get(ctx, &key, o)
 }
 
-// FetchAll fetches all objects of a particular Kind from Datastore.
-// Passing .Interface() to GetAll doesn't work, whether the slice is empty
-// or not, and we can't assert the correct type because we don't know it.
-// However, passing Interface() to GetMulti works just fine, so we use
-// that.
+// FetchAll fetches all objects of a particular type from Datastore.
+// The "o" parameter should be an instance of the type to fetch, which is
+// used only to determine the kind, and to create the result slice.
 func (ds *DatastoreSaver) FetchAll(ctx context.Context, o StateObject) ([]*datastore.Key, interface{}, error) {
 	q := datastore.NewQuery(o.GetKind()).Namespace(ds.Namespace)
 	keys, err := ds.Client.GetAll(ctx, q.KeysOnly(), nil)
 	if err != nil {
 		return nil, nil, err
 	}
+	// Passing .Interface() to GetAll doesn't work, whether the slice is empty
+	// or not, and we can't assert the correct type because we don't know it.
+	// However, passing Interface() to GetMulti works just fine, so we use
+	// that.
 
-	// GetMulti accepts a slice of interface{}, whereas GetAll does not.
-	// It modifies the elements of the slice, and does not change the slice itself.
+	// GetMulti accepts a slice as an interface{}, whereas GetAll does not.
+	// It modifies the elements of the slice, and does not change the slice
+	// itself.
 	objs := reflect.MakeSlice(reflect.SliceOf(reflect.TypeOf(o)), len(keys), len(keys)).Interface()
 	err = ds.Client.GetMulti(ctx, keys, objs)
 	if err != nil {
