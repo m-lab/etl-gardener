@@ -68,7 +68,7 @@ func (ds *DatastoreSaver) Save(ctx context.Context, o StateObject) error {
 	if err != nil {
 		return err
 	}
-	return ctx.Err()
+	return nil
 }
 
 // Delete implements Saver.Delete using Datastore.
@@ -79,7 +79,7 @@ func (ds *DatastoreSaver) Delete(ctx context.Context, o StateObject) error {
 	if err != nil {
 		return err
 	}
-	return ctx.Err()
+	return nil
 }
 
 // Fetch implements Saver.Fetch to fetch state of requested StateObject from Datastore.
