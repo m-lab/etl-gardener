@@ -1,4 +1,4 @@
-# Gardener Tracker 
+# Gardener Tracker
 
 The Tracker keeps track of the state of all parsing activities, persists
 the data in datastore, and recovers the system state from datastore on
@@ -13,6 +13,6 @@ The tracker is used by other components of Gardener to decide:
 The tracker provides an API to the other Gardener components to answer
 questions about the system state.
 
-1.
-1.
-1.
+1. a
+1. b
+1. c

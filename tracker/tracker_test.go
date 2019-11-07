@@ -39,22 +39,18 @@ func createJobs(t *testing.T, tk *tracker.Tracker, prefix string, n int) {
 		}(i)
 	}
 	wg.Wait()
+	// BUG: There may be Saves still in flight
 }
 
-func deleteJobs(t *testing.T, tk *tracker.Tracker, prefix string, n int) {
+func completeJobs(t *testing.T, tk *tracker.Tracker, prefix string, n int) {
 	// Delete all jobs.
-	wg := sync.WaitGroup{}
-	wg.Add(n)
 	for i := 0; i < n; i++ {
-		go func(i int) {
-			err := tk.DeleteJob(fmt.Sprint(prefix, i))
-			if err != nil {
-				t.Error(err)
-			}
-			wg.Done()
-		}(i)
+		err := tk.SetJobState(fmt.Sprint(prefix, i), "Complete")
+		if err != nil {
+			t.Error(err)
+		}
 	}
-	wg.Wait()
+	tk.Sync() // Force synchronous save cycle.
 }
 
 func TestTrackerAddDelete(t *testing.T) {
@@ -65,16 +61,18 @@ func TestTrackerAddDelete(t *testing.T) {
 	}
 	defer cf() // This context must be kept alive for life of saver.
 
-	tk, err := tracker.InitTracker(saver)
+	tk, err := tracker.InitTracker(saver, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	jobs := 500
-	createJobs(t, &tk, "Job:", jobs)
-	deleteJobs(t, &tk, "Job:", jobs)
+	numJobs := 500
+	createJobs(t, tk, "500Jobs:", numJobs)
+	completeJobs(t, tk, "500Jobs:", numJobs)
 }
 
+// This tests basic Add and update of 2 jobs, and verifies
+// correct error returned when trying to update a third job.
 func TestUpdate(t *testing.T) {
 	sctx, cf := context.WithCancel(context.Background())
 	saver, err := persistence.NewDatastoreSaver(sctx, "mlab-testing")
@@ -83,19 +81,66 @@ func TestUpdate(t *testing.T) {
 	}
 	defer cf()
 
-	tk, err := tracker.InitTracker(saver)
+	tk, err := tracker.InitTracker(saver, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	createJobs(t, &tk, "Job:", 2)
-	defer deleteJobs(t, &tk, "Job:", 2)
+	createJobs(t, tk, "JobToUpdate:", 2)
+	defer completeJobs(t, tk, "JobToUpdate:", 2)
 
-	err = tk.SetJobState("Job:0", "1")
-	err = tk.SetJobState("Job:0", "2")
-	err = tk.SetJobState("Job:0", "3")
+	err = tk.SetJobState("JobToUpdate:0", "1")
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	err = tk.SetJobState("JobToUpdate:0", "2")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = tk.SetJobState("JobToUpdate:0", "3")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// This tests whether AddJob and SetJobState generate appropriate
+// errors when job doesn't exist.
+func TestNonexistentJobAccess(t *testing.T) {
+	sctx, cf := context.WithCancel(context.Background())
+	saver, err := persistence.NewDatastoreSaver(sctx, "mlab-testing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cf()
+
+	tk, err := tracker.InitTracker(saver, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = tk.SetJobState("foobar", "non-existent")
+	if err != tracker.ErrJobNotFound {
+		t.Error("Should be ErrJobNotFound", err)
+	}
+	err = tk.AddJob("foobar")
+	if err != nil {
+		t.Error(err)
+	}
+
+	err = tk.AddJob("foobar")
+	if err != tracker.ErrJobAlreadyExists {
+		t.Error("Should be ErrJobAlreadyExists", err)
+	}
+
+	tk.SetJobState("foobar", "Complete")
+	tk.Sync() // Should cause job cleanup.
+
+	// Job should be gone now.
+	err = tk.SetJobState("foobar", "non-existent")
+	if err != tracker.ErrJobNotFound {
+		t.Error("Should be ErrJobNotFound", err)
 	}
 }
 
@@ -113,14 +158,14 @@ func TestConcurrentUpdates(t *testing.T) {
 	}
 	defer cf()
 
-	tk, err := tracker.InitTracker(saver)
+	tk, err := tracker.InitTracker(saver, 100*time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	jobs := 20
-	createJobs(t, &tk, "Job:", jobs)
-	defer deleteJobs(t, &tk, "Job:", jobs)
+	createJobs(t, tk, "Job:", jobs)
+	defer completeJobs(t, tk, "Job:", jobs)
 
 	start := time.Now()
 	updates := 20 * jobs
@@ -129,9 +174,16 @@ func TestConcurrentUpdates(t *testing.T) {
 	for i := 0; i < updates; i++ {
 		go func(i int) {
 			jn := fmt.Sprint("Job:", rand.Intn(jobs))
-			err := tk.SetJobState(jn, fmt.Sprint(i))
-			if err != nil {
-				log.Fatal(err, " ", jn)
+			if i%5 == 0 {
+				err := tk.SetJobState(jn, fmt.Sprint(i))
+				if err != nil {
+					log.Fatal(err, " ", jn)
+				}
+			} else {
+				err := tk.Heartbeat(jn)
+				if err != nil {
+					log.Fatal(err, " ", jn)
+				}
 			}
 			wg.Done()
 		}(i)

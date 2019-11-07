@@ -1,4 +1,5 @@
 # gardener
+
 | branch | travis-ci | report-card | coveralls |
 |--------|-----------|-----------|-------------|
 | master | [![Travis Build Status](https://travis-ci.org/m-lab/etl-gardener.svg?branch=master)](https://travis-ci.org/m-lab/etl-gardener) | [![Go Report Card](https://goreportcard.com/badge/github.com/m-lab/etl-gardener)](https://goreportcard.com/report/github.com/m-lab/etl-gardener) | [![Coverage Status](https://coveralls.io/repos/m-lab/etl-gardener/badge.svg?branch=master)](https://coveralls.io/github/m-lab/etl-gardener?branch=master) |
@@ -30,7 +31,6 @@ before_script:
 You probably don't want to do this on your local machine, as it will leave
 your local machine configured to use datastore emulation.  So be aware
 that if you do, you'll want to clean up the `DATASTORE_` environment variables.
-
 
 ## k8s cluster and network
 
