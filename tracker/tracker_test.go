@@ -14,6 +14,7 @@ import (
 	"math/rand"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
@@ -99,6 +100,12 @@ func TestUpdate(t *testing.T) {
 }
 
 func TestConcurrentUpdates(t *testing.T) {
+	// This test should be run with -race to detect any concurrency
+	// problems.
+	// The test is intended to exercise job updates at a high
+	// rate, and ensure that there is not contention across jobs.
+	// With cross job contention, the execution time for this test
+	// increases dramatically.
 	sctx, cf := context.WithCancel(context.Background())
 	saver, err := persistence.NewDatastoreSaver(sctx, "mlab-testing")
 	if err != nil {
@@ -115,6 +122,7 @@ func TestConcurrentUpdates(t *testing.T) {
 	createJobs(t, &tk, "Job:", jobs)
 	defer deleteJobs(t, &tk, "Job:", jobs)
 
+	start := time.Now()
 	updates := 20 * jobs
 	wg := sync.WaitGroup{}
 	wg.Add(updates)
@@ -129,4 +137,9 @@ func TestConcurrentUpdates(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+
+	elapsed := time.Since(start)
+	if elapsed > 20*time.Second {
+		t.Error("There appears to be excessive contention.")
+	}
 }

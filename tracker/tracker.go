@@ -1,5 +1,13 @@
 // Package tracker tracks status of all jobs, and handles persistence.
 //
+// Concurrency properties:
+//  1. The job map is protected by a Mutex, but lock is only required
+//     to get a pointer to a job, so there is minimal contention on the
+//     map.
+//  2. JobState objects are persisted to a Saver, and protected by a
+//     job Mutex.  Client code accessing a JobState will always see content
+//     consistent with the saved state, and access may block to ensure this.
+//
 // Alternative idea for serializing updates to Saver...
 //  1. provide a buffered channel to a saver routine for each Job
 //  2. send copies of the job to the channel.
@@ -50,17 +58,16 @@ func (j JobState) GetKind() string {
 	return reflect.TypeOf(j).Name()
 }
 
-// jobWithLock is the object actually saved in the Tracker.  It adds a lock
+// jobWrapper is the object actually saved in the Tracker.  It adds a lock
 // object that must be held when accessing or changing the job, and while
 // persisting the job to the Saver.
-// Saving is generally slow (100 msec or so), and should be done
-// asynchronously, holding the Read lock.  However, updates must be
-// done holding the write lock, and Go locks cannot be upgraded, so we
-// end up having to hold the write lock when Saving, which means other
-// users trying to access the job while it is being saved will block.
+// Saving to datastore is generally slow (100 msec or so), and should be
+// done asynchronously, holding the Job lock.  However, reads and updates
+// must also hold the lock, so anyone code trying to access the job while
+// it is being saved will block.
 // TODO - perhaps use copy on write, and separate reader and writer locks?
-type jobWithLock struct {
-	lock     sync.RWMutex // lock that should be held for all accesses.
+type jobWrapper struct {
+	lock     sync.Mutex // lock that should be held for all accesses.
 	obsolete bool
 	JobState
 }
@@ -68,7 +75,7 @@ type jobWithLock struct {
 // Save takes the lock, and asynchronously saves the state to the Saver.
 // This must be used to ensure that saves are properly serialized.
 // Caller must own j.lock.Lock(), and must NOT release it.
-func (j *jobWithLock) Save(s persistence.Saver) {
+func (j *jobWrapper) Save(s persistence.Saver) {
 	go func() {
 		start := time.Now()
 		defer j.lock.Unlock()
@@ -90,7 +97,7 @@ func (j *jobWithLock) Save(s persistence.Saver) {
 }
 
 // NewJobState creates a new JobState with provided name.
-func NewJobState(name string) JobState {
+func newJobState(name string) JobState {
 	return JobState{
 		Base:   persistence.NewBase(name),
 		errors: make([]string, 0, 1),
@@ -103,19 +110,19 @@ type Tracker struct {
 	saver persistence.Saver
 	lock  sync.RWMutex
 
-	Jobs map[string]*jobWithLock // Map from prefix to JobState.
+	Jobs map[string]*jobWrapper // Map from prefix to JobState.
 }
 
 // InitTracker recovers the Tracker state from a Saver object.
 func InitTracker(saver persistence.Saver) (Tracker, error) {
 	// TODO implement recovery.
 
-	return Tracker{saver: saver, Jobs: make(map[string]*jobWithLock, 100)}, nil
+	return Tracker{saver: saver, Jobs: make(map[string]*jobWrapper, 100)}, nil
 }
 
-// getJobForUpdate gets a pointer to a jobWithLock entry, with the
+// getJobForUpdate gets a pointer to a jobWrapper entry, with the
 // job lock held.
-func (tr *Tracker) getJobForUpdate(prefix string) (*jobWithLock, error) {
+func (tr *Tracker) getJobForUpdate(prefix string) (*jobWrapper, error) {
 	start := time.Now()
 	tr.lock.Lock()
 	job, ok := tr.Jobs[prefix]
@@ -136,18 +143,6 @@ func (tr *Tracker) getJobForUpdate(prefix string) (*jobWithLock, error) {
 	return job, nil
 }
 
-// getJobCopy returns a copy of the JobState, with minimal contention.
-func (tr *Tracker) getJobCopy(prefix string) (JobState, error) {
-	tr.lock.RLock()
-	defer tr.lock.RUnlock()
-	job, ok := tr.Jobs[prefix]
-	if !ok {
-		return JobState{}, ErrPrefixNotFound
-	}
-
-	return job.JobState, nil
-}
-
 // AddJob adds a new job to the Tracker.
 // May return ErrJobAlreadyExists if job already exists.
 func (tr *Tracker) AddJob(prefix string) error {
@@ -157,11 +152,15 @@ func (tr *Tracker) AddJob(prefix string) error {
 	if ok {
 		return ErrJobAlreadyExists
 	}
-	js := NewJobState(prefix)
-	job := jobWithLock{JobState: js}
+	js := newJobState(prefix)
+	job := jobWrapper{JobState: js}
 
-	job.lock.Lock()    // Take the lock on behalf of job.Save.
-	job.Save(tr.saver) // This asynchronously saves the job, and releases the job lock.
+	job.lock.Lock() // Take the lock on behalf of job.Save.
+
+	// This asynchronously saves the job, and releases the job lock.
+	// WARNING: There may be a race here with other code deleting the job.
+	// However, future updates should restore the correct state in Saver.
+	job.Save(tr.saver)
 
 	tr.Jobs[prefix] = &job
 
