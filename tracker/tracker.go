@@ -1,5 +1,10 @@
 // Package tracker tracks status of all jobs, and handles persistence.
 //
+// Alternative idea for serializing updates to Saver...
+//  1. provide a buffered channel to a saver routine for each Job
+//  2. send copies of the job to the channel.
+//  3. once the channel has the update, further updates are fine.
+
 package tracker
 
 import (
@@ -98,7 +103,7 @@ type Tracker struct {
 func InitTracker(saver persistence.Saver) (Tracker, error) {
 	// TODO implement recovery.
 
-	return Tracker{saver: saver}, nil
+	return Tracker{saver: saver, Jobs: make(map[string]*jobWithLock, 100)}, nil
 }
 
 // getJobForUpdate gets a pointer to a jobWithLock entry, with the
@@ -137,7 +142,8 @@ func (tr *Tracker) AddJob(prefix string) error {
 	if ok {
 		return ErrJobAlreadyExists
 	}
-	job := jobWithLock{JobState: NewJobState(prefix)}
+	js := NewJobState(prefix)
+	job := jobWithLock{JobState: js}
 
 	job.lock.Lock()    // Take the lock on behalf of job.Save.
 	job.Save(tr.saver) // This asynchronously saves the job, and releases the job lock.
@@ -145,6 +151,26 @@ func (tr *Tracker) AddJob(prefix string) error {
 	tr.Jobs[prefix] = &job
 
 	return nil
+}
+
+// DeleteJob deletes a job from the tracker and persistent store.
+func (tr *Tracker) DeleteJob(prefix string) error {
+	tr.lock.Lock()
+	job, ok := tr.Jobs[prefix]
+	if !ok {
+		return ErrPrefixNotFound
+	}
+	delete(tr.Jobs, prefix)
+	tr.lock.Unlock()
+
+	// Now no-one else can get it, but another user may already be using it.
+	job.lock.Lock() // Take the lock to ensure no-one else is using it.
+	defer job.lock.Unlock()
+
+	ctx, cf := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cf()
+	err := tr.saver.Delete(ctx, job.JobState)
+	return err
 }
 
 // SetJobState updates a job's state, and handles persistence.
