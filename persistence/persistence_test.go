@@ -6,6 +6,7 @@ import (
 	"log"
 	"reflect"
 	"testing"
+	"time"
 
 	"cloud.google.com/go/datastore"
 
@@ -90,13 +91,24 @@ func TestFetchAll(t *testing.T) {
 		}
 	}
 
-	keys, objs, err := ds.FetchAll(ctx, O1{})
-	if err != nil {
-		t.Fatal(err)
+	var keys []*datastore.Key
+	var slice []O1
+
+	// datastore sometimes takes a while to become consistent.
+	for i := 0; i < 50; i++ {
+		var objs interface{}
+		keys, objs, err = ds.FetchAll(ctx, O1{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		slice = objs.([]O1)
+		if len(slice) >= 21 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
-	so := objs.([]O1)
-	if len(so) != 21 {
-		t.Error("Should be 21 items, but got", len(so))
+	if len(slice) != 21 {
+		t.Error("Should be 21 items, but got", len(slice))
 	}
 
 	err = ds.Client.DeleteMulti(ctx, keys)
