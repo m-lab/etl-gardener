@@ -10,6 +10,8 @@ package tracker_test
 import (
 	"context"
 	"fmt"
+	"log"
+	"math/rand"
 	"sync"
 	"testing"
 
@@ -17,45 +19,114 @@ import (
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
+func init() {
+	// Always prepend the filename and line number.
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
+func createJobs(t *testing.T, tk *tracker.Tracker, prefix string, n int) {
+	// Create 100 jobs in parallel
+	wg := sync.WaitGroup{}
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			err := tk.AddJob(fmt.Sprint(prefix, i))
+			if err != nil {
+				t.Error(err)
+			}
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
+}
+
+func deleteJobs(t *testing.T, tk *tracker.Tracker, prefix string, n int) {
+	// Delete all jobs.
+	wg := sync.WaitGroup{}
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			err := tk.DeleteJob(fmt.Sprint(prefix, i))
+			if err != nil {
+				t.Error(err)
+			}
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
+}
+
 func TestTrackerAddDelete(t *testing.T) {
 	sctx, cf := context.WithCancel(context.Background())
 	saver, err := persistence.NewDatastoreSaver(sctx, "mlab-testing")
 	if err != nil {
 		t.Fatal(err)
 	}
-	cf()
+	defer cf() // This context must be kept alive for life of saver.
 
 	tk, err := tracker.InitTracker(saver)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Create 100 jobs in parallel
+	jobs := 500
+	createJobs(t, &tk, "Job:", jobs)
+	deleteJobs(t, &tk, "Job:", jobs)
+}
+
+func TestUpdate(t *testing.T) {
+	sctx, cf := context.WithCancel(context.Background())
+	saver, err := persistence.NewDatastoreSaver(sctx, "mlab-testing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cf()
+
+	tk, err := tracker.InitTracker(saver)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	createJobs(t, &tk, "Job:", 2)
+	defer deleteJobs(t, &tk, "Job:", 2)
+
+	err = tk.SetJobState("Job:0", "1")
+	err = tk.SetJobState("Job:0", "2")
+	err = tk.SetJobState("Job:0", "3")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestConcurrentUpdates(t *testing.T) {
+	sctx, cf := context.WithCancel(context.Background())
+	saver, err := persistence.NewDatastoreSaver(sctx, "mlab-testing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cf()
+
+	tk, err := tracker.InitTracker(saver)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	jobs := 20
+	createJobs(t, &tk, "Job:", jobs)
+	defer deleteJobs(t, &tk, "Job:", jobs)
+
+	updates := 20 * jobs
 	wg := sync.WaitGroup{}
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
+	wg.Add(updates)
+	for i := 0; i < updates; i++ {
 		go func(i int) {
-			err := tk.AddJob(fmt.Sprint("Job:", i))
+			jn := fmt.Sprint("Job:", rand.Intn(jobs))
+			err := tk.SetJobState(jn, fmt.Sprint(i))
 			if err != nil {
-				t.Log(err)
+				log.Fatal(err, " ", jn)
 			}
 			wg.Done()
 		}(i)
 	}
 	wg.Wait()
-
-	// Delete all jobs.
-	wg2 := sync.WaitGroup{}
-	for i := 0; i < 100; i++ {
-		wg2.Add(1)
-		go func(i int) {
-			err := tk.DeleteJob(fmt.Sprint("Job:", i))
-			if err != nil {
-				t.Log(err)
-			}
-			wg2.Done()
-		}(i)
-	}
-	wg2.Wait()
-
 }

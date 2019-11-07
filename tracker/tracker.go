@@ -22,6 +22,7 @@ import (
 var (
 	ErrJobAlreadyExists       = errors.New("prefix already exists")
 	ErrPrefixNotFound         = errors.New("prefix not found")
+	ErrJobIsObsolete          = errors.New("job is obsolete")
 	ErrInvalidStateTransition = errors.New("invalid state transition")
 	ErrNotYetImplemented      = errors.New("not yet implemented")
 )
@@ -59,7 +60,8 @@ func (j JobState) GetKind() string {
 // users trying to access the job while it is being saved will block.
 // TODO - perhaps use copy on write, and separate reader and writer locks?
 type jobWithLock struct {
-	lock sync.RWMutex // lock that should be held for all accesses.
+	lock     sync.RWMutex // lock that should be held for all accesses.
+	obsolete bool
 	JobState
 }
 
@@ -68,16 +70,21 @@ type jobWithLock struct {
 // Caller must own j.lock.Lock(), and must NOT release it.
 func (j *jobWithLock) Save(s persistence.Saver) {
 	go func() {
+		start := time.Now()
 		defer j.lock.Unlock()
 		ctx, cf := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cf()
-		err := s.Save(ctx, j.JobState)
+		err := s.Save(ctx, &j.JobState)
 		if err != nil {
 			// If error, all we can do is log and record the error,
 			// TODO - maybe retry?
 			log.Println(err)
 			j.JobState.LastError = err.Error()
 			j.JobState.errors = append(j.JobState.errors, err.Error())
+		}
+		latency := time.Since(start)
+		if latency > 5*time.Second {
+			log.Println("Slow update:", j.Name, latency)
 		}
 	}()
 }
@@ -109,14 +116,22 @@ func InitTracker(saver persistence.Saver) (Tracker, error) {
 // getJobForUpdate gets a pointer to a jobWithLock entry, with the
 // job lock held.
 func (tr *Tracker) getJobForUpdate(prefix string) (*jobWithLock, error) {
+	start := time.Now()
 	tr.lock.Lock()
-	defer tr.lock.Unlock()
 	job, ok := tr.Jobs[prefix]
+	tr.lock.Unlock()
+	latency := time.Since(start)
+	if latency > time.Second {
+		log.Println("Long latency for getJob:", prefix)
+	}
 	if !ok {
 		return nil, ErrPrefixNotFound
 	}
 
 	job.lock.Lock() // Take the lock on behalf of job.Save.
+	if job.obsolete {
+		return nil, ErrJobIsObsolete
+	}
 
 	return job, nil
 }
@@ -166,6 +181,11 @@ func (tr *Tracker) DeleteJob(prefix string) error {
 	// Now no-one else can get it, but another user may already be using it.
 	job.lock.Lock() // Take the lock to ensure no-one else is using it.
 	defer job.lock.Unlock()
+	if job.obsolete {
+		// Someone else deleted it, so we are done.
+		return ErrJobIsObsolete
+	}
+	job.obsolete = true // Now no-one else will use it.
 
 	ctx, cf := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cf()
