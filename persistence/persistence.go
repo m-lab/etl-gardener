@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"context"
+	"reflect"
 	"time"
 
 	"cloud.google.com/go/datastore"
@@ -9,24 +10,24 @@ import (
 
 // StateObject defines the interface for objects to be saved/retrieved from datastore.
 type StateObject interface {
-	Name() string
-	Kind() string // Should be implemented in the actual type, as return reflect.TypeOf(o).Name()
+	GetName() string
+	GetKind() string // Should be implemented in the actual type, as return reflect.TypeOf(o).Name()
 }
 
 // Base is the base for persistent objects.  All StateObjects should embed
 // Base and call NewBase to initialize.
 type Base struct {
-	name string
+	Name string
 }
 
-// Name implements StateObject.Name
-func (o Base) Name() string {
-	return o.name
+// GetName implements StateObject.Name
+func (o Base) GetName() string {
+	return o.Name
 }
 
 // NewBase initializes a Base object.
 func NewBase(name string) Base {
-	return Base{name: name}
+	return Base{Name: name}
 }
 
 // Saver provides API for saving and retrieving StateObjects.
@@ -54,7 +55,7 @@ func NewDatastoreSaver(ctx context.Context, project string) (*DatastoreSaver, er
 }
 
 func (ds *DatastoreSaver) key(o StateObject) *datastore.Key {
-	k := datastore.NameKey(o.Kind(), o.Name(), nil)
+	k := datastore.NameKey(o.GetKind(), o.GetName(), nil)
 	k.Namespace = ds.Namespace
 	return k
 }
@@ -67,7 +68,7 @@ func (ds *DatastoreSaver) Save(ctx context.Context, o StateObject) error {
 	if err != nil {
 		return err
 	}
-	return ctx.Err()
+	return nil
 }
 
 // Delete implements Saver.Delete using Datastore.
@@ -78,11 +79,36 @@ func (ds *DatastoreSaver) Delete(ctx context.Context, o StateObject) error {
 	if err != nil {
 		return err
 	}
-	return ctx.Err()
+	return nil
 }
 
 // Fetch implements Saver.Fetch to fetch state of requested StateObject from Datastore.
 func (ds *DatastoreSaver) Fetch(ctx context.Context, o StateObject) error {
-	key := datastore.Key{Kind: o.Kind(), Name: o.Name(), Namespace: ds.Namespace}
+	key := datastore.Key{Kind: o.GetKind(), Name: o.GetName(), Namespace: ds.Namespace}
 	return ds.Client.Get(ctx, &key, o)
+}
+
+// FetchAll fetches all objects of a particular type from Datastore.
+// The "o" parameter should be an instance of the type to fetch, which is
+// used only to determine the kind, and to create the result slice.
+func (ds *DatastoreSaver) FetchAll(ctx context.Context, o StateObject) ([]*datastore.Key, interface{}, error) {
+	q := datastore.NewQuery(o.GetKind()).Namespace(ds.Namespace)
+	keys, err := ds.Client.GetAll(ctx, q.KeysOnly(), nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	// Passing .Interface() to GetAll doesn't work, whether the slice is empty
+	// or not, and we can't assert the correct type because we don't know it.
+	// However, passing Interface() to GetMulti works just fine, so we use
+	// that.
+
+	// GetMulti accepts a slice as an interface{}, whereas GetAll does not.
+	// It modifies the elements of the slice, and does not change the slice
+	// itself.
+	objs := reflect.MakeSlice(reflect.SliceOf(reflect.TypeOf(o)), len(keys), len(keys)).Interface()
+	err = ds.Client.GetMulti(ctx, keys, objs)
+	if err != nil {
+		return nil, nil, err
+	}
+	return keys, objs, err
 }
