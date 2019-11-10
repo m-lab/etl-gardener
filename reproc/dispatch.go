@@ -271,14 +271,60 @@ queueLoop:
 	return maxDate, nil
 }
 
+// findNextRecentDay finds an appropriate date to start daily processing.
+func findNextRecentDay(start time.Time, skip int) time.Time {
+	// Temp hack
+	hack := time.Now().Add(-14 * time.Hour).Truncate(24 * time.Hour)
+	log.Println("Next will be", hack)
+	return hack
+
+	// Normally we'll reprocess yesterday after 6:00 am UTC.
+	// However, allow a couple more hours of leeway when restarting.
+	// This may mean yesterday gets processed twice in a row.
+	yesterday := time.Now().Add(-8 * time.Hour).Truncate(24 * time.Hour)
+	if skip == 0 {
+		return yesterday
+	}
+
+	nextCurrentDate := start
+	next := nextCurrentDate.AddDate(0, 0, 1+skip)
+
+	for next.Before(yesterday) {
+		nextCurrentDate = next
+		next = nextCurrentDate.AddDate(0, 0, 1+skip)
+	}
+
+	return nextCurrentDate
+}
+
 // doDispatchLoop just sequences through archives in date order.
 // It will generally be blocked on the queues.
 // It will start processing at startDate, and when it catches up to "now" it will restart at restartDate.
 func doDispatchLoop(ctx context.Context, handler *TaskHandler, bucket string, exp string, startDate time.Time, restartDate time.Time, dateSkip int) {
 	log.Println("(Re)starting at", startDate)
-	next := startDate
+
+	nextRecent := findNextRecentDay(startDate, dateSkip)
+	next := startDate.Truncate(24 * time.Hour)
 
 	for {
+		// First check if we need to process yesterday.
+		if time.Since(nextRecent) > 30*time.Hour {
+			// Only process if next isn't same or later date.
+			if nextRecent.After(next.Add(time.Hour)) {
+				prefix := fmt.Sprintf("gs://%s/%s/", bucket, exp) + nextRecent.Format("2006/01/02/")
+
+				log.Println("Processing yesterday:", prefix)
+				// Note that this blocks until a queue is available.
+				err := handler.AddTask(ctx, prefix)
+				if err != nil {
+					// Only error expected here is ErrTerminating
+					log.Println(err)
+				}
+			}
+			// For now, process every day in sandbox
+			nextRecent = nextRecent.AddDate(0, 0, 1+dateSkip)
+		}
+
 		prefix := fmt.Sprintf("gs://%s/%s/", bucket, exp) + next.Format("2006/01/02/")
 
 		// Note that this blocks until a queue is available.
@@ -291,8 +337,8 @@ func doDispatchLoop(ctx context.Context, handler *TaskHandler, bucket string, ex
 		// Advance to next date, possibly skipping days if DATE_SKIP env var was set.
 		next = next.AddDate(0, 0, 1+dateSkip)
 
-		// If gardener has processed all dates up now, then start over.
-		if next.After(time.Now()) {
+		// Start over if next date is less than 3 days ago.
+		if time.Since(next) < 72*time.Hour {
 			// TODO - load this from DataStore
 			log.Println("Starting over at", restartDate)
 			next = restartDate
@@ -301,9 +347,7 @@ func doDispatchLoop(ctx context.Context, handler *TaskHandler, bucket string, ex
 }
 
 // RunDispatchLoop sets up dispatch loop.
-// TODO inject DatastoreSaver to allow unit testing??  TaskHandler would require a fake task queue.
-// However, this code will be replaced soon.  Replacement code should have better unit tests, but it might
-// be wasted effort to improve coverage on this code.
+// TODO - refactor to take tasks as argument, instead of loading them.
 func RunDispatchLoop(ctx context.Context, th *TaskHandler, project string, bucket string, exp string, startDate time.Time, dateSkip int) error {
 	ds, err := state.NewDatastoreSaver(ctx, project)
 	if err != nil {
@@ -320,6 +364,7 @@ func RunDispatchLoop(ctx context.Context, th *TaskHandler, project string, bucke
 		log.Println(err)
 		return err
 	}
+
 	maxDate, err := th.RestartTasks(ctx, tasks)
 	if err != nil {
 		log.Println(err)
