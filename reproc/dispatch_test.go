@@ -10,7 +10,10 @@ import (
 
 	"github.com/m-lab/etl-gardener/reproc"
 	"github.com/m-lab/etl-gardener/state"
+	"github.com/m-lab/go/test"
 )
+
+var verbose = false
 
 func init() {
 	// Always prepend the filename and line number.
@@ -76,7 +79,10 @@ func assertPersistentStore() { func(ex state.PersistentStore) {}(&testSaver{}) }
 type Exec struct{}
 
 func (ex *Exec) Next(ctx context.Context, t *state.Task, terminate <-chan struct{}) error {
-	log.Println("Do", t)
+	if verbose {
+		log.Println("Do", t)
+	}
+
 	time.Sleep(time.Duration(1+rand.Intn(2)) * time.Millisecond)
 
 	switch t.State {
@@ -131,6 +137,8 @@ func TestBasic(t *testing.T) {
 // may fail to complete.  Also, running with -race may detect race
 // conditions.
 func TestWithTaskQueue(t *testing.T) {
+	verbose = true
+
 	ctx := context.Background()
 	// Start tracker with one queue.
 	exec := Exec{}
@@ -148,6 +156,8 @@ func TestWithTaskQueue(t *testing.T) {
 }
 
 func TestRestart(t *testing.T) {
+	verbose = true
+
 	ctx := context.Background()
 	exec := Exec{}
 	saver := NewTestSaver()
@@ -164,4 +174,51 @@ func TestRestart(t *testing.T) {
 
 	time.Sleep(5 * time.Second)
 	log.Println(saver.tasks[taskName])
+}
+
+func TestDoDispatchLoop(t *testing.T) {
+	verbose = false
+
+	// Set up time to go at approximately 30 days/second.
+	test.FakeTime(int((30 * 24 * time.Hour) / (1000 * time.Millisecond)))
+	// Virtual start time.
+	start := time.Now().UTC()
+
+	ctx := context.Background()
+	exec := Exec{}
+	saver := NewTestSaver()
+	th := reproc.NewTaskHandler("exp", &exec, []string{"queue-1", "queue-2", "queue-3"}, saver)
+
+	restart := time.Date(2013, 1, 1, 0, 0, 0, 0, time.UTC)
+	startDate := time.Date(2013, 2, 1, 0, 0, 0, 0, time.UTC)
+	go reproc.DoDispatchLoop(ctx, th, "foobar", "exp", restart, startDate, 0)
+
+	// run for 3 virtual days
+	for {
+		if time.Since(start) > (3*24+12)*time.Hour {
+			break
+		}
+	}
+
+	th.Terminate()
+
+	test.StopFakeTime()
+
+	// FakeTime starts at midnight UTC, so we should see the previous day.
+	recent := "gs://foobar/exp" + start.Add(-24*time.Hour).Format("/2006/01/02/")
+	// We expect to see at least 3 distinct recent dates...
+	recents := map[string]bool{}
+	for _, task := range saver.tasks {
+		taskEnd := task[len(task)-1]
+		if taskEnd.Name >= recent {
+			t.Log(taskEnd)
+			recents[taskEnd.Name] = true
+		}
+	}
+
+	// Count should be 3 or 4 days.  There is some variation because of the randomness
+	// in processing time in the fake Exec.Next() function.
+	if len(recents) < 3 {
+		t.Error("Should have seen at least 3 daily jobs", recents)
+	}
 }

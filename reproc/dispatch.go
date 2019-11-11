@@ -273,16 +273,12 @@ queueLoop:
 
 // findNextRecentDay finds an appropriate date to start daily processing.
 func findNextRecentDay(start time.Time, skip int) time.Time {
-	// Temp hack
-	hack := time.Now().Add(-14 * time.Hour).Truncate(24 * time.Hour)
-	log.Println("Next will be", hack)
-	return hack
-
 	// Normally we'll reprocess yesterday after 6:00 am UTC.
 	// However, allow a couple more hours of leeway when restarting.
 	// This may mean yesterday gets processed twice in a row.
-	yesterday := time.Now().Add(-8 * time.Hour).Truncate(24 * time.Hour)
+	yesterday := time.Now().Add(-8 * time.Hour).UTC().Truncate(24 * time.Hour)
 	if skip == 0 {
+		log.Println("yesterday is:", yesterday.Format("2006/01/02 15:04 UTC"))
 		return yesterday
 	}
 
