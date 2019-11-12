@@ -271,12 +271,14 @@ queueLoop:
 	return maxDate, nil
 }
 
+var dailyDelay = 3 * time.Hour
+
 // findNextRecentDay finds an appropriate date to start daily processing.
 func findNextRecentDay(start time.Time, skip int) time.Time {
-	// Normally we'll reprocess yesterday after 6:00 am UTC.
-	// However, allow a couple more hours of leeway when restarting.
+	// Normally we'll reprocess yesterday after 3:00 am UTC.
+	// However, allow an extra hour of leeway when restarting.
 	// This may mean yesterday gets processed twice in a row.
-	yesterday := time.Now().Add(-8 * time.Hour).UTC().Truncate(24 * time.Hour)
+	yesterday := time.Now().Add(time.Hour + dailyDelay).UTC().Truncate(24 * time.Hour)
 	if skip == 0 {
 		log.Println("Most recent day to process is:", yesterday.Format("2006/01/02"))
 		return yesterday
@@ -303,8 +305,8 @@ func doDispatchLoop(ctx context.Context, handler *TaskHandler, bucket string, ex
 	next := startDate.Truncate(24 * time.Hour)
 
 	for {
-		// First check if we need to process yesterday.
-		if time.Since(nextRecent) > 30*time.Hour {
+		// If it is 3 hours past the end of the nextRecent day, we should process it now.
+		if time.Since(nextRecent) > 24*time.Hour+dailyDelay {
 			// Only process if next isn't same or later date.
 			if nextRecent.After(next.Add(time.Hour)) {
 				prefix := fmt.Sprintf("gs://%s/%s/", bucket, expAndType) + nextRecent.Format("2006/01/02/")
