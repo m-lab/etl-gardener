@@ -69,6 +69,9 @@ func TestTrackerAddDelete(t *testing.T) {
 	numJobs := 500
 	createJobs(t, tk, "500Jobs:", numJobs)
 	completeJobs(t, tk, "500Jobs:", numJobs)
+	if tk.NumJobs() != 0 {
+		t.Error("Job cleanup failed")
+	}
 }
 
 // This tests basic Add and update of 2 jobs, and verifies
@@ -89,17 +92,17 @@ func TestUpdate(t *testing.T) {
 	createJobs(t, tk, "JobToUpdate:", 2)
 	defer completeJobs(t, tk, "JobToUpdate:", 2)
 
-	err = tk.SetJobState("JobToUpdate:0", "1")
+	err = tk.SetJobState("JobToUpdate:0", "start")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = tk.SetJobState("JobToUpdate:0", "2")
+	err = tk.SetJobState("JobToUpdate:0", "middle")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = tk.SetJobState("JobToUpdate:0", "3")
+	err = tk.SetJobState("JobToUpdate:0", "end")
 	if err != nil {
 		t.Fatal(err)
 	}

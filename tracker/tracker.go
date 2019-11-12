@@ -215,20 +215,17 @@ func (tr *Tracker) SetJobState(prefix string, newState string) error {
 	}
 	job.State = newState
 	job.UpdateTime = time.Now()
-	tr.updateJob(job)
-	return nil
+	return tr.updateJob(job)
 }
 
-// Heartbeat updates a job's heartbeat time, and handles persistence.
-// Heartbeats are only pushed to saver every minute or so.
+// Heartbeat updates a job's heartbeat time.
 func (tr *Tracker) Heartbeat(prefix string) error {
 	job, err := tr.getJob(prefix)
 	if err != nil {
 		return err
 	}
 	job.HeartbeatTime = time.Now()
-	tr.updateJob(job)
-	return nil
+	return tr.updateJob(job)
 }
 
 // SetJobError updates a job's error fields, and handles persistence.
@@ -240,6 +237,5 @@ func (tr *Tracker) SetJobError(prefix string, errString string) error {
 	job.UpdateTime = time.Now()
 	job.LastError = errString
 	job.errors = append(job.errors, errString)
-	tr.updateJob(job)
-	return nil
+	return tr.updateJob(job)
 }
