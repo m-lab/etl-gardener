@@ -31,18 +31,18 @@ var (
 	ErrNotYetImplemented      = errors.New("not yet implemented")
 )
 
-// A JobState describes the state of a prefix job.
+// A JobState describes the state of a bucket/exp/type/YYYY/MM/DD job.
 // Completed jobs are removed from the persistent store.
 // Errored jobs are maintained in the persistent store for debugging.
 // JobState should be updated only by the Tracker, which will
 // ensure correct serialization and Saver updates.
 type JobState struct {
-	persistence.Base // Includes Name field
+	persistence.Base // Includes Name field like gs://bucket/exp/type/YYYY/MM/DD
 
 	UpdateTime    time.Time // Time of last update.
 	HeartbeatTime time.Time // Time of last ETL heartbeat.
 
-	State     string // String defining the current state - parsing, parsed, dedup, join, completed, failed.
+	State     string // String defining the current state - parsing, stabilizing, dedupping, joining, complete, failed.
 	LastError string // The most recent error encountered.
 
 	// Not persisted
@@ -63,7 +63,7 @@ func (j JobState) saveOrDelete(s persistence.Saver) error {
 	ctx, cf := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cf()
 	var err error
-	if j.State == "Complete" {
+	if j.State == "Complete" || j.State == "complete" {
 		err = s.Delete(ctx, &j)
 
 	} else {
@@ -148,7 +148,7 @@ func (tr *Tracker) saveAllModifiedJobs() error {
 				return err
 			}
 			eg.Go(f)
-			if job.State == "Complete" {
+			if jobCopy.State == "Complete" || jobCopy.State == "complete" {
 				delete(tr.jobs, key)
 			}
 		}
@@ -199,7 +199,7 @@ func (tr *Tracker) updateJob(job JobState) error {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 	oldJob, ok := tr.jobs[job.Name]
-	if !ok || oldJob.State == "Complete" {
+	if !ok || oldJob.State == "Complete" || oldJob.State == "complete" {
 		return ErrJobNotFound
 	}
 
