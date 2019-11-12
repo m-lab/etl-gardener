@@ -10,7 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bouk/monkey"
+	"bou.ke/monkey"
+
 	"github.com/m-lab/etl-gardener/reproc"
 	"github.com/m-lab/etl-gardener/state"
 )
