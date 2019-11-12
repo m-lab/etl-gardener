@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -206,31 +207,39 @@ func TestRestart(t *testing.T) {
 This block of code vvvvvvvv will move to go/test
 ***********************************************/
 
-var ticker *time.Ticker
-
 // FakeTime sets the current time to midnight UTC 1 month ago, then advances time at
 // the speed indicated by the multiplier.
-func FakeTime(multiplier int) {
+// NOTE: Since this replaces time.Now() for the entire process, it should not be used in
+// parallel, e.g. for concurrent unit tests.
+func FakeTime(multiplier int64) func() {
 	if flag.Lookup("test.v") == nil {
 		log.Fatal("package go/test should not be used outside unit tests")
 	}
 
-	ticker = time.NewTicker(time.Millisecond)
+	var fakeNow int64
 
-	fakeNow := time.Now().AddDate(0, -1, 0).UTC().Truncate(24 * time.Hour)
-	monkey.Patch(time.Now, func() time.Time { return fakeNow })
+	atomic.StoreInt64(&fakeNow, time.Now().AddDate(0, -1, 0).UTC().Truncate(24*time.Hour).UnixNano())
 
+	f := func() time.Time {
+		return time.Unix(0, atomic.LoadInt64(&fakeNow)) // race
+	}
+
+	monkey.Patch(time.Now, f)
+
+	ticker := time.NewTicker(time.Millisecond)
 	go func() {
 		for range ticker.C {
-			fakeNow = fakeNow.Add(time.Duration(multiplier) * time.Millisecond)
+			atomic.AddInt64(&fakeNow, multiplier*int64(time.Millisecond))
 		}
 	}()
+
+	return ticker.Stop
 }
 
 // StopFakeTime restores the normal time.Now() function.
-func StopFakeTime() {
+func StopFakeTime(stop func()) {
 	log.Println("Stopping fake clock")
-	ticker.Stop()
+	stop()
 	monkey.Unpatch(time.Now)
 }
 
@@ -242,7 +251,7 @@ func TestDoDispatchLoop(t *testing.T) {
 	verbose = false
 
 	// Set up time to go at approximately 30 days/second.
-	FakeTime(int((30 * 24 * time.Hour) / (1000 * time.Millisecond)))
+	stop := FakeTime(int64((30 * 24 * time.Hour) / (1000 * time.Millisecond)))
 	// Virtual start time.
 	start := time.Now().UTC()
 
@@ -262,9 +271,9 @@ func TestDoDispatchLoop(t *testing.T) {
 		}
 	}
 
-	th.Terminate()
+	//	th.Terminate()
 
-	StopFakeTime()
+	StopFakeTime(stop)
 
 	// FakeTime starts at midnight UTC, so we should see the previous day.
 	recent := "gs://foobar/exp" + start.Add(-24*time.Hour).Format("/2006/01/02/")
