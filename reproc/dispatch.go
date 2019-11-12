@@ -317,7 +317,6 @@ func doDispatchLoop(ctx context.Context, handler *TaskHandler, bucket string, ex
 					log.Println(err)
 				}
 			}
-			// For now, process every day in sandbox
 			nextRecent = nextRecent.AddDate(0, 0, 1+dateSkip)
 		}
 

@@ -75,6 +75,18 @@ func (s *testSaver) DeleteTask(ctx context.Context, t state.Task) error {
 	return nil
 }
 
+func (s *testSaver) getTaskStates() [][]state.Task {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	taskStates := make([][]state.Task, len(s.tasks))
+	i := 0
+	for _, t := range s.tasks {
+		taskStates[i] = t
+		i++
+	}
+	return taskStates
+}
+
 func assertPersistentStore() { func(ex state.PersistentStore) {}(&testSaver{}) }
 
 type Exec struct{}
@@ -244,7 +256,8 @@ func TestDoDispatchLoop(t *testing.T) {
 	recent := "gs://foobar/exp" + start.Add(-24*time.Hour).Format("/2006/01/02/")
 	// We expect to see at least 3 distinct recent dates...
 	recents := map[string]bool{}
-	for _, task := range saver.tasks {
+	tasks := saver.getTaskStates()
+	for _, task := range tasks {
 		taskEnd := task[len(task)-1]
 		if taskEnd.Name >= recent {
 			t.Log(taskEnd)
