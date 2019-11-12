@@ -3,6 +3,7 @@ package reproc_test
 import (
 	"context"
 	"flag"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"sync"
@@ -16,8 +17,6 @@ import (
 	"github.com/m-lab/etl-gardener/state"
 )
 
-var verbose = false
-
 func init() {
 	// Always prepend the filename and line number.
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -25,6 +24,16 @@ func init() {
 
 func assertTaskPipe(t state.Terminator) {
 	func(t state.Terminator) {}(&reproc.Terminator{})
+}
+
+var verbose = log.New(ioutil.Discard, "", 0)
+
+func setVerbose(b bool) {
+	if b {
+		verbose = log.New(log.Writer(), log.Prefix(), log.Flags())
+	} else {
+		verbose = log.New(ioutil.Discard, "", 0)
+	}
 }
 
 // This test exercises the termination sequencing.  It does not check
@@ -100,9 +109,7 @@ func assertPersistentStore() { func(ex state.PersistentStore) {}(&testSaver{}) }
 type Exec struct{}
 
 func (ex *Exec) Next(ctx context.Context, t *state.Task, terminate <-chan struct{}) error {
-	if verbose {
-		log.Println("Do", t)
-	}
+	verbose.Println("Do", t)
 
 	time.Sleep(time.Duration(1+rand.Intn(2)) * time.Millisecond)
 
@@ -158,7 +165,7 @@ func TestBasic(t *testing.T) {
 // may fail to complete.  Also, running with -race may detect race
 // conditions.
 func TestWithTaskQueue(t *testing.T) {
-	verbose = true
+	setVerbose(true)
 
 	ctx := context.Background()
 	// Start tracker with one queue.
@@ -177,7 +184,7 @@ func TestWithTaskQueue(t *testing.T) {
 }
 
 func TestRestart(t *testing.T) {
-	verbose = true
+	setVerbose(true)
 
 	ctx := context.Background()
 	exec := Exec{}
@@ -249,7 +256,7 @@ This block of code ^^^^^^ will move to go/test
 ***********************************************/
 
 func TestDoDispatchLoop(t *testing.T) {
-	verbose = false
+	setVerbose(false)
 
 	// Set up time to go at approximately 30 days/second.
 	stop := FakeTime(int64((30 * 24 * time.Hour) / (1000 * time.Millisecond)))
