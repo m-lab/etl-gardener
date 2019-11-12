@@ -2,15 +2,16 @@ package reproc_test
 
 import (
 	"context"
+	"flag"
 	"log"
 	"math/rand"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/bouk/monkey"
 	"github.com/m-lab/etl-gardener/reproc"
 	"github.com/m-lab/etl-gardener/state"
-	"github.com/m-lab/go/test"
 )
 
 var verbose = false
@@ -176,11 +177,46 @@ func TestRestart(t *testing.T) {
 	log.Println(saver.tasks[taskName])
 }
 
+/*********************************
+This block of code vvvvvvvv will move to go/test
+***********************************************/
+
+var ticker *time.Ticker
+
+// FakeTime sets the current time to midnight UTC 1 month ago, then advances time at
+// the speed indicated by the multiplier.
+func FakeTime(multiplier int) {
+	if flag.Lookup("test.v") == nil {
+		log.Fatal("package go/test should not be used outside unit tests")
+	}
+
+	ticker = time.NewTicker(time.Millisecond)
+
+	fakeNow := time.Now().AddDate(0, -1, 0).UTC().Truncate(24 * time.Hour)
+	monkey.Patch(time.Now, func() time.Time { return fakeNow })
+
+	go func() {
+		for range ticker.C {
+			fakeNow = fakeNow.Add(time.Duration(multiplier) * time.Millisecond)
+		}
+	}()
+}
+
+// StopFakeTime restores the normal time.Now() function.
+func StopFakeTime() {
+	ticker.Stop()
+	monkey.Unpatch(time.Now)
+}
+
+/*********************************
+This block of code ^^^^^^ will move to go/test
+***********************************************/
+
 func TestDoDispatchLoop(t *testing.T) {
 	verbose = false
 
 	// Set up time to go at approximately 30 days/second.
-	test.FakeTime(int((30 * 24 * time.Hour) / (1000 * time.Millisecond)))
+	FakeTime(int((30 * 24 * time.Hour) / (1000 * time.Millisecond)))
 	// Virtual start time.
 	start := time.Now().UTC()
 
@@ -202,7 +238,7 @@ func TestDoDispatchLoop(t *testing.T) {
 
 	th.Terminate()
 
-	test.StopFakeTime()
+	StopFakeTime()
 
 	// FakeTime starts at midnight UTC, so we should see the previous day.
 	recent := "gs://foobar/exp" + start.Add(-24*time.Hour).Format("/2006/01/02/")
