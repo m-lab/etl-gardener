@@ -75,6 +75,12 @@ func (s *testSaver) DeleteTask(ctx context.Context, t state.Task) error {
 	return nil
 }
 
+func (s *testSaver) getTask(name string) []state.Task {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return s.tasks[name]
+}
+
 func (s *testSaver) getTaskStates() [][]state.Task {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -185,8 +191,15 @@ func TestRestart(t *testing.T) {
 	tasks := []state.Task{*t1}
 	th.RestartTasks(ctx, tasks)
 
-	time.Sleep(5 * time.Second)
-	log.Println(saver.tasks[taskName])
+	// Restarts are asynchronous, so wait up to 5 seconds for task to be started.
+	start := time.Now()
+	for time.Since(start) < 5*time.Second &&
+		saver.getTask(taskName) == nil {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if saver.getTask(taskName) == nil {
+		t.Fatal("Task never started")
+	}
 }
 
 /*********************************
@@ -216,6 +229,7 @@ func FakeTime(multiplier int) {
 
 // StopFakeTime restores the normal time.Now() function.
 func StopFakeTime() {
+	log.Println("Stopping fake clock")
 	ticker.Stop()
 	monkey.Unpatch(time.Now)
 }

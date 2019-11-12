@@ -278,7 +278,7 @@ func findNextRecentDay(start time.Time, skip int) time.Time {
 	// This may mean yesterday gets processed twice in a row.
 	yesterday := time.Now().Add(-8 * time.Hour).UTC().Truncate(24 * time.Hour)
 	if skip == 0 {
-		log.Println("yesterday is:", yesterday.Format("2006/01/02 15:04 UTC"))
+		log.Println("Most recent day to process is:", yesterday.Format("2006/01/02"))
 		return yesterday
 	}
 
@@ -296,7 +296,7 @@ func findNextRecentDay(start time.Time, skip int) time.Time {
 // doDispatchLoop just sequences through archives in date order.
 // It will generally be blocked on the queues.
 // It will start processing at startDate, and when it catches up to "now" it will restart at restartDate.
-func doDispatchLoop(ctx context.Context, handler *TaskHandler, bucket string, exp string, startDate time.Time, restartDate time.Time, dateSkip int) {
+func doDispatchLoop(ctx context.Context, handler *TaskHandler, bucket string, expAndType string, startDate time.Time, restartDate time.Time, dateSkip int) {
 	log.Println("(Re)starting at", startDate)
 
 	nextRecent := findNextRecentDay(startDate, dateSkip)
@@ -307,7 +307,7 @@ func doDispatchLoop(ctx context.Context, handler *TaskHandler, bucket string, ex
 		if time.Since(nextRecent) > 30*time.Hour {
 			// Only process if next isn't same or later date.
 			if nextRecent.After(next.Add(time.Hour)) {
-				prefix := fmt.Sprintf("gs://%s/%s/", bucket, exp) + nextRecent.Format("2006/01/02/")
+				prefix := fmt.Sprintf("gs://%s/%s/", bucket, expAndType) + nextRecent.Format("2006/01/02/")
 
 				log.Println("Processing yesterday:", prefix)
 				// Note that this blocks until a queue is available.
@@ -320,7 +320,7 @@ func doDispatchLoop(ctx context.Context, handler *TaskHandler, bucket string, ex
 			nextRecent = nextRecent.AddDate(0, 0, 1+dateSkip)
 		}
 
-		prefix := fmt.Sprintf("gs://%s/%s/", bucket, exp) + next.Format("2006/01/02/")
+		prefix := fmt.Sprintf("gs://%s/%s/", bucket, expAndType) + next.Format("2006/01/02/")
 
 		// Note that this blocks until a queue is available.
 		err := handler.AddTask(ctx, prefix)
@@ -343,7 +343,7 @@ func doDispatchLoop(ctx context.Context, handler *TaskHandler, bucket string, ex
 
 // RunDispatchLoop sets up dispatch loop.
 // TODO - refactor to take tasks as argument, instead of loading them.
-func RunDispatchLoop(ctx context.Context, th *TaskHandler, project string, bucket string, exp string, startDate time.Time, dateSkip int) error {
+func RunDispatchLoop(ctx context.Context, th *TaskHandler, project string, bucket string, expAndType string, startDate time.Time, dateSkip int) error {
 	ds, err := state.NewDatastoreSaver(ctx, project)
 	if err != nil {
 		log.Println(err)
@@ -352,7 +352,7 @@ func RunDispatchLoop(ctx context.Context, th *TaskHandler, project string, bucke
 
 	// Move the timeout into GetStatus?
 	taskCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	tasks, err := ds.FetchAllTasks(taskCtx, exp)
+	tasks, err := ds.FetchAllTasks(taskCtx, expAndType)
 	cancel()
 
 	if err != nil {
@@ -375,7 +375,7 @@ func RunDispatchLoop(ctx context.Context, th *TaskHandler, project string, bucke
 	}
 
 	log.Println("Using start date of", startDate)
-	go doDispatchLoop(ctx, th, bucket, exp, restartDate, startDate, dateSkip)
+	go doDispatchLoop(ctx, th, bucket, expAndType, restartDate, startDate, dateSkip)
 
 	return nil
 }
