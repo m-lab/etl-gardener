@@ -65,10 +65,10 @@ func (j JobState) saveOrDelete(s persistence.Saver) error {
 	defer cf()
 	var err error
 	if j.isDone() {
-		err = s.Delete(ctx, &j)
+		err = s.Delete(ctx, j)
 
 	} else {
-		err = s.Save(ctx, &j)
+		err = s.Save(ctx, j)
 	}
 	// With datastore and high save rates, this may be 2 seconds or more.
 	latency := time.Since(start)

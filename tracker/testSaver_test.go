@@ -12,6 +12,7 @@ import (
 type JobState = tracker.JobState
 
 // TODO - generalize to StateObject and move to the persistence package?
+// Generalizing is complicated because StateObject is an interface.
 type testSaver struct {
 	lock  sync.Mutex
 	tasks map[string][]tracker.JobState
@@ -26,7 +27,7 @@ func (s *testSaver) Save(ctx context.Context, o persistence.StateObject) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	name := o.GetName()
-	s.tasks[name] = append(s.tasks[name], *o.(*JobState))
+	s.tasks[name] = append(s.tasks[name], o.(JobState))
 	return nil
 }
 
