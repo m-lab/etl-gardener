@@ -8,7 +8,6 @@
 package tracker_test
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"math/rand"
@@ -16,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
@@ -54,12 +52,7 @@ func completeJobs(t *testing.T, tk *tracker.Tracker, prefix string, n int) {
 }
 
 func TestTrackerAddDelete(t *testing.T) {
-	sctx, cf := context.WithCancel(context.Background())
-	saver, err := persistence.NewDatastoreSaver(sctx, "mlab-testing")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer cf() // This context must be kept alive for life of saver.
+	saver := NewTestSaver()
 
 	tk, err := tracker.InitTracker(saver, 0)
 	if err != nil {
@@ -72,17 +65,20 @@ func TestTrackerAddDelete(t *testing.T) {
 	if tk.NumJobs() != 0 {
 		t.Error("Job cleanup failed")
 	}
+
+	all := saver.GetTasks()
+	for _, states := range all {
+		final := states[len(states)-1]
+		if final.Name != "" {
+			t.Error(final)
+		}
+	}
 }
 
 // This tests basic Add and update of 2 jobs, and verifies
 // correct error returned when trying to update a third job.
 func TestUpdate(t *testing.T) {
-	sctx, cf := context.WithCancel(context.Background())
-	saver, err := persistence.NewDatastoreSaver(sctx, "mlab-testing")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer cf()
+	saver := NewTestSaver()
 
 	tk, err := tracker.InitTracker(saver, 0)
 	if err != nil {
@@ -111,12 +107,7 @@ func TestUpdate(t *testing.T) {
 // This tests whether AddJob and SetJobState generate appropriate
 // errors when job doesn't exist.
 func TestNonexistentJobAccess(t *testing.T) {
-	sctx, cf := context.WithCancel(context.Background())
-	saver, err := persistence.NewDatastoreSaver(sctx, "mlab-testing")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer cf()
+	saver := NewTestSaver()
 
 	tk, err := tracker.InitTracker(saver, time.Second)
 	if err != nil {
@@ -154,14 +145,10 @@ func TestConcurrentUpdates(t *testing.T) {
 	// rate, and ensure that there is not contention across jobs.
 	// With cross job contention, the execution time for this test
 	// increases dramatically.
-	sctx, cf := context.WithCancel(context.Background())
-	saver, err := persistence.NewDatastoreSaver(sctx, "mlab-testing")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer cf()
+	saver := NewTestSaver()
 
-	tk, err := tracker.InitTracker(saver, 100*time.Millisecond)
+	// For testing, push to the saver every 5 milliseconds.
+	tk, err := tracker.InitTracker(saver, 5*time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +157,6 @@ func TestConcurrentUpdates(t *testing.T) {
 	createJobs(t, tk, "Job:", jobs)
 	defer completeJobs(t, tk, "Job:", jobs)
 
-	start := time.Now()
 	updates := 20 * jobs
 	wg := sync.WaitGroup{}
 	wg.Add(updates)
@@ -190,11 +176,24 @@ func TestConcurrentUpdates(t *testing.T) {
 			}
 			wg.Done()
 		}(i)
+		time.Sleep(200 * time.Microsecond)
 	}
 	wg.Wait()
 
-	elapsed := time.Since(start)
-	if elapsed > 20*time.Second {
-		t.Error("There appears to be excessive contention.")
+	max := 0
+	min := 100
+	for _, job := range saver.GetTasks() {
+		if max < len(job) {
+			max = len(job)
+		}
+		if min > len(job) {
+			min = len(job)
+		}
+	}
+	if min < 5 {
+		t.Error("Warning, expected at least 5 updates per job, saw", min)
+	}
+	if max < 15 {
+		t.Error("Warning, expected > 15 updates for at least one job, saw", max)
 	}
 }

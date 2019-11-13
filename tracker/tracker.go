@@ -15,6 +15,7 @@ import (
 	"errors"
 	"log"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -63,7 +64,7 @@ func (j JobState) saveOrDelete(s persistence.Saver) error {
 	ctx, cf := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cf()
 	var err error
-	if j.State == "Complete" || j.State == "complete" {
+	if j.isDone() {
 		err = s.Delete(ctx, &j)
 
 	} else {
@@ -75,6 +76,10 @@ func (j JobState) saveOrDelete(s persistence.Saver) error {
 		log.Println("Slow update:", j.Name, latency)
 	}
 	return err
+}
+
+func (j JobState) isDone() bool {
+	return strings.ToLower(j.State) == "complete"
 }
 
 // NewJobState creates a new JobState with provided name.
@@ -148,7 +153,7 @@ func (tr *Tracker) saveAllModifiedJobs() error {
 				return err
 			}
 			eg.Go(f)
-			if jobCopy.State == "Complete" || jobCopy.State == "complete" {
+			if job.isDone() {
 				delete(tr.jobs, key)
 			}
 		}
@@ -199,7 +204,7 @@ func (tr *Tracker) updateJob(job JobState) error {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 	oldJob, ok := tr.jobs[job.Name]
-	if !ok || oldJob.State == "Complete" || oldJob.State == "complete" {
+	if !ok || oldJob.isDone() {
 		return ErrJobNotFound
 	}
 
