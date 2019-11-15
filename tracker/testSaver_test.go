@@ -1,5 +1,8 @@
 package tracker_test
 
+// TODO: Make this a StateObject saver, and maybe put
+// in persistence.go.
+
 import (
 	"context"
 	"errors"

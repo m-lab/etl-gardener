@@ -35,7 +35,7 @@ func must(t *testing.T, err error) {
 	}
 }
 
-func TestDatastoreSaver(t *testing.T) {
+func TestWithDatastoreSaver(t *testing.T) {
 	ctx := context.Background()
 	ds, err := persistence.NewDatastoreSaver(ctx, "mlab-testing")
 	must(t, err)
