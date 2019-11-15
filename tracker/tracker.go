@@ -50,6 +50,10 @@ type JobState struct {
 	errors []string // all errors related to the job.
 }
 
+func assertStateObject(so persistence.StateObject) {
+	assertStateObject(JobState{})
+}
+
 // GetKind implements Saver.GetKind
 func (j JobState) GetKind() string {
 	return reflect.TypeOf(j).Name()
@@ -65,10 +69,10 @@ func (j JobState) saveOrDelete(s persistence.Saver) error {
 	defer cf()
 	var err error
 	if j.isDone() {
-		err = s.Delete(ctx, j)
+		err = s.Delete(ctx, &j)
 
 	} else {
-		err = s.Save(ctx, j)
+		err = s.Save(ctx, &j)
 	}
 	// With datastore and high save rates, this may be 2 seconds or more.
 	latency := time.Since(start)
@@ -83,7 +87,7 @@ func (j JobState) isDone() bool {
 }
 
 // NewJobState creates a new JobState with provided name.
-func newJobState(name string) JobState {
+func NewJobState(name string) JobState {
 	return JobState{
 		Base:   persistence.NewBase(name),
 		errors: make([]string, 0, 1),
@@ -192,7 +196,7 @@ func (tr *Tracker) AddJob(prefix string) error {
 	if ok {
 		return ErrJobAlreadyExists
 	}
-	job := newJobState(prefix)
+	job := NewJobState(prefix)
 
 	tr.jobs[prefix] = &job
 	return nil

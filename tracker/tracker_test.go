@@ -8,6 +8,7 @@
 package tracker_test
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math/rand"
@@ -15,12 +16,41 @@ import (
 	"testing"
 	"time"
 
+	"cloud.google.com/go/datastore"
+
+	"github.com/m-lab/etl-gardener/persistence"
+
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
 func init() {
 	// Always prepend the filename and line number.
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
+func must(t *testing.T, err error) {
+	if err != nil {
+		log.Output(1, err.Error())
+		t.Fatal()
+	}
+}
+
+func TestDatastoreSaver(t *testing.T) {
+	ctx := context.Background()
+	ds, err := persistence.NewDatastoreSaver(ctx, "mlab-testing")
+	must(t, err)
+
+	o := tracker.NewJobState("foobar")
+	must(t, ds.Save(ctx, &o))
+
+	must(t, ds.Fetch(ctx, &o))
+
+	must(t, ds.Delete(ctx, &o))
+
+	err = ds.Fetch(ctx, &o)
+	if err != datastore.ErrNoSuchEntity {
+		t.Fatal("Should have errored")
+	}
 }
 
 func createJobs(t *testing.T, tk *tracker.Tracker, prefix string, n int) {
@@ -55,12 +85,11 @@ func TestTrackerAddDelete(t *testing.T) {
 	saver := NewTestSaver()
 
 	tk, err := tracker.InitTracker(saver, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	must(t, err)
 
 	numJobs := 500
 	createJobs(t, tk, "500Jobs:", numJobs)
+
 	completeJobs(t, tk, "500Jobs:", numJobs)
 	if tk.NumJobs() != 0 {
 		t.Error("Job cleanup failed")
@@ -81,27 +110,24 @@ func TestUpdate(t *testing.T) {
 	saver := NewTestSaver()
 
 	tk, err := tracker.InitTracker(saver, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	must(t, err)
 
 	createJobs(t, tk, "JobToUpdate:", 2)
 	defer completeJobs(t, tk, "JobToUpdate:", 2)
 
-	err = tk.SetJobState("JobToUpdate:0", "start")
-	if err != nil {
-		t.Fatal(err)
+	must(t, tk.SetJobState("JobToUpdate:0", "start"))
+
+	must(t, tk.SetJobState("JobToUpdate:0", "middle"))
+
+	tk.Sync()
+
+	var j = tracker.NewJobState("JobToUpdate:0")
+	must(t, saver.Fetch(context.Background(), &j))
+	if j.State != "middle" {
+		t.Error("Expected State:middle, but", j)
 	}
 
-	err = tk.SetJobState("JobToUpdate:0", "middle")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = tk.SetJobState("JobToUpdate:0", "end")
-	if err != nil {
-		t.Fatal(err)
-	}
+	must(t, tk.SetJobState("JobToUpdate:0", "end"))
 }
 
 // This tests whether AddJob and SetJobState generate appropriate

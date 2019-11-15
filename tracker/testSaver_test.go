@@ -2,6 +2,8 @@ package tracker_test
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"sync"
 
 	"github.com/m-lab/etl-gardener/tracker"
@@ -15,7 +17,7 @@ type JobState = tracker.JobState
 // Generalizing is complicated because StateObject is an interface.
 type testSaver struct {
 	lock  sync.Mutex
-	tasks map[string][]tracker.JobState
+	tasks map[string][]JobState
 	// deletes are represented as an empty Task in the tasks sequence.
 }
 
@@ -24,14 +26,20 @@ func NewTestSaver() *testSaver {
 }
 
 func (s *testSaver) Save(ctx context.Context, o persistence.StateObject) error {
+	if reflect.TypeOf(o).Kind() != reflect.Ptr {
+		return errors.New("Invalid type")
+	}
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	name := o.GetName()
-	s.tasks[name] = append(s.tasks[name], o.(JobState))
+	s.tasks[name] = append(s.tasks[name], *o.(*JobState))
 	return nil
 }
 
 func (s *testSaver) Delete(ctx context.Context, o persistence.StateObject) error {
+	if reflect.TypeOf(o).Kind() != reflect.Ptr {
+		return errors.New("Invalid type")
+	}
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	name := o.GetName()
@@ -41,6 +49,9 @@ func (s *testSaver) Delete(ctx context.Context, o persistence.StateObject) error
 
 // This is not quite correct.
 func (s *testSaver) Fetch(ctx context.Context, o persistence.StateObject) error {
+	if reflect.TypeOf(o).Kind() != reflect.Ptr {
+		return errors.New("Invalid type")
+	}
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	taskStates := s.tasks[o.GetName()]
@@ -52,7 +63,7 @@ func (s *testSaver) Fetch(ctx context.Context, o persistence.StateObject) error 
 	if last.Name == "" {
 		return tracker.ErrJobNotFound
 	}
-	*(o.(*tracker.JobState)) = last
+	*(o.(*JobState)) = last
 	return nil
 }
 
