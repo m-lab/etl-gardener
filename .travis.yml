@@ -65,12 +65,14 @@ before_script:
 script:
 # To start, run all the non-integration unit tests.
 - cd $TRAVIS_BUILD_DIR
-- go test -v -coverpkg=./... -coverprofile=_unit.cov ./...
+# This is failing since go 1.13.  See https://github.com/golang/go/issues/30374
+# - go test -v -coverpkg=./... -coverprofile=_unit.cov ./...
+- go test -v -coverprofile=_unit.cov ./...
 
 # Rerun modules with integration tests.  This means that some tests are
 # repeated, but otherwise we lose some coverage.
 - if [[ -n "$SERVICE_ACCOUNT_mlab_testing" ]] ; then
-    go test -v -coverpkg=./... -coverprofile=_integration.cov ./... -tags=integration ;
+    go test -v -coverprofile=_integration.cov ./... -tags=integration ;
   fi
 
 # Combine coverage of unit tests and integration tests and send the results to coveralls.
