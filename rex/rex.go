@@ -30,20 +30,8 @@ import (
 	"google.golang.org/api/option"
 )
 
-// Environment provides "global" variables.
-// TODO - use entries in context instead.
-type environment struct {
-	TestMode bool
-}
-
-// env provides environment vars.
-var env environment
-
-func init() {
-	// HACK This allows some modified behavior when running unit tests.
-	if flag.Lookup("test.v") != nil {
-		env.TestMode = true
-	}
+func isTest() bool {
+	return flag.Lookup("test.v") != nil
 }
 
 // ReprocessingExecutor handles all reprocessing steps.
@@ -142,8 +130,11 @@ func (rex *ReprocessingExecutor) Next(ctx context.Context, t *state.Task, termin
 		err = bq.WaitForStableTable(ctx, s)
 		if err != nil {
 			// When testing, we expect to get ErrTableNotFound here.
-			if !env.TestMode || err != state.ErrTableNotFound {
-				// SetError also pushes to datastore, like Update(ctx, )
+			if err != state.ErrTableNotFound {
+				t.SetError(ctx, err, "bq.WaitForStableTable")
+				return err
+			}
+			if flag.Lookup("testing.v") == nil {
 				t.SetError(ctx, err, "bq.WaitForStableTable")
 				return err
 			}
@@ -211,8 +202,9 @@ func (rex *ReprocessingExecutor) waitForParsing(ctx context.Context, t *state.Ta
 		if err == tq.ErrTerminated {
 			break
 		}
-		if err == io.EOF && env.TestMode {
+		if err == io.EOF && isTest() {
 			// Expected when using test client.
+			log.Println("TestMode")
 			return nil
 		}
 		// We don't expect errors here, so try logging, and a large backoff
@@ -248,7 +240,7 @@ func (rex *ReprocessingExecutor) queue(ctx context.Context, t *state.Task) (int,
 	// TODO - try cancelling the context instead?
 	bucket, err := tq.GetBucket(ctx, rex.StorageClient, rex.Project, prefix.Bucket, false)
 	if err != nil {
-		if err == io.EOF && env.TestMode {
+		if err == io.EOF && isTest() {
 			log.Println("Using fake client, ignoring EOF error")
 			return 0, 0, nil
 		}
@@ -289,7 +281,7 @@ func (rex *ReprocessingExecutor) dedup(ctx context.Context, t *state.Task) error
 	job, err := bq.Dedup(ctx, &ds, src.TableID(), dest)
 	if err != nil {
 		if err == io.EOF {
-			if env.TestMode {
+			if isTest() {
 				t.JobID = "fakeJobID"
 				return nil
 			}
