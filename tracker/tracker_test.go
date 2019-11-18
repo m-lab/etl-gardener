@@ -16,10 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"cloud.google.com/go/datastore"
-
-	"github.com/m-lab/etl-gardener/persistence"
-
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
@@ -32,24 +28,6 @@ func must(t *testing.T, err error) {
 	if err != nil {
 		log.Output(1, err.Error())
 		t.Fatal()
-	}
-}
-
-func TestWithDatastoreSaver(t *testing.T) {
-	ctx := context.Background()
-	ds, err := persistence.NewDatastoreSaver(ctx, "mlab-testing")
-	must(t, err)
-
-	o := tracker.NewJobState("foobar")
-	must(t, ds.Save(ctx, &o))
-
-	must(t, ds.Fetch(ctx, &o))
-
-	must(t, ds.Delete(ctx, &o))
-
-	err = ds.Fetch(ctx, &o)
-	if err != datastore.ErrNoSuchEntity {
-		t.Fatal("Should have errored")
 	}
 }
 
@@ -73,7 +51,7 @@ func createJobs(t *testing.T, tk *tracker.Tracker, prefix string, n int) {
 func completeJobs(t *testing.T, tk *tracker.Tracker, prefix string, n int) {
 	// Delete all jobs.
 	for i := 0; i < n; i++ {
-		err := tk.SetJobState(fmt.Sprint(prefix, i), "Complete")
+		err := tk.SetJobState(fmt.Sprint(prefix, i), tracker.Complete)
 		if err != nil {
 			t.Error(err)
 		}
@@ -92,7 +70,7 @@ func TestTrackerAddDelete(t *testing.T) {
 
 	completeJobs(t, tk, "500Jobs:", numJobs)
 	if tk.NumJobs() != 0 {
-		t.Error("Job cleanup failed")
+		t.Error("Job cleanup failed", tk.NumJobs())
 	}
 
 	all := saver.GetTasks()
@@ -140,7 +118,7 @@ func TestNonexistentJobAccess(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = tk.SetJobState("foobar", "non-existent")
+	err = tk.SetJobState("foobar", tracker.State("non-existent"))
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)
 	}
@@ -154,7 +132,7 @@ func TestNonexistentJobAccess(t *testing.T) {
 		t.Error("Should be ErrJobAlreadyExists", err)
 	}
 
-	tk.SetJobState("foobar", "Complete")
+	tk.SetJobState("foobar", tracker.Complete)
 	tk.Sync() // Should cause job cleanup.
 
 	// Job should be gone now.
@@ -165,16 +143,15 @@ func TestNonexistentJobAccess(t *testing.T) {
 }
 
 func TestConcurrentUpdates(t *testing.T) {
-	// This test should be run with -race to detect any concurrency
-	// problems.
 	// The test is intended to exercise job updates at a high
-	// rate, and ensure that there is not contention across jobs.
-	// With cross job contention, the execution time for this test
-	// increases dramatically.
+	// rate, and ensure that are no races.
+	// It should be run with -race to detect any concurrency
+	// problems.
 	saver := NewTestSaver()
 
 	// For testing, push to the saver every 5 milliseconds.
-	tk, err := tracker.InitTracker(saver, 5*time.Millisecond)
+	saverInterval := 5 * time.Millisecond
+	tk, err := tracker.InitTracker(saver, saverInterval)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,14 +160,15 @@ func TestConcurrentUpdates(t *testing.T) {
 	createJobs(t, tk, "Job:", jobs)
 	defer completeJobs(t, tk, "Job:", jobs)
 
-	updates := 20 * jobs
+	changes := 20 * jobs
+	start := time.Now()
 	wg := sync.WaitGroup{}
-	wg.Add(updates)
-	for i := 0; i < updates; i++ {
+	wg.Add(changes)
+	for i := 0; i < changes; i++ {
 		go func(i int) {
 			jn := fmt.Sprint("Job:", rand.Intn(jobs))
 			if i%5 == 0 {
-				err := tk.SetJobState(jn, fmt.Sprint(i))
+				err := tk.SetJobState(jn, tracker.State(fmt.Sprintf("State:%d", i)))
 				if err != nil {
 					log.Fatal(err, " ", jn)
 				}
@@ -205,21 +183,19 @@ func TestConcurrentUpdates(t *testing.T) {
 		time.Sleep(200 * time.Microsecond)
 	}
 	wg.Wait()
+	elapsed := time.Since(start)
+	t.Log(elapsed)
+	intervals := int(elapsed / saverInterval)
+	maxUpdates := (intervals + 1) * jobs
 
-	max := 0
-	min := 100
+	// Now we look at all the updates observed by saver.
+	total := 0
 	for _, job := range saver.GetTasks() {
-		if max < len(job) {
-			max = len(job)
-		}
-		if min > len(job) {
-			min = len(job)
-		}
+		total += len(job)
 	}
-	if min < 5 {
-		t.Error("Warning, expected at least 5 updates per job, saw", min)
-	}
-	if max < 15 {
-		t.Error("Warning, expected > 15 updates for at least one job, saw", max)
+	// Because of heartbeats and updates, we expect most jobs to be
+	// saved on each saver interval.  We generally see about 60% of max.
+	if total < maxUpdates/2 {
+		t.Errorf("Expected at least %d updates, but observed %d\n", maxUpdates/2, total)
 	}
 }

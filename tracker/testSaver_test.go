@@ -57,12 +57,12 @@ func (s *testSaver) Fetch(ctx context.Context, o persistence.StateObject) error 
 	}
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	taskStates := s.tasks[o.GetName()]
-	if taskStates == nil {
+	states, ok := s.tasks[o.GetName()]
+	if !ok {
 		return tracker.ErrJobNotFound
 	}
 
-	last := taskStates[len(taskStates)-1]
+	last := states[len(states)-1]
 	if last.Name == "" {
 		return tracker.ErrJobNotFound
 	}

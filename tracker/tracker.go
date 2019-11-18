@@ -15,7 +15,6 @@ import (
 	"errors"
 	"log"
 	"reflect"
-	"strings"
 	"sync"
 	"time"
 
@@ -32,6 +31,21 @@ var (
 	ErrNotYetImplemented      = errors.New("not yet implemented")
 )
 
+// State types are used for the JobState.State values
+// This is intended to enforce type safety, but compiler accepts string assignment.  8-(
+type State string
+
+// State values
+const (
+	Init          State = "init"
+	Parsing       State = "parsing"
+	Stabilizing   State = "stabilizing"
+	Deduplicating State = "deduplicating"
+	Joining       State = "joining"
+	Failed        State = "failed"
+	Complete      State = "complete"
+)
+
 // A JobState describes the state of a bucket/exp/type/YYYY/MM/DD job.
 // Completed jobs are removed from the persistent store.
 // Errored jobs are maintained in the persistent store for debugging.
@@ -43,7 +57,7 @@ type JobState struct {
 	UpdateTime    time.Time // Time of last update.
 	HeartbeatTime time.Time // Time of last ETL heartbeat.
 
-	State     string // String defining the current state - parsing, stabilizing, dedupping, joining, complete, failed.
+	State     State  // String defining the current state.
 	LastError string // The most recent error encountered.
 
 	// Not persisted
@@ -64,26 +78,16 @@ func (j JobState) GetKind() string {
 // This is threadsafe, but concurrent calls on the same job create a
 // race in the Saver, so the final value is unclear.
 func (j JobState) saveOrDelete(s persistence.Saver) error {
-	start := time.Now()
 	ctx, cf := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cf()
-	var err error
 	if j.isDone() {
-		err = s.Delete(ctx, &j)
-
-	} else {
-		err = s.Save(ctx, &j)
+		return s.Delete(ctx, &j)
 	}
-	// With datastore and high save rates, this may be 2 seconds or more.
-	latency := time.Since(start)
-	if latency > 5*time.Second {
-		log.Println("Slow update:", j.Name, latency)
-	}
-	return err
+	return s.Save(ctx, &j)
 }
 
 func (j JobState) isDone() bool {
-	return strings.ToLower(j.State) == "complete"
+	return j.State == Complete
 }
 
 // NewJobState creates a new JobState with provided name.
@@ -217,7 +221,7 @@ func (tr *Tracker) updateJob(job JobState) error {
 }
 
 // SetJobState updates a job's state, and handles persistence.
-func (tr *Tracker) SetJobState(prefix string, newState string) error {
+func (tr *Tracker) SetJobState(prefix string, newState State) error {
 	job, err := tr.getJob(prefix)
 	if err != nil {
 		return err
