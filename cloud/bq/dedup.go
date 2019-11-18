@@ -17,12 +17,9 @@ import (
 	"github.com/m-lab/go/dataset"
 )
 
-// testMode is set IFF the test.v flag is defined, as it is in all go testing.T tests.
 // Use with caution!
-var testMode bool
-
-func init() {
-	testMode = flag.Lookup("test.v") != nil
+func isTest() bool {
+	return flag.Lookup("test.v") != nil
 }
 
 // Dedup related errors.
@@ -44,7 +41,7 @@ func WaitForStableTable(ctx context.Context, tt bqiface.Table) error {
 	emptyBufferWaitTime := 60 * time.Minute
 
 	errorTimeout := 2 * time.Minute
-	if testMode {
+	if isTest() {
 		errorTimeout = 100 * time.Millisecond
 	}
 	errorDeadline := time.Now().Add(errorTimeout)
