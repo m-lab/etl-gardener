@@ -130,11 +130,7 @@ func (rex *ReprocessingExecutor) Next(ctx context.Context, t *state.Task, termin
 		err = bq.WaitForStableTable(ctx, s)
 		if err != nil {
 			// When testing, we expect to get ErrTableNotFound here.
-			if err != state.ErrTableNotFound {
-				t.SetError(ctx, err, "bq.WaitForStableTable")
-				return err
-			}
-			if flag.Lookup("testing.v") == nil {
+			if err != state.ErrTableNotFound || !isTest() {
 				t.SetError(ctx, err, "bq.WaitForStableTable")
 				return err
 			}
