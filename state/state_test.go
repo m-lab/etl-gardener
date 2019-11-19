@@ -11,6 +11,8 @@ import (
 	"github.com/m-lab/go/dataset"
 )
 
+type Task = state.Task
+
 func init() {
 	// Always prepend the filename and line number.
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -18,31 +20,35 @@ func init() {
 
 type testSaver struct {
 	lock   sync.Mutex
-	tasks  map[string][]state.Task
+	tasks  map[string][]Task
 	delete map[string]struct{}
 }
 
-func (s *testSaver) SaveTask(ctx context.Context, t state.Task) error {
+func (s *testSaver) SaveTask(ctx context.Context, t Task) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.tasks[t.Name] = append(s.tasks[t.Name], t)
 	return nil
 }
 
-func (s *testSaver) DeleteTask(ctx context.Context, t state.Task) error {
+func (s *testSaver) DeleteTask(ctx context.Context, t Task) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.delete[t.Name] = struct{}{}
 	return nil
 }
 
-func (s *testSaver) GetTasks(t state.Task) map[string][]state.Task {
+func (s *testSaver) GetTasks() map[string][]Task {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	return s.tasks
+	m := make(map[string][]Task, len(s.tasks))
+	for k, v := range s.tasks {
+		m[k] = v
+	}
+	return m
 }
 
-func (s *testSaver) GetDeletes(t state.Task) map[string]struct{} {
+func (s *testSaver) GetDeletes(t Task) map[string]struct{} {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	return s.delete
@@ -51,8 +57,8 @@ func (s *testSaver) GetDeletes(t state.Task) map[string]struct{} {
 func assertSaver() { func(ex state.PersistentStore) {}(&testSaver{}) }
 
 func TestNewPlatformPrefix(t *testing.T) {
-	task := state.Task{Name: "gs://pusher-mlab-sandbox/ndt/tcpinfo/2019/04/01/", State: state.Initializing}
-	saver := testSaver{tasks: make(map[string][]state.Task), delete: make(map[string]struct{})}
+	task := Task{Name: "gs://pusher-mlab-sandbox/ndt/tcpinfo/2019/04/01/", State: state.Initializing}
+	saver := testSaver{tasks: make(map[string][]Task), delete: make(map[string]struct{})}
 	task.SetSaver(&saver)
 
 	pp, err := task.ParsePrefix()
@@ -67,8 +73,8 @@ func TestNewPlatformPrefix(t *testing.T) {
 }
 
 func TestLegacyPrefix(t *testing.T) {
-	task := state.Task{Name: "gs://archive-mlab-sandbox/ndt/2019/04/01/", State: state.Initializing}
-	saver := testSaver{tasks: make(map[string][]state.Task), delete: make(map[string]struct{})}
+	task := Task{Name: "gs://archive-mlab-sandbox/ndt/2019/04/01/", State: state.Initializing}
+	saver := testSaver{tasks: make(map[string][]Task), delete: make(map[string]struct{})}
 	task.SetSaver(&saver)
 
 	pp, err := task.ParsePrefix()
@@ -84,8 +90,8 @@ func TestLegacyPrefix(t *testing.T) {
 
 func TestTaskBasics(t *testing.T) {
 	ctx := context.Background()
-	task := state.Task{Name: "foobar", State: state.Initializing}
-	saver := testSaver{tasks: make(map[string][]state.Task), delete: make(map[string]struct{})}
+	task := Task{Name: "foobar", State: state.Initializing}
+	saver := testSaver{tasks: make(map[string][]Task), delete: make(map[string]struct{})}
 	task.SetSaver(&saver)
 
 	task.Update(ctx, state.Initializing)
@@ -186,7 +192,7 @@ func TestSourceAndDest(t *testing.T) {
 	}
 
 	// Exercise error case, which should be impossible if the task was created with NewTask.
-	task = &state.Task{Name: "gs://foo/ndt/2000/ab/01/task1"}
+	task = &Task{Name: "gs://foo/ndt/2000/ab/01/task1"}
 	_, _, err = task.SourceAndDest(&dsExt)
 	if err == nil {
 		t.Fatal("Should have had an error")
