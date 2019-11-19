@@ -13,6 +13,7 @@ package tracker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"reflect"
 	"sync"
@@ -52,7 +53,12 @@ const (
 // JobState should be updated only by the Tracker, which will
 // ensure correct serialization and Saver updates.
 type JobState struct {
-	persistence.Base // Includes Name field like gs://bucket/exp/type/YYYY/MM/DD
+	key string
+
+	// These define the job.
+	Bucket     string
+	ExpAndType string
+	Date       time.Time
 
 	UpdateTime    time.Time // Time of last update.
 	HeartbeatTime time.Time // Time of last ETL heartbeat.
@@ -68,8 +74,22 @@ func assertStateObject(so persistence.StateObject) {
 	assertStateObject(JobState{})
 }
 
-// GetKind implements Saver.GetKind
-func (j JobState) GetKind() string {
+// JobKey creates a canonical key for a given bucket, exp, and date.
+func JobKey(bucket string, exp string, date time.Time) string {
+	return fmt.Sprintf("gs://%s/%s/%s",
+		bucket, exp, date.Format("2006/01/02"))
+}
+
+// Key implements Saver.Key
+func (j JobState) Key() string {
+	if len(j.key) == 0 {
+		return JobKey(j.Bucket, j.ExpAndType, j.Date)
+	}
+	return j.key
+}
+
+// Kind implements Saver.Kind
+func (j JobState) Kind() string {
 	return reflect.TypeOf(j).Name()
 }
 
@@ -90,12 +110,15 @@ func (j JobState) isDone() bool {
 	return j.State == Complete
 }
 
-// NewJobState creates a new JobState with provided name.
-func NewJobState(name string) JobState {
+// NewJobState creates a new JobState with provided parameters.
+// NB:  The date will be converted to UTC and truncated to day boundary!
+func NewJobState(bucket string, exp string, date time.Time) JobState {
 	return JobState{
-		Base:   persistence.NewBase(name),
-		errors: make([]string, 0, 1),
-		State:  "Init",
+		Bucket:     bucket,
+		ExpAndType: exp,
+		Date:       date.UTC().Truncate(24 * time.Hour),
+		errors:     make([]string, 0, 1),
+		State:      "Init",
 	}
 }
 
@@ -193,16 +216,15 @@ func (tr *Tracker) getJob(prefix string) (JobState, error) {
 
 // AddJob adds a new job to the Tracker.
 // May return ErrJobAlreadyExists if job already exists.
-func (tr *Tracker) AddJob(prefix string) error {
+func (tr *Tracker) AddJob(job JobState) error {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	_, ok := tr.jobs[prefix]
+	_, ok := tr.jobs[job.Key()]
 	if ok {
 		return ErrJobAlreadyExists
 	}
-	job := NewJobState(prefix)
 
-	tr.jobs[prefix] = &job
+	tr.jobs[job.Key()] = &job
 	return nil
 }
 
@@ -211,12 +233,12 @@ func (tr *Tracker) AddJob(prefix string) error {
 func (tr *Tracker) updateJob(job JobState) error {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	oldJob, ok := tr.jobs[job.Name]
+	oldJob, ok := tr.jobs[job.key]
 	if !ok || oldJob.isDone() {
 		return ErrJobNotFound
 	}
 
-	tr.jobs[job.Name] = &job
+	tr.jobs[job.Key()] = &job
 	return nil
 }
 

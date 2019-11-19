@@ -31,27 +31,32 @@ func must(t *testing.T, err error) {
 	}
 }
 
-func createJobs(t *testing.T, tk *tracker.Tracker, prefix string, n int) {
+func createJobs(t *testing.T, tk *tracker.Tracker, exp string, n int) {
 	// Create 100 jobs in parallel
 	wg := sync.WaitGroup{}
 	wg.Add(n)
+	date := time.Date(2011, 1, 1, 0, 0, 0, 0, time.UTC)
 	for i := 0; i < n; i++ {
-		go func(i int) {
-			err := tk.AddJob(fmt.Sprint(prefix, i))
+		go func(date time.Time) {
+			job := tracker.NewJobState("bucket", exp, date)
+			err := tk.AddJob(job)
 			if err != nil {
 				t.Error(err)
 			}
 			wg.Done()
-		}(i)
+		}(date)
+		date = date.Add(24 * time.Hour)
 	}
 	wg.Wait()
 	// BUG: There may be Saves still in flight
 }
 
-func completeJobs(t *testing.T, tk *tracker.Tracker, prefix string, n int) {
+func completeJobs(t *testing.T, tk *tracker.Tracker, exp string, n int) {
 	// Delete all jobs.
+	date := time.Date(2011, 1, 1, 0, 0, 0, 0, time.UTC)
 	for i := 0; i < n; i++ {
-		err := tk.SetJobState(fmt.Sprint(prefix, i), tracker.Complete)
+		key := tracker.JobKey("bucket", exp, date)
+		err := tk.SetJobState(key, tracker.Complete)
 		if err != nil {
 			t.Error(err)
 		}
@@ -76,7 +81,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	all := saver.GetTasks()
 	for _, states := range all {
 		final := states[len(states)-1]
-		if final.Name != "" {
+		if final.State != "DELETED" {
 			t.Error(final)
 		}
 	}
@@ -118,7 +123,7 @@ func TestNonexistentJobAccess(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = tk.SetJobState("foobar", tracker.State("non-existent"))
+	err = tk.SetJobState("foobar", "non-existent")
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)
 	}
@@ -132,7 +137,7 @@ func TestNonexistentJobAccess(t *testing.T) {
 		t.Error("Should be ErrJobAlreadyExists", err)
 	}
 
-	tk.SetJobState("foobar", tracker.Complete)
+	tk.SetJobState("foobar", "Complete")
 	tk.Sync() // Should cause job cleanup.
 
 	// Job should be gone now.
