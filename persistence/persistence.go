@@ -22,24 +22,8 @@ func setVerbose(b bool) {
 
 // StateObject defines the interface for objects to be saved/retrieved from datastore.
 type StateObject interface {
-	GetName() string
-	GetKind() string // Should be implemented in the actual type, as return reflect.TypeOf(o).Name()
-}
-
-// Base is the base for persistent objects.  All StateObjects should embed
-// Base and call NewBase to initialize.
-type Base struct {
-	Name string
-}
-
-// GetName implements StateObject.Name
-func (o Base) GetName() string {
-	return o.Name
-}
-
-// NewBase initializes a Base object.
-func NewBase(name string) Base {
-	return Base{Name: name}
+	Key() string
+	Kind() string // Should be implemented in the actual type, as return reflect.TypeOf(o).Name()
 }
 
 // Saver provides API for saving and retrieving StateObjects.
@@ -67,18 +51,20 @@ func NewDatastoreSaver(ctx context.Context, project string) (*DatastoreSaver, er
 }
 
 func (ds *DatastoreSaver) key(o StateObject) *datastore.Key {
-	k := datastore.NameKey(o.GetKind(), o.GetName(), nil)
+	k := datastore.NameKey(o.Kind(), o.Key(), nil)
 	k.Namespace = ds.Namespace
 	return k
 }
 
 // Save implements Saver.Save using Datastore.
 func (ds *DatastoreSaver) Save(ctx context.Context, o StateObject) error {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	// These can be quite slow when there is a lot of activity.
+	// 10 seconds seems sufficient.
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	verbose.Println("Saving", o.GetName())
+	verbose.Println("Saving", o.Key())
 	_, err := ds.Client.Put(ctx, ds.key(o), o)
-	verbose.Println("Saved", o.GetName(), err)
+	verbose.Println("Saved", o.Key(), err)
 	if err != nil {
 		return err
 	}
@@ -87,11 +73,13 @@ func (ds *DatastoreSaver) Save(ctx context.Context, o StateObject) error {
 
 // Delete implements Saver.Delete using Datastore.
 func (ds *DatastoreSaver) Delete(ctx context.Context, o StateObject) error {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	// These can be quite slow when there is a lot of activity.
+	// 10 seconds seems sufficient.
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	verbose.Println("Deleting", o.GetName())
+	verbose.Println("Deleting", o.Key())
 	err := ds.Client.Delete(ctx, ds.key(o))
-	verbose.Println("Deleted", o.GetName(), err, time.Now())
+	verbose.Println("Deleted", o.Key(), err, time.Now())
 	if err != nil {
 		return err
 	}
@@ -100,7 +88,7 @@ func (ds *DatastoreSaver) Delete(ctx context.Context, o StateObject) error {
 
 // Fetch implements Saver.Fetch to fetch state of requested StateObject from Datastore.
 func (ds *DatastoreSaver) Fetch(ctx context.Context, o StateObject) error {
-	key := datastore.Key{Kind: o.GetKind(), Name: o.GetName(), Namespace: ds.Namespace}
+	key := datastore.Key{Kind: o.Kind(), Name: o.Key(), Namespace: ds.Namespace}
 	return ds.Client.Get(ctx, &key, o)
 }
 
@@ -108,7 +96,7 @@ func (ds *DatastoreSaver) Fetch(ctx context.Context, o StateObject) error {
 // The "o" parameter should be an instance of the type to fetch, which is
 // used only to determine the kind, and to create the result slice.
 func (ds *DatastoreSaver) FetchAll(ctx context.Context, o StateObject) ([]*datastore.Key, interface{}, error) {
-	q := datastore.NewQuery(o.GetKind()).Namespace(ds.Namespace)
+	q := datastore.NewQuery(o.Kind()).Namespace(ds.Namespace)
 	keys, err := ds.Client.GetAll(ctx, q.KeysOnly(), nil)
 	if err != nil {
 		return nil, nil, err
