@@ -118,14 +118,19 @@ func TestTrackerAddDelete(t *testing.T) {
 
 	numJobs := 500
 	createJobs(t, tk, "500Jobs", numJobs)
+	if tk.NumJobs() != 500 {
+		t.Fatal("Incorrect number of jobs", tk.NumJobs())
+	}
 
 	log.Println("Calling Sync")
 	must(t, tk.Sync())
-	log.Println(client.objects)
-	_, err = tracker.InitTracker(context.Background(), client, 0)
+	// Check that the sync (and InitTracker) work.
+	restore, err := tracker.InitTracker(context.Background(), client, 0)
 	must(t, err)
 
-	log.Println(tk)
+	if restore.NumJobs() != 500 {
+		t.Fatal("Incorrect number of jobs", restore.NumJobs())
+	}
 
 	completeJobs(t, tk, "500Jobs", numJobs)
 

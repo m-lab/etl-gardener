@@ -53,8 +53,6 @@ const (
 // JobState should be updated only by the Tracker, which will
 // ensure correct serialization and Saver updates.
 type JobState struct {
-	key string // cache of key string, not persisted
-
 	// These define the job.
 	Bucket     string
 	ExpAndType string
@@ -76,12 +74,8 @@ func JobKey(bucket string, exp string, date time.Time) string {
 		bucket, exp, date.Format("2006/01/02"))
 }
 
-// Key implements Saver.Key
 func (j JobState) Key() string {
-	if len(j.key) == 0 {
-		return JobKey(j.Bucket, j.ExpAndType, j.Date)
-	}
-	return j.key
+	return JobKey(j.Bucket, j.ExpAndType, j.Date)
 }
 
 func (j JobState) isDone() bool {
@@ -212,8 +206,9 @@ func (tr *Tracker) AddJob(job JobState) error {
 func (tr *Tracker) updateJob(job JobState) error {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	oldJob, ok := tr.jobs[job.key]
+	oldJob, ok := tr.jobs[job.Key()]
 	if !ok || oldJob.isDone() {
+		log.Println(ok, oldJob)
 		return ErrJobNotFound
 	}
 
