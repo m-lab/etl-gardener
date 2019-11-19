@@ -3,7 +3,9 @@ package tracker_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
+	"math/rand"
 	"reflect"
 	"sync"
 	"testing"
@@ -26,11 +28,66 @@ func must(t *testing.T, err error) {
 	}
 }
 
+type testClient struct {
+	dsiface.Client // For unimplemented methods
+	lock           sync.Mutex
+	objects        map[datastore.Key]reflect.Value
+}
+
+func newTestClient() *testClient {
+	return &testClient{objects: make(map[datastore.Key]reflect.Value, 10)}
+}
+
+func (c *testClient) Close() error { return nil }
+
+func (c *testClient) Count(ctx context.Context, q *datastore.Query) (n int, err error) {
+	return 0, ErrNotImplemented
+}
+
+func (c *testClient) Delete(ctx context.Context, key *datastore.Key) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	_, ok := c.objects[*key]
+	if !ok {
+		return datastore.ErrNoSuchEntity
+	}
+	delete(c.objects, *key)
+	return nil
+}
+
+func (c *testClient) Get(ctx context.Context, key *datastore.Key, dst interface{}) (err error) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	v := reflect.ValueOf(dst)
+	if v.Kind() != reflect.Ptr {
+		return datastore.ErrInvalidEntityType
+	}
+	o, ok := c.objects[*key]
+	if !ok {
+		return datastore.ErrNoSuchEntity
+	}
+	v.Elem().Set(o)
+	return nil
+}
+
+func (c *testClient) Put(ctx context.Context, key *datastore.Key, src interface{}) (*datastore.Key, error) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	v := reflect.ValueOf(src)
+	if v.Kind() != reflect.Ptr {
+		return nil, datastore.ErrInvalidEntityType
+	}
+	c.objects[*key] = reflect.Indirect(v)
+	return key, nil
+}
+
+var startDate = time.Date(2011, 1, 1, 0, 0, 0, 0, time.UTC)
+
 func createJobs(t *testing.T, tk *tracker.Tracker, exp string, n int) {
 	// Create 100 jobs in parallel
 	wg := sync.WaitGroup{}
 	wg.Add(n)
-	date := time.Date(2011, 1, 1, 0, 0, 0, 0, time.UTC)
+	date := startDate
 	for i := 0; i < n; i++ {
 		go func(date time.Time) {
 			job := tracker.NewJobState("bucket", exp, date)
@@ -47,7 +104,7 @@ func createJobs(t *testing.T, tk *tracker.Tracker, exp string, n int) {
 
 func completeJobs(t *testing.T, tk *tracker.Tracker, exp string, n int) {
 	// Delete all jobs.
-	date := time.Date(2011, 1, 1, 0, 0, 0, 0, time.UTC)
+	date := startDate
 	for i := 0; i < n; i++ {
 		key := tracker.JobKey("bucket", exp, date)
 		err := tk.SetJobState(key, tracker.Complete)
@@ -60,52 +117,6 @@ func completeJobs(t *testing.T, tk *tracker.Tracker, exp string, n int) {
 }
 
 var ErrNotImplemented = errors.New("Not implemented")
-
-type testClient struct {
-	dsiface.Client // For unimplemented methods
-	objects        map[datastore.Key]reflect.Value
-}
-
-func newTestClient() *testClient {
-	return &testClient{objects: make(map[datastore.Key]reflect.Value, 10)}
-}
-
-func (c *testClient) Close() error { return nil }
-
-func (c *testClient) Count(ctx context.Context, q *datastore.Query) (n int, err error) {
-	return 0, ErrNotImplemented
-}
-
-func (c *testClient) Delete(ctx context.Context, key *datastore.Key) error {
-	_, ok := c.objects[*key]
-	if !ok {
-		return datastore.ErrNoSuchEntity
-	}
-	delete(c.objects, *key)
-	return nil
-}
-
-func (c *testClient) Get(ctx context.Context, key *datastore.Key, dst interface{}) (err error) {
-	v := reflect.ValueOf(dst)
-	if v.Kind() != reflect.Ptr {
-		return datastore.ErrInvalidEntityType
-	}
-	o, ok := c.objects[*key]
-	if !ok {
-		return datastore.ErrNoSuchEntity
-	}
-	v.Elem().Set(o)
-	return nil
-}
-
-func (c *testClient) Put(ctx context.Context, key *datastore.Key, src interface{}) (*datastore.Key, error) {
-	v := reflect.ValueOf(src)
-	if v.Kind() != reflect.Ptr {
-		return nil, datastore.ErrInvalidEntityType
-	}
-	c.objects[*key] = reflect.Indirect(v)
-	return key, nil
-}
 
 func TestTrackerAddDelete(t *testing.T) {
 	client := newTestClient()
@@ -142,63 +153,63 @@ func TestTrackerAddDelete(t *testing.T) {
 
 }
 
-/*
-
 // This tests basic Add and update of 2 jobs, and verifies
 // correct error returned when trying to update a third job.
 func TestUpdate(t *testing.T) {
-	saver := NewTestSaver()
+	client := newTestClient()
 
-	tk, err := tracker.InitTracker(saver, 0)
+	tk, err := tracker.InitTracker(context.Background(), client, 0)
 	must(t, err)
 
-	createJobs(t, tk, "JobToUpdate:", 2)
-	defer completeJobs(t, tk, "JobToUpdate:", 2)
+	createJobs(t, tk, "JobToUpdate", 2)
+	defer completeJobs(t, tk, "JobToUpdate", 2)
 
-	must(t, tk.SetJobState("JobToUpdate:0", "start"))
+	prefix := tracker.JobKey("bucket", "JobToUpdate", startDate)
+	must(t, tk.SetJobState(prefix, tracker.Parsing))
 
-	must(t, tk.SetJobState("JobToUpdate:0", "middle"))
+	must(t, tk.SetJobState(prefix, tracker.Stabilizing))
 
-	tk.Sync()
-
-	var j = tracker.NewJobState("JobToUpdate:0")
-	must(t, saver.Fetch(context.Background(), &j))
-	if j.State != "middle" {
-		t.Error("Expected State:middle, but", j)
+	job, err := tk.GetJob(prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.State != tracker.Stabilizing {
+		t.Error("Incorrect job state", job)
 	}
 
-	must(t, tk.SetJobState("JobToUpdate:0", "end"))
+	err = tk.SetJobState("no such job", tracker.Stabilizing)
+	if err != tracker.ErrJobNotFound {
+		t.Error(err, "should have been ErrJobNotFound")
+	}
 }
 
 // This tests whether AddJob and SetJobState generate appropriate
 // errors when job doesn't exist.
 func TestNonexistentJobAccess(t *testing.T) {
-	saver := NewTestSaver()
+	client := newTestClient()
 
-	tk, err := tracker.InitTracker(saver, time.Second)
-	if err != nil {
-		t.Fatal(err)
-	}
+	tk, err := tracker.InitTracker(context.Background(), client, 0)
+	must(t, err)
 
-	err = tk.SetJobState("foobar", "non-existent")
+	err = tk.SetJobState("foobar", tracker.Parsing)
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)
 	}
-	err = tk.AddJob("foobar")
+	job := tracker.NewJobState("foobar", "exp", startDate)
+	err = tk.AddJob(job)
 	if err != nil {
 		t.Error(err)
 	}
 
-	err = tk.AddJob("foobar")
+	err = tk.AddJob(job)
 	if err != tracker.ErrJobAlreadyExists {
 		t.Error("Should be ErrJobAlreadyExists", err)
 	}
 
-	tk.SetJobState("foobar", "Complete")
-	tk.Sync() // Should cause job cleanup.
+	tk.SetJobState(job.Key(), tracker.Complete)
 
 	// Job should be gone now.
-	err = tk.SetJobState("foobar", "non-existent")
+	err = tk.SetJobState(job.Key(), "foobar")
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)
 	}
@@ -209,18 +220,15 @@ func TestConcurrentUpdates(t *testing.T) {
 	// rate, and ensure that are no races.
 	// It should be run with -race to detect any concurrency
 	// problems.
-	saver := NewTestSaver()
-
+	client := newTestClient()
 	// For testing, push to the saver every 5 milliseconds.
 	saverInterval := 5 * time.Millisecond
-	tk, err := tracker.InitTracker(saver, saverInterval)
-	if err != nil {
-		t.Fatal(err)
-	}
+	tk, err := tracker.InitTracker(context.Background(), client, saverInterval)
+	must(t, err)
 
 	jobs := 20
-	createJobs(t, tk, "Job:", jobs)
-	defer completeJobs(t, tk, "Job:", jobs)
+	createJobs(t, tk, "ConcurrentUpdates", jobs)
+	defer completeJobs(t, tk, "ConcurrentUpdates", jobs)
 
 	changes := 20 * jobs
 	start := time.Now()
@@ -228,16 +236,17 @@ func TestConcurrentUpdates(t *testing.T) {
 	wg.Add(changes)
 	for i := 0; i < changes; i++ {
 		go func(i int) {
-			jn := fmt.Sprint("Job:", rand.Intn(jobs))
+			k := tracker.JobKey("bucket", "ConcurrentUpdates",
+				startDate.Add(time.Duration(24*rand.Intn(jobs))*time.Hour))
 			if i%5 == 0 {
-				err := tk.SetJobState(jn, tracker.State(fmt.Sprintf("State:%d", i)))
+				err := tk.SetJobState(k, tracker.State(fmt.Sprintf("State:%d", i)))
 				if err != nil {
-					log.Fatal(err, " ", jn)
+					log.Fatal(err, " ", k)
 				}
 			} else {
-				err := tk.Heartbeat(jn)
+				err := tk.Heartbeat(k)
 				if err != nil {
-					log.Fatal(err, " ", jn)
+					log.Fatal(err, " ", k)
 				}
 			}
 			wg.Done()
@@ -246,20 +255,7 @@ func TestConcurrentUpdates(t *testing.T) {
 	}
 	wg.Wait()
 	elapsed := time.Since(start)
-	t.Log(elapsed)
-	intervals := int(elapsed / saverInterval)
-	maxUpdates := (intervals + 1) * jobs
-
-	// Now we look at all the updates observed by saver.
-	total := 0
-	for _, job := range saver.GetTasks() {
-		total += len(job)
-	}
-	// Because of heartbeats and updates, we expect most jobs to be
-	// saved on each saver interval.  We generally see about 60% of max.
-	if total < maxUpdates/2 {
-		t.Errorf("Expected at least %d updates, but observed %d\n", maxUpdates/2, total)
+	if elapsed > 2*time.Second {
+		t.Error("Expected elapsed time < 2 seconds", elapsed)
 	}
 }
-
-*/

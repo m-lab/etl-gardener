@@ -74,6 +74,7 @@ func JobKey(bucket string, exp string, date time.Time) string {
 		bucket, exp, date.Format("2006/01/02"))
 }
 
+// Key generates the prefix key for lookups.
 func (j JobState) Key() string {
 	return JobKey(j.Bucket, j.ExpAndType, j.Date)
 }
@@ -177,7 +178,7 @@ func (tr *Tracker) saveEvery(interval time.Duration) {
 }
 
 // GetJob gets a copy of an existing job.
-func (tr *Tracker) getJob(prefix string) (JobState, error) {
+func (tr *Tracker) GetJob(prefix string) (JobState, error) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 	job := tr.jobs[prefix]
@@ -206,19 +207,22 @@ func (tr *Tracker) AddJob(job JobState) error {
 func (tr *Tracker) updateJob(job JobState) error {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	oldJob, ok := tr.jobs[job.Key()]
-	if !ok || oldJob.isDone() {
-		log.Println(ok, oldJob)
+	_, ok := tr.jobs[job.Key()]
+	if !ok {
 		return ErrJobNotFound
 	}
 
-	tr.jobs[job.Key()] = &job
+	if job.isDone() {
+		delete(tr.jobs, job.Key())
+	} else {
+		tr.jobs[job.Key()] = &job
+	}
 	return nil
 }
 
 // SetJobState updates a job's state, and handles persistence.
 func (tr *Tracker) SetJobState(prefix string, newState State) error {
-	job, err := tr.getJob(prefix)
+	job, err := tr.GetJob(prefix)
 	if err != nil {
 		return err
 	}
@@ -229,7 +233,7 @@ func (tr *Tracker) SetJobState(prefix string, newState State) error {
 
 // Heartbeat updates a job's heartbeat time.
 func (tr *Tracker) Heartbeat(prefix string) error {
-	job, err := tr.getJob(prefix)
+	job, err := tr.GetJob(prefix)
 	if err != nil {
 		return err
 	}
@@ -239,7 +243,7 @@ func (tr *Tracker) Heartbeat(prefix string) error {
 
 // SetJobError updates a job's error fields, and handles persistence.
 func (tr *Tracker) SetJobError(prefix string, errString string) error {
-	job, err := tr.getJob(prefix)
+	job, err := tr.GetJob(prefix)
 	if err != nil {
 		return err
 	}
