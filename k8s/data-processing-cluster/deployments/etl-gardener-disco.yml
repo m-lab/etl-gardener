@@ -54,7 +54,7 @@ spec:
         - name: TASK_FILE_SKIP # Should be 0 for normal operation
           value: "{{TASK_FILE_SKIP}}"
         - name: EXPERIMENT
-          value: "switch"
+          value: "utilization/switch"
         - name: DATASET
           value: "batch"
         - name: FINAL_DATASET
