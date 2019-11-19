@@ -12,15 +12,15 @@ package tracker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
-	"reflect"
 	"sync"
 	"time"
 
-	"github.com/m-lab/etl-gardener/persistence"
-	"golang.org/x/sync/errgroup"
+	"cloud.google.com/go/datastore"
+	"github.com/GoogleCloudPlatform/google-cloud-go-testing/datastore/dsiface"
 )
 
 // Error declarations
@@ -53,7 +53,7 @@ const (
 // JobState should be updated only by the Tracker, which will
 // ensure correct serialization and Saver updates.
 type JobState struct {
-	key string
+	key string // cache of key string, not persisted
 
 	// These define the job.
 	Bucket     string
@@ -66,12 +66,8 @@ type JobState struct {
 	State     State  // String defining the current state.
 	LastError string // The most recent error encountered.
 
-	// Not persisted
+	// Note that these are not persisted
 	errors []string // all errors related to the job.
-}
-
-func assertStateObject(so persistence.StateObject) {
-	assertStateObject(JobState{})
 }
 
 // JobKey creates a canonical key for a given bucket, exp, and date.
@@ -88,24 +84,6 @@ func (j JobState) Key() string {
 	return j.key
 }
 
-// Kind implements Saver.Kind
-func (j JobState) Kind() string {
-	return reflect.TypeOf(j).Name()
-}
-
-// saveOrDelete saves the JobState to the persistence.Saver, or, if
-// job.State is "Complete", it removes it using Saver.Delete.
-// This is threadsafe, but concurrent calls on the same job create a
-// race in the Saver, so the final value is unclear.
-func (j JobState) saveOrDelete(s persistence.Saver) error {
-	ctx, cf := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cf()
-	if j.isDone() {
-		return s.Delete(ctx, &j)
-	}
-	return s.Save(ctx, &j)
-}
-
 func (j JobState) isDone() bool {
 	return j.State == Complete
 }
@@ -117,29 +95,44 @@ func NewJobState(bucket string, exp string, date time.Time) JobState {
 		Bucket:     bucket,
 		ExpAndType: exp,
 		Date:       date.UTC().Truncate(24 * time.Hour),
-		errors:     make([]string, 0, 1),
 		State:      "Init",
+		errors:     make([]string, 0, 1),
 	}
 }
 
 // Tracker keeps track of all the jobs in flight.
 // Only tracker functions should access any of the fields.
 type Tracker struct {
-	saver          persistence.Saver
-	ticker         *time.Ticker
-	saveLock       sync.Mutex // Mutex held during save cycles.
-	lastUpdateTime time.Time  // Last time updates were saved.
+	client dsiface.Client
+	dsKey  *datastore.Key
+	ticker *time.Ticker
 
 	lock sync.Mutex
-
 	jobs map[string]*JobState // Map from prefix to JobState.
 }
 
-// InitTracker recovers the Tracker state from a Saver object.
+// InitTracker recovers the Tracker state from a Client object.
 // May return error if recovery fails.
-func InitTracker(saver persistence.Saver, saveInterval time.Duration) (*Tracker, error) {
+func InitTracker(ctx context.Context, client dsiface.Client, saveInterval time.Duration) (*Tracker, error) {
 	// TODO implement recovery.
-	t := Tracker{saver: saver, jobs: make(map[string]*JobState, 100)}
+	t := Tracker{client: client, jobs: make(map[string]*JobState, 100)}
+	t.dsKey = datastore.NameKey("tracker", "state", nil)
+	t.dsKey.Namespace = "gardener"
+
+	if client != nil {
+		var jsonBytes []byte
+		err := client.Get(ctx, t.dsKey, &jsonBytes) // This should error?
+		if err != nil {
+			if err != datastore.ErrNoSuchEntity {
+				return nil, err
+			}
+			log.Println(err)
+		} else {
+			log.Println("Unmarshalling", len(jsonBytes))
+			json.Unmarshal(jsonBytes, &t.jobs)
+		}
+	}
+
 	if saveInterval > 0 {
 		t.saveEvery(saveInterval)
 	}
@@ -154,51 +147,37 @@ func (tr *Tracker) NumJobs() int {
 	return len(tr.jobs)
 }
 
-// Sync synchronously saves all jobs to saver, removing completed jobs
-// from tracker.
-func (tr *Tracker) Sync() {
-	tr.saveAllModifiedJobs()
-}
-
-// SaveAllModifiedJobs snapshots all modified jobs and concurrently saves
-// them.  When saving is complete, func returns nil, or the first error,
-// if there were any errors.
-func (tr *Tracker) saveAllModifiedJobs() error {
-	tr.saveLock.Lock() // Hold the lock while saving.
-	defer tr.saveLock.Unlock()
-
-	last := tr.lastUpdateTime
-	tr.lastUpdateTime = time.Now()
-	eg := errgroup.Group{}
+// Sync snapshots the full job state and saves it to the datastore client.
+func (tr *Tracker) Sync() error {
 	tr.lock.Lock()
-	// Start concurrent save of all jobs.
+
 	for key, job := range tr.jobs { // TODO - is job capture correct here?
-		if job.UpdateTime.After(last) || job.HeartbeatTime.After(last) {
-			jobCopy := *job
-			f := func() error {
-				err := jobCopy.saveOrDelete(tr.saver)
-				// We will eventually return only one error, so log all errors.
-				if err != nil {
-					log.Println(err)
-				}
-				return err
-			}
-			eg.Go(f)
-			if job.isDone() {
-				delete(tr.jobs, key)
-			}
+		if job.isDone() {
+			delete(tr.jobs, key)
 		}
 	}
+
+	bytes, err := json.Marshal(tr.jobs)
 	// We have copied all jobs, so we can release the lock.
 	tr.lock.Unlock()
-	return eg.Wait()
+
+	if err != nil {
+		return err
+	}
+
+	// Save the full state.
+	ctx, cf := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cf()
+	_, err = tr.client.Put(ctx, tr.dsKey, &bytes)
+
+	return err
 }
 
 func (tr *Tracker) saveEvery(interval time.Duration) {
 	tr.ticker = time.NewTicker(interval)
 	go func() {
 		for range tr.ticker.C {
-			tr.saveAllModifiedJobs()
+			tr.Sync()
 		}
 	}()
 }
