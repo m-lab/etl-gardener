@@ -47,57 +47,35 @@ const (
 	Complete      State = "complete"
 )
 
-// A JobState describes the state of a bucket/exp/type/YYYY/MM/DD job.
-// Completed jobs are removed from the persistent store.
-// Errored jobs are maintained in the persistent store for debugging.
-// JobState should be updated only by the Tracker, which will
+// A Job is a complete definition of a single parser task that we might want to
+// track from beginning to end. We expect that it's an amount of work that will
+// take a single parser a few hours.
+type Job struct {
+	Bucket, Experiment, Datatype string
+	Date                         time.Time
+}
+
+// URL returns a Google Cloud Storage URL. Within that URL prefix (not a
+// directory, because technically GCS doesn't have those, so we'll say "URL
+// prefix" but it can be thought of like a directory), every file should be
+// considered part of the job the parser must do in order to mark this Job as
+// complete.
+func (j Job) URL() string {
+	return fmt.Sprintf("gs://%s/%s/%s/%s", j.Bucket, j.Experiment, j.Datatype, j.Date.Format("2006/01/02"))
+}
+
+// Status describes the state of a single bucket/exp/type/YYYY/MM/DD job.
+// Status should be updated only by the Tracker, which will
 // ensure correct serialization and Saver updates.
-type JobState struct {
-	key string // cache of key string, not persisted
-
-	// These define the job.
-	Bucket     string
-	ExpAndType string
-	Date       time.Time
-
+type Status struct {
 	UpdateTime    time.Time // Time of last update.
 	HeartbeatTime time.Time // Time of last ETL heartbeat.
 
-	State     State  // String defining the current state.
-	LastError string // The most recent error encountered.
+	State     State // String defining the current state.
+	LastError error // The most recent error encountered.
 
 	// Note that these are not persisted
-	errors []string // all errors related to the job.
-}
-
-// JobKey creates a canonical key for a given bucket, exp, and date.
-func JobKey(bucket string, exp string, date time.Time) string {
-	return fmt.Sprintf("gs://%s/%s/%s",
-		bucket, exp, date.Format("2006/01/02"))
-}
-
-// Key implements Saver.Key
-func (j JobState) Key() string {
-	if len(j.key) == 0 {
-		return JobKey(j.Bucket, j.ExpAndType, j.Date)
-	}
-	return j.key
-}
-
-func (j JobState) isDone() bool {
-	return j.State == Complete
-}
-
-// NewJobState creates a new JobState with provided parameters.
-// NB:  The date will be converted to UTC and truncated to day boundary!
-func NewJobState(bucket string, exp string, date time.Time) JobState {
-	return JobState{
-		Bucket:     bucket,
-		ExpAndType: exp,
-		Date:       date.UTC().Truncate(24 * time.Hour),
-		State:      "Init",
-		errors:     make([]string, 0, 1),
-	}
+	errors []error // all errors related to the job.
 }
 
 // Tracker keeps track of all the jobs in flight.
@@ -105,17 +83,15 @@ func NewJobState(bucket string, exp string, date time.Time) JobState {
 type Tracker struct {
 	client dsiface.Client
 	dsKey  *datastore.Key
-	ticker *time.Ticker
 
 	lock sync.Mutex
-	jobs map[string]*JobState // Map from prefix to JobState.
+	jobs map[Job]*Status // Map from Job to Status
 }
 
-// InitTracker recovers the Tracker state from a Client object.
-// May return error if recovery fails.
-func InitTracker(ctx context.Context, client dsiface.Client, saveInterval time.Duration) (*Tracker, error) {
+// New recovers the Tracker state from a Client object or creates a new Tracker.
+func New(ctx context.Context, client dsiface.Client, saveInterval time.Duration) (*Tracker, error) {
 	// TODO implement recovery.
-	t := Tracker{client: client, jobs: make(map[string]*JobState, 100)}
+	t := &Tracker{client: client, jobs: make(map[Job]*Status, 100)}
 	t.dsKey = datastore.NameKey("tracker", "state", nil)
 	t.dsKey.Namespace = "gardener"
 
@@ -134,28 +110,14 @@ func InitTracker(ctx context.Context, client dsiface.Client, saveInterval time.D
 	}
 
 	if saveInterval > 0 {
-		t.saveEvery(saveInterval)
+		go t.saveEvery(ctx, saveInterval)
 	}
-	return &t, nil
-}
-
-// NumJobs returns the number of jobs in flight.  This includes
-// jobs in "Complete" state that have not been removed from saver.
-func (tr *Tracker) NumJobs() int {
-	tr.lock.Lock()
-	defer tr.lock.Unlock()
-	return len(tr.jobs)
+	return t, nil
 }
 
 // Sync snapshots the full job state and saves it to the datastore client.
-func (tr *Tracker) Sync() error {
+func (tr *Tracker) Sync(ctx context.Context) error {
 	tr.lock.Lock()
-
-	for key, job := range tr.jobs { // TODO - is job capture correct here?
-		if job.isDone() {
-			delete(tr.jobs, key)
-		}
-	}
 
 	bytes, err := json.Marshal(tr.jobs)
 	// We have copied all jobs, so we can release the lock.
@@ -166,90 +128,101 @@ func (tr *Tracker) Sync() error {
 	}
 
 	// Save the full state.
-	ctx, cf := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cf := context.WithTimeout(ctx, 10*time.Second)
 	defer cf()
 	_, err = tr.client.Put(ctx, tr.dsKey, &bytes)
 
 	return err
 }
 
-func (tr *Tracker) saveEvery(interval time.Duration) {
-	tr.ticker = time.NewTicker(interval)
-	go func() {
-		for range tr.ticker.C {
-			tr.Sync()
+func (tr *Tracker) saveEvery(ctx context.Context, interval time.Duration) {
+	tick := time.NewTicker(interval)
+	defer tick.Stop()
+	for {
+		select {
+		case <-tick.C:
+			tr.Sync(ctx)
+		case <-ctx.Done():
+			return
 		}
-	}()
-}
-
-// GetJob gets a copy of an existing job.
-func (tr *Tracker) getJob(prefix string) (JobState, error) {
-	tr.lock.Lock()
-	defer tr.lock.Unlock()
-	job := tr.jobs[prefix]
-	if job == nil {
-		return JobState{}, ErrJobNotFound
 	}
-	return *job, nil
 }
 
-// AddJob adds a new job to the Tracker.
-// May return ErrJobAlreadyExists if job already exists.
-func (tr *Tracker) AddJob(job JobState) error {
+// Update updates a job to a new state.
+func (tr *Tracker) Update(job Job, state State) error {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	_, ok := tr.jobs[job.Key()]
-	if ok {
-		return ErrJobAlreadyExists
-	}
-
-	tr.jobs[job.Key()] = &job
-	return nil
-}
-
-// updateJob updates an existing job.
-// May return ErrJobNotFound if job no longer exists.
-func (tr *Tracker) updateJob(job JobState) error {
-	tr.lock.Lock()
-	defer tr.lock.Unlock()
-	oldJob, ok := tr.jobs[job.key]
-	if !ok || oldJob.isDone() {
+	status, ok := tr.jobs[job]
+	if !ok {
 		return ErrJobNotFound
 	}
-
-	tr.jobs[job.Key()] = &job
+	status.State = state
+	if state == Complete {
+		status.LastError = nil
+		status.errors = nil
+	}
+	status.UpdateTime = time.Now()
+	tr.jobs[job] = status
 	return nil
 }
 
-// SetJobState updates a job's state, and handles persistence.
-func (tr *Tracker) SetJobState(prefix string, newState State) error {
-	job, err := tr.getJob(prefix)
-	if err != nil {
-		return err
+// Error updates a job with an error to indicate that the job failed.
+func (tr *Tracker) Error(job Job, err error) error {
+	tr.lock.Lock()
+	defer tr.lock.Unlock()
+	status, ok := tr.jobs[job]
+	if !ok {
+		return ErrJobNotFound
 	}
-	job.State = newState
-	job.UpdateTime = time.Now()
-	return tr.updateJob(job)
+	status.State = Failed
+	status.LastError = err
+	status.errors = append(status.errors, err)
+	status.UpdateTime = time.Now()
+	tr.jobs[job] = status
+	return nil
 }
 
 // Heartbeat updates a job's heartbeat time.
-func (tr *Tracker) Heartbeat(prefix string) error {
-	job, err := tr.getJob(prefix)
-	if err != nil {
-		return err
+func (tr *Tracker) Heartbeat(job Job) error {
+	tr.lock.Lock()
+	defer tr.lock.Unlock()
+	status, ok := tr.jobs[job]
+	if !ok {
+		return ErrJobNotFound
 	}
-	job.HeartbeatTime = time.Now()
-	return tr.updateJob(job)
+	status.HeartbeatTime = time.Now()
+	tr.jobs[job] = status
+	return nil
 }
 
-// SetJobError updates a job's error fields, and handles persistence.
-func (tr *Tracker) SetJobError(prefix string, errString string) error {
-	job, err := tr.getJob(prefix)
-	if err != nil {
-		return err
+// NextJob returns the next job that a parser should run.
+//
+// The job to hand out is the job with:
+// 1. A HeartbeatTime in the past by at least the desired threshold.
+// 2. The oldest CompletionTime
+//
+// In the unlikely event that no job can be found with a sufficiently-old
+// completion time, return a nil pointer.
+func (tr *Tracker) NextJob() (job *Job) {
+	tr.lock.Lock()
+	defer tr.lock.Unlock()
+
+	maxAge := time.Now().Add(-2 * time.Hour)
+	var completionTime time.Time
+	for j, s := range tr.jobs {
+		if s.HeartbeatTime.Before(maxAge) {
+			if s.UpdateTime.Before(completionTime) {
+				job = &j
+				completionTime = s.UpdateTime
+			}
+		}
 	}
-	job.UpdateTime = time.Now()
-	job.LastError = errString
-	job.errors = append(job.errors, errString)
-	return tr.updateJob(job)
+	if job != nil {
+		tr.jobs[*job].HeartbeatTime = time.Now()
+	}
+	return job
+}
+
+func (tr *Tracker) Handler() Handler {
+	return Handler{tr}
 }
