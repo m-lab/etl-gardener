@@ -6,13 +6,10 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"reflect"
 	"sync"
 	"testing"
 	"time"
 
-	"cloud.google.com/go/datastore"
-	"github.com/GoogleCloudPlatform/google-cloud-go-testing/datastore/dsiface"
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
@@ -26,59 +23,6 @@ func must(t *testing.T, err error) {
 		log.Output(2, err.Error())
 		t.Fatal(err)
 	}
-}
-
-type testClient struct {
-	dsiface.Client // For unimplemented methods
-	lock           sync.Mutex
-	objects        map[datastore.Key]reflect.Value
-}
-
-func newTestClient() *testClient {
-	return &testClient{objects: make(map[datastore.Key]reflect.Value, 10)}
-}
-
-func (c *testClient) Close() error { return nil }
-
-func (c *testClient) Count(ctx context.Context, q *datastore.Query) (n int, err error) {
-	return 0, ErrNotImplemented
-}
-
-func (c *testClient) Delete(ctx context.Context, key *datastore.Key) error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	_, ok := c.objects[*key]
-	if !ok {
-		return datastore.ErrNoSuchEntity
-	}
-	delete(c.objects, *key)
-	return nil
-}
-
-func (c *testClient) Get(ctx context.Context, key *datastore.Key, dst interface{}) (err error) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	v := reflect.ValueOf(dst)
-	if v.Kind() != reflect.Ptr {
-		return datastore.ErrInvalidEntityType
-	}
-	o, ok := c.objects[*key]
-	if !ok {
-		return datastore.ErrNoSuchEntity
-	}
-	v.Elem().Set(o)
-	return nil
-}
-
-func (c *testClient) Put(ctx context.Context, key *datastore.Key, src interface{}) (*datastore.Key, error) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	v := reflect.ValueOf(src)
-	if v.Kind() != reflect.Ptr {
-		return nil, datastore.ErrInvalidEntityType
-	}
-	c.objects[*key] = reflect.Indirect(v)
-	return key, nil
 }
 
 var startDate = time.Date(2011, 1, 1, 0, 0, 0, 0, time.UTC)

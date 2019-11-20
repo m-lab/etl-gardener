@@ -115,16 +115,19 @@ func InitTracker(ctx context.Context, client dsiface.Client, saveInterval time.D
 	t.dsKey.Namespace = "gardener"
 
 	if client != nil {
-		var jsonBytes []byte
-		err := client.Get(ctx, t.dsKey, &jsonBytes) // This should error?
+		jobStruct := struct {
+			SaveTime time.Time
+			JSON     []byte `datastore:",noindex"`
+		}{time.Time{}, make([]byte, 0, 100000)}
+		err := client.Get(ctx, t.dsKey, &jobStruct) // This should error?
 		if err != nil {
 			if err != datastore.ErrNoSuchEntity {
 				return nil, err
 			}
 			log.Println(err)
 		} else {
-			log.Println("Unmarshalling", len(jsonBytes))
-			json.Unmarshal(jsonBytes, &t.jobs)
+			log.Println("Unmarshalling", len(jobStruct.JSON))
+			json.Unmarshal(jobStruct.JSON, &t.jobs)
 		}
 	}
 
@@ -161,9 +164,13 @@ func (tr *Tracker) Sync() error {
 	}
 
 	// Save the full state.
+	jsonStruct := struct {
+		SaveTime time.Time
+		JSON     []byte `datastore:",noindex"`
+	}{time.Now(), bytes}
 	ctx, cf := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cf()
-	_, err = tr.client.Put(ctx, tr.dsKey, &bytes)
+	_, err = tr.client.Put(ctx, tr.dsKey, &jsonStruct)
 
 	return err
 }

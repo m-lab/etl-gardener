@@ -33,7 +33,7 @@ func TestWithDatastore(t *testing.T) {
 	}
 
 	log.Println("Calling Sync")
-	must(t, tk.Sync())
+	must(t, tk.Sync()) // This causes invalid entity type
 	// Check that the sync (and InitTracker) work.
 	restore, err := tracker.InitTracker(context.Background(), client, 0)
 	must(t, err)
