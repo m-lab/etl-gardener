@@ -2,7 +2,6 @@ package tracker_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"math/rand"
@@ -27,14 +26,14 @@ func must(t *testing.T, err error) {
 
 var startDate = time.Date(2011, 1, 1, 0, 0, 0, 0, time.UTC)
 
-func createJobs(t *testing.T, tk *tracker.Tracker, exp string, n int) {
+func createJobs(t *testing.T, tk *tracker.Tracker, exp string, typ string, n int) {
 	// Create 100 jobs in parallel
 	wg := sync.WaitGroup{}
 	wg.Add(n)
 	date := startDate
 	for i := 0; i < n; i++ {
 		go func(date time.Time) {
-			job := tracker.NewJobState("bucket", exp, date)
+			job := tracker.NewJobState("bucket", exp, typ, date)
 			err := tk.AddJob(job)
 			if err != nil {
 				t.Error(err)
@@ -46,21 +45,19 @@ func createJobs(t *testing.T, tk *tracker.Tracker, exp string, n int) {
 	wg.Wait()
 }
 
-func completeJobs(t *testing.T, tk *tracker.Tracker, exp string, n int) {
+func completeJobs(t *testing.T, tk *tracker.Tracker, exp string, typ string, n int) {
 	// Delete all jobs.
 	date := startDate
 	for i := 0; i < n; i++ {
-		key := tracker.JobKey("bucket", exp, date)
-		err := tk.SetJobState(key, tracker.Complete)
+		job := tracker.Job{"bucket", exp, typ, date}
+		err := tk.SetJobState(job, tracker.Complete)
 		if err != nil {
-			t.Error(err, key)
+			t.Error(err, job)
 		}
 		date = date.Add(24 * time.Hour)
 	}
 	tk.Sync() // Force synchronous save cycle.
 }
-
-var ErrNotImplemented = errors.New("Not implemented")
 
 func TestTrackerAddDelete(t *testing.T) {
 	client := newTestClient()
@@ -72,7 +69,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	}
 
 	numJobs := 500
-	createJobs(t, tk, "500Jobs", numJobs)
+	createJobs(t, tk, "500Jobs", "type", numJobs)
 	if tk.NumJobs() != 500 {
 		t.Fatal("Incorrect number of jobs", tk.NumJobs())
 	}
@@ -87,7 +84,7 @@ func TestTrackerAddDelete(t *testing.T) {
 		t.Fatal("Incorrect number of jobs", restore.NumJobs())
 	}
 
-	completeJobs(t, tk, "500Jobs", numJobs)
+	completeJobs(t, tk, "500Jobs", "type", numJobs)
 
 	tk.Sync()
 
@@ -105,23 +102,23 @@ func TestUpdate(t *testing.T) {
 	tk, err := tracker.InitTracker(context.Background(), client, 0)
 	must(t, err)
 
-	createJobs(t, tk, "JobToUpdate", 2)
-	defer completeJobs(t, tk, "JobToUpdate", 2)
+	createJobs(t, tk, "JobToUpdate", "type", 2)
+	defer completeJobs(t, tk, "JobToUpdate", "type", 2)
 
-	prefix := tracker.JobKey("bucket", "JobToUpdate", startDate)
-	must(t, tk.SetJobState(prefix, tracker.Parsing))
+	job := tracker.Job{"bucket", "JobToUpdate", "type", startDate}
+	must(t, tk.SetJobState(job, tracker.Parsing))
 
-	must(t, tk.SetJobState(prefix, tracker.Stabilizing))
+	must(t, tk.SetJobState(job, tracker.Stabilizing))
 
-	job, err := tk.GetJob(prefix)
+	status, err := tk.GetStatus(job)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if job.State != tracker.Stabilizing {
+	if status.State != tracker.Stabilizing {
 		t.Error("Incorrect job state", job)
 	}
 
-	err = tk.SetJobState("no such job", tracker.Stabilizing)
+	err = tk.SetJobState(tracker.Job{"bucket", "JobToUpdate", "nontype", startDate}, tracker.Stabilizing)
 	if err != tracker.ErrJobNotFound {
 		t.Error(err, "should have been ErrJobNotFound")
 	}
@@ -135,25 +132,26 @@ func TestNonexistentJobAccess(t *testing.T) {
 	tk, err := tracker.InitTracker(context.Background(), client, 0)
 	must(t, err)
 
-	err = tk.SetJobState("foobar", tracker.Parsing)
+	job := tracker.Job{}
+	err = tk.SetJobState(job, tracker.Parsing)
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)
 	}
-	job := tracker.NewJobState("foobar", "exp", startDate)
-	err = tk.AddJob(job)
+	js := tracker.NewJobState("bucket", "exp", "type", startDate)
+	err = tk.AddJob(js)
 	if err != nil {
 		t.Error(err)
 	}
 
-	err = tk.AddJob(job)
+	err = tk.AddJob(js)
 	if err != tracker.ErrJobAlreadyExists {
 		t.Error("Should be ErrJobAlreadyExists", err)
 	}
 
-	tk.SetJobState(job.Key(), tracker.Complete)
+	tk.SetJobState(js.Job, tracker.Complete)
 
 	// Job should be gone now.
-	err = tk.SetJobState(job.Key(), "foobar")
+	err = tk.SetJobState(js.Job, "foobar")
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)
 	}
@@ -171,8 +169,8 @@ func TestConcurrentUpdates(t *testing.T) {
 	must(t, err)
 
 	jobs := 20
-	createJobs(t, tk, "ConcurrentUpdates", jobs)
-	defer completeJobs(t, tk, "ConcurrentUpdates", jobs)
+	createJobs(t, tk, "ConcurrentUpdates", "type", jobs)
+	defer completeJobs(t, tk, "ConcurrentUpdates", "type", jobs)
 
 	changes := 20 * jobs
 	start := time.Now()
@@ -180,8 +178,8 @@ func TestConcurrentUpdates(t *testing.T) {
 	wg.Add(changes)
 	for i := 0; i < changes; i++ {
 		go func(i int) {
-			k := tracker.JobKey("bucket", "ConcurrentUpdates",
-				startDate.Add(time.Duration(24*rand.Intn(jobs))*time.Hour))
+			k := tracker.Job{"bucket", "ConcurrentUpdates", "type",
+				startDate.Add(time.Duration(24*rand.Intn(jobs)) * time.Hour)}
 			if i%5 == 0 {
 				err := tk.SetJobState(k, tracker.State(fmt.Sprintf("State:%d", i)))
 				if err != nil {

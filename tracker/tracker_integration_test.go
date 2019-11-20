@@ -27,7 +27,7 @@ func TestWithDatastore(t *testing.T) {
 	}
 
 	numJobs := 500
-	createJobs(t, tk, "500Jobs", numJobs)
+	createJobs(t, tk, "500Jobs", "type", numJobs)
 	if tk.NumJobs() != 500 {
 		t.Fatal("Incorrect number of jobs", tk.NumJobs())
 	}
@@ -42,7 +42,7 @@ func TestWithDatastore(t *testing.T) {
 		t.Fatal("Incorrect number of jobs", restore.NumJobs())
 	}
 
-	completeJobs(t, tk, "500Jobs", numJobs)
+	completeJobs(t, tk, "500Jobs", "type", numJobs)
 
 	tk.Sync()
 

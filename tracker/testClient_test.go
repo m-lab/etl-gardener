@@ -2,6 +2,7 @@ package tracker_test
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"sync"
 
@@ -20,6 +21,8 @@ func validateDatastoreEntity(e interface{}) error {
 	}
 	return nil
 }
+
+var ErrNotImplemented = errors.New("Not implemented")
 
 // This implements a crude datastore test client.  It is somewhat
 // simplistic and incomplete.  It works only for basic Put, Get, and Delete,

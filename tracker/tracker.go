@@ -32,15 +32,10 @@ type Job struct {
 	Date       time.Time
 }
 
-// JobKey creates a canonical key for a given bucket, exp, and date.
-func JobKey(bucket string, exp string, typ string, date time.Time) string {
-	return fmt.Sprintf("gs://%s/%s/%s/%s",
-		bucket, exp, typ, date.Format("2006/01/02"))
-}
-
 // Key generates the prefix key for lookups.
 func (j Job) Key() string {
-	return JobKey(j.Bucket, j.Experiment, j.Datatype, j.Date)
+	return fmt.Sprintf("gs://%s/%s/%s/%s",
+		j.Bucket, j.Experiment, j.Datatype, j.Date.Format("2006/01/02"))
 }
 
 // Error declarations
@@ -192,15 +187,15 @@ func (tr *Tracker) saveEvery(interval time.Duration) {
 	}()
 }
 
-// GetJob gets a copy of an existing job.
-func (tr *Tracker) GetJob(prefix string) (JobState, error) {
+// GetStatus gets a copy of an existing job.
+func (tr *Tracker) GetStatus(job Job) (JobState, error) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	job := tr.jobs[prefix]
-	if job == nil {
+	status := tr.jobs[job.Key()]
+	if status == nil {
 		return JobState{}, ErrJobNotFound
 	}
-	return *job, nil
+	return *status, nil
 }
 
 // AddJob adds a new job to the Tracker.
@@ -236,34 +231,34 @@ func (tr *Tracker) updateJob(job JobState) error {
 }
 
 // SetJobState updates a job's state, and handles persistence.
-func (tr *Tracker) SetJobState(prefix string, newState State) error {
-	job, err := tr.GetJob(prefix)
+func (tr *Tracker) SetJobState(job Job, newState State) error {
+	status, err := tr.GetStatus(job)
 	if err != nil {
 		return err
 	}
-	job.State = newState
-	job.UpdateTime = time.Now()
-	return tr.updateJob(job)
+	status.State = newState
+	status.UpdateTime = time.Now()
+	return tr.updateJob(status)
 }
 
 // Heartbeat updates a job's heartbeat time.
-func (tr *Tracker) Heartbeat(prefix string) error {
-	job, err := tr.GetJob(prefix)
+func (tr *Tracker) Heartbeat(job Job) error {
+	status, err := tr.GetStatus(job)
 	if err != nil {
 		return err
 	}
-	job.HeartbeatTime = time.Now()
-	return tr.updateJob(job)
+	status.HeartbeatTime = time.Now()
+	return tr.updateJob(status)
 }
 
 // SetJobError updates a job's error fields, and handles persistence.
-func (tr *Tracker) SetJobError(prefix string, errString string) error {
-	job, err := tr.GetJob(prefix)
+func (tr *Tracker) SetJobError(job Job, errString string) error {
+	status, err := tr.GetStatus(job)
 	if err != nil {
 		return err
 	}
-	job.UpdateTime = time.Now()
-	job.LastError = errString
-	job.errors = append(job.errors, errString)
-	return tr.updateJob(job)
+	status.UpdateTime = time.Now()
+	status.LastError = errString
+	status.errors = append(status.errors, errString)
+	return tr.updateJob(status)
 }
