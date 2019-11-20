@@ -32,6 +32,26 @@ var (
 	ErrNotYetImplemented      = errors.New("not yet implemented")
 )
 
+// Job describes a reprocessing "Job", which includes
+// all data for a particular experiment, type and date.
+type Job struct {
+	Bucket     string
+	Experiment string
+	Datatype   string
+	Date       time.Time
+}
+
+// JobKey creates a canonical key for a given bucket, exp, and date.
+func JobKey(bucket string, exp string, typ string, date time.Time) string {
+	return fmt.Sprintf("gs://%s/%s/%s/%s",
+		bucket, exp, typ, date.Format("2006/01/02"))
+}
+
+// Key generates the prefix key for lookups.
+func (j Job) Key() string {
+	return JobKey(j.Bucket, j.Experiment, j.Datatype, j.Date)
+}
+
 // State types are used for the JobState.State values
 // This is intended to enforce type safety, but compiler accepts string assignment.  8-(
 type State string
@@ -53,10 +73,7 @@ const (
 // JobState should be updated only by the Tracker, which will
 // ensure correct serialization and Saver updates.
 type JobState struct {
-	// These define the job.
-	Bucket     string
-	ExpAndType string
-	Date       time.Time
+	Job
 
 	UpdateTime    time.Time // Time of last update.
 	HeartbeatTime time.Time // Time of last ETL heartbeat.
@@ -68,30 +85,20 @@ type JobState struct {
 	errors []string // all errors related to the job.
 }
 
-// JobKey creates a canonical key for a given bucket, exp, and date.
-func JobKey(bucket string, exp string, date time.Time) string {
-	return fmt.Sprintf("gs://%s/%s/%s",
-		bucket, exp, date.Format("2006/01/02"))
-}
-
-// Key generates the prefix key for lookups.
-func (j JobState) Key() string {
-	return JobKey(j.Bucket, j.ExpAndType, j.Date)
-}
-
 func (j JobState) isDone() bool {
 	return j.State == Complete
 }
 
 // NewJobState creates a new JobState with provided parameters.
 // NB:  The date will be converted to UTC and truncated to day boundary!
-func NewJobState(bucket string, exp string, date time.Time) JobState {
+func NewJobState(bucket string, exp string, typ string, date time.Time) JobState {
 	return JobState{
-		Bucket:     bucket,
-		ExpAndType: exp,
-		Date:       date.UTC().Truncate(24 * time.Hour),
-		State:      "Init",
-		errors:     make([]string, 0, 1),
+		Job: Job{Bucket: bucket,
+			Experiment: exp,
+			Datatype:   typ,
+			Date:       date.UTC().Truncate(24 * time.Hour)},
+		State:  Init,
+		errors: make([]string, 0, 1),
 	}
 }
 
@@ -106,6 +113,11 @@ type Tracker struct {
 	jobs map[string]*JobState // Map from prefix to JobState.
 }
 
+type saverStruct struct {
+	SaveTime time.Time
+	Jobs     []byte `datastore:",noindex"`
+}
+
 // InitTracker recovers the Tracker state from a Client object.
 // May return error if recovery fails.
 func InitTracker(ctx context.Context, client dsiface.Client, saveInterval time.Duration) (*Tracker, error) {
@@ -115,19 +127,17 @@ func InitTracker(ctx context.Context, client dsiface.Client, saveInterval time.D
 	t.dsKey.Namespace = "gardener"
 
 	if client != nil {
-		jobStruct := struct {
-			SaveTime time.Time
-			JSON     []byte `datastore:",noindex"`
-		}{time.Time{}, make([]byte, 0, 100000)}
-		err := client.Get(ctx, t.dsKey, &jobStruct) // This should error?
+		state := saverStruct{time.Time{}, make([]byte, 0, 100000)}
+
+		err := client.Get(ctx, t.dsKey, &state) // This should error?
 		if err != nil {
 			if err != datastore.ErrNoSuchEntity {
 				return nil, err
 			}
 			log.Println(err)
 		} else {
-			log.Println("Unmarshalling", len(jobStruct.JSON))
-			json.Unmarshal(jobStruct.JSON, &t.jobs)
+			log.Println("Unmarshalling", len(state.Jobs))
+			json.Unmarshal(state.Jobs, &t.jobs)
 		}
 	}
 
@@ -145,32 +155,30 @@ func (tr *Tracker) NumJobs() int {
 	return len(tr.jobs)
 }
 
-// Sync snapshots the full job state and saves it to the datastore client.
-func (tr *Tracker) Sync() error {
+func (tr *Tracker) getJSON() ([]byte, error) {
 	tr.lock.Lock()
-
-	for key, job := range tr.jobs { // TODO - is job capture correct here?
+	defer tr.lock.Unlock()
+	// First delete any completed jobs.
+	for key, job := range tr.jobs {
 		if job.isDone() {
 			delete(tr.jobs, key)
 		}
 	}
+	return json.Marshal(tr.jobs)
+}
 
-	bytes, err := json.Marshal(tr.jobs)
-	// We have copied all jobs, so we can release the lock.
-	tr.lock.Unlock()
-
+// Sync snapshots the full job state and saves it to the datastore client.
+func (tr *Tracker) Sync() error {
+	bytes, err := tr.getJSON()
 	if err != nil {
 		return err
 	}
 
 	// Save the full state.
-	jsonStruct := struct {
-		SaveTime time.Time
-		JSON     []byte `datastore:",noindex"`
-	}{time.Now(), bytes}
+	state := saverStruct{time.Now(), bytes}
 	ctx, cf := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cf()
-	_, err = tr.client.Put(ctx, tr.dsKey, &jsonStruct)
+	_, err = tr.client.Put(ctx, tr.dsKey, &state)
 
 	return err
 }

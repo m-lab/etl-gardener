@@ -14,12 +14,16 @@ func validateDatastoreEntity(e interface{}) error {
 	if v.Kind() != reflect.Ptr {
 		return datastore.ErrInvalidEntityType
 	}
+	// NOTE: This is over-restrictive, but fine for current purposes.
 	if reflect.Indirect(v).Kind() != reflect.Struct {
 		return datastore.ErrInvalidEntityType
 	}
 	return nil
 }
 
+// This implements a crude datastore test client.  It is somewhat
+// simplistic and incomplete.  It works only for basic Put, Get, and Delete,
+// but may not work always work correctly.
 type testClient struct {
 	dsiface.Client // For unimplemented methods
 	lock           sync.Mutex
