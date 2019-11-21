@@ -32,6 +32,14 @@ type Job struct {
 	Date       time.Time
 }
 
+// NewJob creates a new job object.
+func NewJob(bucket, exp, typ string, date time.Time) Job {
+	return Job{Bucket: bucket,
+		Experiment: exp,
+		Datatype:   typ,
+		Date:       date.UTC().Truncate(24 * time.Hour)}
+}
+
 // Key generates the prefix key for lookups.
 func (j Job) Key() string {
 	return fmt.Sprintf("gs://%s/%s/%s/%s",
@@ -68,8 +76,6 @@ const (
 // JobState should be updated only by the Tracker, which will
 // ensure correct serialization and Saver updates.
 type JobState struct {
-	Job
-
 	UpdateTime    time.Time // Time of last update.
 	HeartbeatTime time.Time // Time of last ETL heartbeat.
 
@@ -86,16 +92,14 @@ func (j JobState) isDone() bool {
 
 // NewJobState creates a new JobState with provided parameters.
 // NB:  The date will be converted to UTC and truncated to day boundary!
-func NewJobState(bucket string, exp string, typ string, date time.Time) JobState {
+func NewJobState() JobState {
 	return JobState{
-		Job: Job{Bucket: bucket,
-			Experiment: exp,
-			Datatype:   typ,
-			Date:       date.UTC().Truncate(24 * time.Hour)},
 		State:  Init,
 		errors: make([]string, 0, 1),
 	}
 }
+
+type JobMap map[Job]*JobState
 
 // Tracker keeps track of all the jobs in flight.
 // Only tracker functions should access any of the fields.
@@ -105,7 +109,42 @@ type Tracker struct {
 	ticker *time.Ticker
 
 	lock sync.Mutex
-	jobs map[string]*JobState // Map from prefix to JobState.
+	jobs JobMap // Map from Job to JobState.
+}
+
+// MarshalJSON implements json.Marshal
+func (jobs JobMap) MarshalJSON() ([]byte, error) {
+	type Pair struct {
+		Job   Job
+		State JobState
+	}
+	pairs := make([]Pair, len(jobs))
+	i := 0
+	for k, v := range jobs {
+		pairs[i].Job = k
+		pairs[i].State = *v
+		i++
+	}
+	return json.Marshal(&pairs)
+}
+
+// UnmarshalJSON implements json.UnmarshalJSON
+func (jobs *JobMap) UnmarshalJSON(data []byte) error {
+	type Pair struct {
+		Job   Job
+		State JobState
+	}
+	pairs := make([]Pair, 0, 100)
+	err := json.Unmarshal(data, &pairs)
+	if err != nil {
+		return err
+	}
+
+	//jobs = make(map[Job]*JobState, len(pairs))
+	for i := range pairs {
+		(*jobs)[pairs[i].Job] = &pairs[i].State
+	}
+	return nil
 }
 
 type saverStruct struct {
@@ -117,7 +156,7 @@ type saverStruct struct {
 // May return error if recovery fails.
 func InitTracker(ctx context.Context, client dsiface.Client, saveInterval time.Duration) (*Tracker, error) {
 	// TODO implement recovery.
-	t := Tracker{client: client, jobs: make(map[string]*JobState, 100)}
+	t := Tracker{client: client, jobs: make(map[Job]*JobState, 100)}
 	t.dsKey = datastore.NameKey("tracker", "state", nil)
 	t.dsKey.Namespace = "gardener"
 
@@ -191,7 +230,7 @@ func (tr *Tracker) saveEvery(interval time.Duration) {
 func (tr *Tracker) GetStatus(job Job) (JobState, error) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	status := tr.jobs[job.Key()]
+	status := tr.jobs[job]
 	if status == nil {
 		return JobState{}, ErrJobNotFound
 	}
@@ -200,32 +239,33 @@ func (tr *Tracker) GetStatus(job Job) (JobState, error) {
 
 // AddJob adds a new job to the Tracker.
 // May return ErrJobAlreadyExists if job already exists.
-func (tr *Tracker) AddJob(job JobState) error {
+func (tr *Tracker) AddJob(job Job) error {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	_, ok := tr.jobs[job.Key()]
+	_, ok := tr.jobs[job]
 	if ok {
 		return ErrJobAlreadyExists
 	}
 
-	tr.jobs[job.Key()] = &job
+	state := NewJobState()
+	tr.jobs[job] = &state
 	return nil
 }
 
 // updateJob updates an existing job.
 // May return ErrJobNotFound if job no longer exists.
-func (tr *Tracker) updateJob(job JobState) error {
+func (tr *Tracker) updateJob(job Job, state JobState) error {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	_, ok := tr.jobs[job.Key()]
+	_, ok := tr.jobs[job]
 	if !ok {
 		return ErrJobNotFound
 	}
 
-	if job.isDone() {
-		delete(tr.jobs, job.Key())
+	if state.isDone() {
+		delete(tr.jobs, job)
 	} else {
-		tr.jobs[job.Key()] = &job
+		tr.jobs[job] = &state
 	}
 	return nil
 }
@@ -238,7 +278,7 @@ func (tr *Tracker) SetJobState(job Job, newState State) error {
 	}
 	status.State = newState
 	status.UpdateTime = time.Now()
-	return tr.updateJob(status)
+	return tr.updateJob(job, status)
 }
 
 // Heartbeat updates a job's heartbeat time.
@@ -248,7 +288,7 @@ func (tr *Tracker) Heartbeat(job Job) error {
 		return err
 	}
 	status.HeartbeatTime = time.Now()
-	return tr.updateJob(status)
+	return tr.updateJob(job, status)
 }
 
 // SetJobError updates a job's error fields, and handles persistence.
@@ -260,5 +300,5 @@ func (tr *Tracker) SetJobError(job Job, errString string) error {
 	status.UpdateTime = time.Now()
 	status.LastError = errString
 	status.errors = append(status.errors, errString)
-	return tr.updateJob(status)
+	return tr.updateJob(job, status)
 }

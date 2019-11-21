@@ -33,7 +33,7 @@ func createJobs(t *testing.T, tk *tracker.Tracker, exp string, typ string, n int
 	date := startDate
 	for i := 0; i < n; i++ {
 		go func(date time.Time) {
-			job := tracker.NewJobState("bucket", exp, typ, date)
+			job := tracker.NewJob("bucket", exp, typ, date)
 			err := tk.AddJob(job)
 			if err != nil {
 				t.Error(err)
@@ -137,7 +137,7 @@ func TestNonexistentJobAccess(t *testing.T) {
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)
 	}
-	js := tracker.NewJobState("bucket", "exp", "type", startDate)
+	js := tracker.NewJob("bucket", "exp", "type", startDate)
 	err = tk.AddJob(js)
 	if err != nil {
 		t.Error(err)
@@ -148,10 +148,10 @@ func TestNonexistentJobAccess(t *testing.T) {
 		t.Error("Should be ErrJobAlreadyExists", err)
 	}
 
-	tk.SetJobState(js.Job, tracker.Complete)
+	tk.SetJobState(js, tracker.Complete)
 
 	// Job should be gone now.
-	err = tk.SetJobState(js.Job, "foobar")
+	err = tk.SetJobState(js, "foobar")
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)
 	}
