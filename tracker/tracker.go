@@ -48,6 +48,7 @@ func (j Job) Key() string {
 
 // Error declarations
 var (
+	ErrClientIsNil            = errors.New("nil datastore client")
 	ErrJobAlreadyExists       = errors.New("job already exists")
 	ErrJobNotFound            = errors.New("job not found")
 	ErrJobIsObsolete          = errors.New("job is obsolete")
@@ -99,18 +100,9 @@ func NewJobState() JobState {
 	}
 }
 
+// JobMap is defined to allow custom json marshal/unmarshal.
+// It defines the map from Job to JobState
 type JobMap map[Job]*JobState
-
-// Tracker keeps track of all the jobs in flight.
-// Only tracker functions should access any of the fields.
-type Tracker struct {
-	client dsiface.Client
-	dsKey  *datastore.Key
-	ticker *time.Ticker
-
-	lock sync.Mutex
-	jobs JobMap // Map from Job to JobState.
-}
 
 // MarshalJSON implements json.Marshal
 func (jobs JobMap) MarshalJSON() ([]byte, error) {
@@ -147,35 +139,52 @@ func (jobs *JobMap) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Tracker keeps track of all the jobs in flight.
+// Only tracker functions should access any of the fields.
+type Tracker struct {
+	client dsiface.Client
+	dsKey  *datastore.Key
+	ticker *time.Ticker
+
+	lock sync.Mutex
+	jobs JobMap // Map from Job to JobState.
+}
+
 type saverStruct struct {
 	SaveTime time.Time
 	Jobs     []byte `datastore:",noindex"`
 }
 
+func getJobMap(ctx context.Context, client dsiface.Client, key *datastore.Key) (JobMap, error) {
+	if client == nil {
+		return nil, ErrClientIsNil
+	}
+	state := saverStruct{time.Time{}, make([]byte, 0, 100000)}
+
+	err := client.Get(ctx, key, &state) // This should error?
+	if err != nil {
+		return nil, err
+	}
+	jobMap := make(JobMap, 100)
+	log.Println("Unmarshalling", len(state.Jobs))
+	err = json.Unmarshal(state.Jobs, &jobMap)
+	if err != nil {
+		return nil, err
+	}
+	return jobMap, nil
+}
+
 // InitTracker recovers the Tracker state from a Client object.
 // May return error if recovery fails.
-func InitTracker(ctx context.Context, client dsiface.Client, saveInterval time.Duration) (*Tracker, error) {
+func InitTracker(ctx context.Context, client dsiface.Client, key *datastore.Key, saveInterval time.Duration) (*Tracker, error) {
 	// TODO implement recovery.
-	t := Tracker{client: client, jobs: make(map[Job]*JobState, 100)}
-	t.dsKey = datastore.NameKey("tracker", "state", nil)
-	t.dsKey.Namespace = "gardener"
-
-	if client != nil {
-		state := saverStruct{time.Time{}, make([]byte, 0, 100000)}
-
-		err := client.Get(ctx, t.dsKey, &state) // This should error?
-		if err != nil {
-			if err != datastore.ErrNoSuchEntity {
-				return nil, err
-			}
-			log.Println(err)
-		} else {
-			log.Println("Unmarshalling", len(state.Jobs))
-			json.Unmarshal(state.Jobs, &t.jobs)
-		}
+	jobMap, err := getJobMap(ctx, client, key)
+	if err != nil {
+		log.Println(err, key)
+		jobMap = make(JobMap, 100)
 	}
-
-	if saveInterval > 0 {
+	t := Tracker{client: client, dsKey: key, jobs: jobMap}
+	if client != nil && saveInterval > 0 {
 		t.saveEvery(saveInterval)
 	}
 	return &t, nil
@@ -189,6 +198,7 @@ func (tr *Tracker) NumJobs() int {
 	return len(tr.jobs)
 }
 
+// getJSON creates a json encoding of the job map.
 func (tr *Tracker) getJSON() ([]byte, error) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
@@ -226,7 +236,7 @@ func (tr *Tracker) saveEvery(interval time.Duration) {
 	}()
 }
 
-// GetStatus gets a copy of an existing job.
+// GetStatus retrieves the status of an existing job.
 func (tr *Tracker) GetStatus(job Job) (JobState, error) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
@@ -301,4 +311,15 @@ func (tr *Tracker) SetJobError(job Job, errString string) error {
 	status.LastError = errString
 	status.errors = append(status.errors, errString)
 	return tr.updateJob(job, status)
+}
+
+// GetAll returns the full job map.
+func (tr *Tracker) GetAll() JobMap {
+	tr.lock.Lock()
+	defer tr.lock.Unlock()
+	m := make(JobMap, len(tr.jobs))
+	for k, v := range tr.jobs {
+		m[k] = v
+	}
+	return m
 }
