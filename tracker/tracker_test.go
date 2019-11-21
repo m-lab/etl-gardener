@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"cloud.google.com/go/datastore"
+	"github.com/GoogleCloudPlatform/google-cloud-go-testing/datastore/dsiface"
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
@@ -51,18 +53,35 @@ func completeJobs(t *testing.T, tk *tracker.Tracker, exp string, typ string, n i
 	for i := 0; i < n; i++ {
 		job := tracker.Job{"bucket", exp, typ, date}
 		err := tk.SetJobState(job, tracker.Complete)
+
 		if err != nil {
 			t.Error(err, job)
 		}
 		date = date.Add(24 * time.Hour)
 	}
-	tk.Sync() // Force synchronous save cycle.
+}
+
+func cleanup(client dsiface.Client, key *datastore.Key) error {
+	ctx, cf := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cf()
+	err := client.Delete(ctx, key)
+	if err != nil && err != datastore.ErrNoSuchEntity {
+		tc, ok := client.(*testClient)
+		if ok {
+			tc.DumpKeys()
+		}
+		return err
+	}
+	return nil
 }
 
 func TestTrackerAddDelete(t *testing.T) {
 	client := newTestClient()
+	dsKey := datastore.NameKey("TestTrackerAddDelete", "jobs", nil)
+	dsKey.Namespace = "gardener"
+	defer must(t, cleanup(client, dsKey))
 
-	tk, err := tracker.InitTracker(context.Background(), client, 0)
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
 	must(t, err)
 	if tk == nil {
 		t.Fatal("nil Tracker")
@@ -77,7 +96,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	log.Println("Calling Sync")
 	must(t, tk.Sync())
 	// Check that the sync (and InitTracker) work.
-	restore, err := tracker.InitTracker(context.Background(), client, 0)
+	restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
 	must(t, err)
 
 	if restore.NumJobs() != 500 {
@@ -86,20 +105,22 @@ func TestTrackerAddDelete(t *testing.T) {
 
 	completeJobs(t, tk, "500Jobs", "type", numJobs)
 
-	tk.Sync()
+	must(t, tk.Sync())
 
 	if tk.NumJobs() != 0 {
 		t.Error("Job cleanup failed", tk.NumJobs())
 	}
-
 }
 
 // This tests basic Add and update of 2 jobs, and verifies
 // correct error returned when trying to update a third job.
 func TestUpdate(t *testing.T) {
 	client := newTestClient()
+	dsKey := datastore.NameKey("TestUpdate", "jobs", nil)
+	dsKey.Namespace = "gardener"
+	defer must(t, cleanup(client, dsKey))
 
-	tk, err := tracker.InitTracker(context.Background(), client, 0)
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
 	must(t, err)
 
 	createJobs(t, tk, "JobToUpdate", "type", 2)
@@ -128,8 +149,11 @@ func TestUpdate(t *testing.T) {
 // errors when job doesn't exist.
 func TestNonexistentJobAccess(t *testing.T) {
 	client := newTestClient()
+	dsKey := datastore.NameKey("TestNonexistentJobAccess", "jobs", nil)
+	dsKey.Namespace = "gardener"
+	defer must(t, cleanup(client, dsKey))
 
-	tk, err := tracker.InitTracker(context.Background(), client, 0)
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
 	must(t, err)
 
 	job := tracker.Job{}
@@ -163,9 +187,13 @@ func TestConcurrentUpdates(t *testing.T) {
 	// It should be run with -race to detect any concurrency
 	// problems.
 	client := newTestClient()
+	dsKey := datastore.NameKey("TestConcurrentUpdates", "jobs", nil)
+	dsKey.Namespace = "gardener"
+	defer must(t, cleanup(client, dsKey))
+
 	// For testing, push to the saver every 5 milliseconds.
 	saverInterval := 5 * time.Millisecond
-	tk, err := tracker.InitTracker(context.Background(), client, saverInterval)
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, saverInterval)
 	must(t, err)
 
 	jobs := 20
@@ -199,5 +227,19 @@ func TestConcurrentUpdates(t *testing.T) {
 	elapsed := time.Since(start)
 	if elapsed > 2*time.Second {
 		t.Error("Expected elapsed time < 2 seconds", elapsed)
+	}
+
+	// Change to true to dump the final state.
+	if false {
+		tk.Sync()
+		restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
+		must(t, err)
+
+		status := restore.GetAll()
+		for k, v := range status {
+			log.Println(k, v)
+		}
+
+		t.Fail()
 	}
 }

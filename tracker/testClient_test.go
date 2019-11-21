@@ -3,6 +3,7 @@ package tracker_test
 import (
 	"context"
 	"errors"
+	"log"
 	"reflect"
 	"sync"
 
@@ -80,4 +81,14 @@ func (c *testClient) Put(ctx context.Context, key *datastore.Key, src interface{
 	v := reflect.ValueOf(src)
 	c.objects[*key] = reflect.Indirect(v)
 	return key, nil
+}
+
+func (c *testClient) DumpKeys() {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	log.Println(len(c.objects), "keys")
+	for k := range c.objects {
+		log.Println("Key:", k)
+	}
+
 }

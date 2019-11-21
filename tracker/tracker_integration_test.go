@@ -17,10 +17,14 @@ import (
 // It should generally be run with the datastore emulator.
 func TestWithDatastore(t *testing.T) {
 	dsc, err := datastore.NewClient(context.Background(), "mlab-testing")
-	client := dsiface.AdaptClient(dsc)
 	must(t, err)
+	client := dsiface.AdaptClient(dsc)
 
-	tk, err := tracker.InitTracker(context.Background(), client, 0)
+	dsKey := datastore.NameKey("TestWithDatastore", "jobs", nil)
+	dsKey.Namespace = "gardener"
+	defer must(t, cleanup(client, dsKey))
+
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
 	must(t, err)
 	if tk == nil {
 		t.Fatal("nil Tracker")
@@ -35,7 +39,7 @@ func TestWithDatastore(t *testing.T) {
 	log.Println("Calling Sync")
 	must(t, tk.Sync()) // This causes invalid entity type
 	// Check that the sync (and InitTracker) work.
-	restore, err := tracker.InitTracker(context.Background(), client, 0)
+	restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
 	must(t, err)
 
 	if restore.NumJobs() != 500 {
@@ -49,5 +53,4 @@ func TestWithDatastore(t *testing.T) {
 	if tk.NumJobs() != 0 {
 		t.Error("Job cleanup failed", tk.NumJobs())
 	}
-
 }
