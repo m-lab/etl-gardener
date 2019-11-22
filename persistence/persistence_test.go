@@ -20,21 +20,18 @@ func init() {
 }
 
 type O1 struct {
-	key     string
+	persistence.Base
+
 	Integer int32
 }
 
 // Kind implements StateObject.Kind
-func (o O1) Kind() string {
+func (o O1) GetKind() string {
 	return reflect.TypeOf(o).Name()
 }
 
-func (o O1) Key() string {
-	return o.key
-}
-
-func NewO1(key string) O1 {
-	return O1{key: key}
+func NewO1(name string) O1 {
+	return O1{Base: persistence.NewBase(name)}
 }
 
 func assertStateObject(so persistence.StateObject) {
