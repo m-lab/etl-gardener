@@ -22,6 +22,8 @@ func TestWithDatastore(t *testing.T) {
 
 	dsKey := datastore.NameKey("TestWithDatastore", "jobs", nil)
 	dsKey.Namespace = "gardener"
+	// NOTE: datastore has eventual consistency, and deletes seem to take
+	// quite a while to propogate.
 	defer must(t, cleanup(client, dsKey))
 
 	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
