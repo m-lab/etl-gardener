@@ -124,11 +124,9 @@ func TestUpdate(t *testing.T) {
 	must(t, err)
 
 	createJobs(t, tk, "JobToUpdate", "type", 2)
-	defer completeJobs(t, tk, "JobToUpdate", "type", 2)
 
 	job := tracker.Job{"bucket", "JobToUpdate", "type", startDate}
 	must(t, tk.SetStatus(job, tracker.Parsing))
-
 	must(t, tk.SetStatus(job, tracker.Stabilizing))
 
 	status, err := tk.GetStatus(job)
@@ -139,7 +137,7 @@ func TestUpdate(t *testing.T) {
 		t.Error("Incorrect job state", job)
 	}
 
-	err = tk.SetStatus(tracker.Job{"bucket", "JobToUpdate", "nontype", startDate}, tracker.Stabilizing)
+	err = tk.SetStatus(tracker.Job{"bucket", "JobToUpdate", "other-type", startDate}, tracker.Stabilizing)
 	if err != tracker.ErrJobNotFound {
 		t.Error(err, "should have been ErrJobNotFound")
 	}
@@ -198,12 +196,12 @@ func TestConcurrentUpdates(t *testing.T) {
 
 	jobs := 20
 	createJobs(t, tk, "ConcurrentUpdates", "type", jobs)
-	defer completeJobs(t, tk, "ConcurrentUpdates", "type", jobs)
 
 	changes := 20 * jobs
 	start := time.Now()
 	wg := sync.WaitGroup{}
 	wg.Add(changes)
+	// Execute large number of concurrent updates and heartbeats.
 	for i := 0; i < changes; i++ {
 		go func(i int) {
 			k := tracker.Job{"bucket", "ConcurrentUpdates", "type",

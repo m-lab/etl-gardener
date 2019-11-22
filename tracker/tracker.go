@@ -94,7 +94,7 @@ func NewStatus() Status {
 }
 
 // JobMap is defined to allow custom json marshal/unmarshal.
-// It defines the map from Job to Status
+// It defines the map from Job to Status.
 type JobMap map[Job]Status
 
 // MarshalJSON implements json.Marshal
