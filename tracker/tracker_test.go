@@ -112,8 +112,8 @@ func TestTrackerAddDelete(t *testing.T) {
 	}
 }
 
-// This tests basic Add and update of 2 jobs, and verifies
-// correct error returned when trying to update a third job.
+// This tests basic Add and update of one jobs, and verifies
+// correct error returned when trying to update a non-existent job.
 func TestUpdate(t *testing.T) {
 	client := newTestClient()
 	dsKey := datastore.NameKey("TestUpdate", "jobs", nil)
@@ -123,7 +123,7 @@ func TestUpdate(t *testing.T) {
 	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
 	must(t, err)
 
-	createJobs(t, tk, "JobToUpdate", "type", 2)
+	createJobs(t, tk, "JobToUpdate", "type", 1)
 
 	job := tracker.Job{"bucket", "JobToUpdate", "type", startDate}
 	must(t, tk.SetStatus(job, tracker.Parsing))

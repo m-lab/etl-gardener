@@ -61,7 +61,9 @@ const (
 	Deduplicating State = "deduplicating"
 	Joining       State = "joining"
 	Failed        State = "failed"
-	Complete      State = "complete"
+	// Note that GetStatus will never return Complete, as the
+	// Job is removed when SetJobState is called with Complete.
+	Complete State = "complete"
 )
 
 // A Status describes the state of a bucket/exp/type/YYYY/MM/DD job.
@@ -198,12 +200,6 @@ func (tr *Tracker) NumJobs() int {
 func (tr *Tracker) getJSON() ([]byte, error) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	// First delete any completed jobs.
-	for key, job := range tr.jobs {
-		if job.isDone() {
-			delete(tr.jobs, key)
-		}
-	}
 	return json.Marshal(tr.jobs)
 }
 
