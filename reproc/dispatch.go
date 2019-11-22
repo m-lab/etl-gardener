@@ -275,10 +275,16 @@ var dailyDelay = 3 * time.Hour
 
 // findNextRecentDay finds an appropriate date to start daily processing.
 func findNextRecentDay(start time.Time, skip int) time.Time {
-	// Normally we'll reprocess yesterday after 3:00 am UTC.
-	// However, allow an extra hour of leeway when restarting.
-	// This may mean yesterday gets processed twice in a row.
-	yesterday := time.Now().Add(time.Hour + dailyDelay).UTC().Truncate(24 * time.Hour)
+	// Normally we'll reprocess yesterday sometime after 3:00 am UTC.
+	// When restarting, we want to be a little generous, in case the
+	// previous instance hadn't started yesterday already.  So, if it
+	// is before UTC 6:00 am, we still want to process yesterday.  So
+	// we subtract 6 hours from current time and truncate to determine
+	// the starting date.
+	// This may mean yesterday gets processed twice in a row, but it
+	// should be rare, since we will rarely restart Gardener between 3am
+	// and 6am utc.
+	yesterday := time.Now().Add(-3*time.Hour - dailyDelay).UTC().Truncate(24 * time.Hour)
 	if skip == 0 {
 		log.Println("Most recent day to process is:", yesterday.Format("2006/01/02"))
 		return yesterday
