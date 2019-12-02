@@ -32,6 +32,7 @@ type Job struct {
 }
 
 // NewJob creates a new job object.
+// NB:  The date will be converted to UTC and truncated to day boundary!
 func NewJob(bucket, exp, typ string, date time.Time) Job {
 	return Job{Bucket: bucket,
 		Experiment: exp,
@@ -87,7 +88,6 @@ func (j Status) isDone() bool {
 }
 
 // NewStatus creates a new Status with provided parameters.
-// NB:  The date will be converted to UTC and truncated to day boundary!
 func NewStatus() Status {
 	return Status{
 		State:  Init,
@@ -97,6 +97,7 @@ func NewStatus() Status {
 
 // JobMap is defined to allow custom json marshal/unmarshal.
 // It defines the map from Job to Status.
+// TODO implement datastore.PropertyLoadSaver
 type JobMap map[Job]Status
 
 // MarshalJSON implements json.Marshal
@@ -116,6 +117,7 @@ func (jobs JobMap) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON implements json.UnmarshalJSON
+// jobs and data should be non-nil.
 func (jobs *JobMap) UnmarshalJSON(data []byte) error {
 	type Pair struct {
 		Job   Job
@@ -127,7 +129,6 @@ func (jobs *JobMap) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	//jobs = make(map[Job]*Status, len(pairs))
 	for i := range pairs {
 		(*jobs)[pairs[i].Job] = pairs[i].State
 	}

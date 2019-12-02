@@ -39,7 +39,7 @@ func TestWithDatastore(t *testing.T) {
 	}
 
 	log.Println("Calling Sync")
-	must(t, tk.Sync()) // This causes invalid entity type
+	must(t, tk.Sync())
 	// Check that the sync (and InitTracker) work.
 	restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
 	must(t, err)
@@ -50,7 +50,7 @@ func TestWithDatastore(t *testing.T) {
 
 	completeJobs(t, tk, "500Jobs", "type", numJobs)
 
-	tk.Sync()
+	must(t, tk.Sync())
 
 	if tk.NumJobs() != 0 {
 		t.Error("Job cleanup failed", tk.NumJobs())
