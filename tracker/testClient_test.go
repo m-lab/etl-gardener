@@ -1,5 +1,7 @@
 package tracker_test
 
+// TODO move this to go/dsfake package
+
 import (
 	"context"
 	"errors"
@@ -27,7 +29,7 @@ var ErrNotImplemented = errors.New("Not implemented")
 
 // This implements a crude datastore test client.  It is somewhat
 // simplistic and incomplete.  It works only for basic Put, Get, and Delete,
-// but may not work always work correctly.
+// but may not always work correctly.
 type testClient struct {
 	dsiface.Client // For unimplemented methods
 	lock           sync.Mutex

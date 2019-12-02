@@ -67,9 +67,9 @@ func TestConcurrentUpdates(t *testing.T) {
 		t.Error("Expected elapsed time < 2 seconds", elapsed)
 	}
 
-	// Change to true to dump the final state.
-	if false {
-		tk.Sync()
+	// If verbose, dump the final state.
+	if testing.Verbose() {
+		must(t, tk.Sync())
 		restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
 		must(t, err)
 
@@ -77,7 +77,5 @@ func TestConcurrentUpdates(t *testing.T) {
 		for k, v := range status {
 			log.Println(k, v)
 		}
-
-		t.Fail()
 	}
 }
