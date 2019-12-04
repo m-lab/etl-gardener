@@ -13,6 +13,7 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/m-lab/etl-gardener/tracker"
+	"github.com/m-lab/go/cloudtest/dsfake"
 )
 
 func TestConcurrentUpdates(t *testing.T) {
@@ -24,7 +25,7 @@ func TestConcurrentUpdates(t *testing.T) {
 		t.Skip("Skipping for -short")
 	}
 
-	client := newTestClient()
+	client := dsfake.NewClient()
 	dsKey := datastore.NameKey("TestConcurrentUpdates", "jobs", nil)
 	dsKey.Namespace = "gardener"
 	defer must(t, cleanup(client, dsKey))
