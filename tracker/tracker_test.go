@@ -10,6 +10,7 @@ import (
 	"cloud.google.com/go/datastore"
 	"github.com/GoogleCloudPlatform/google-cloud-go-testing/datastore/dsiface"
 	"github.com/m-lab/etl-gardener/tracker"
+	"github.com/m-lab/go/cloudtest/dsfake"
 )
 
 func init() {
@@ -64,9 +65,10 @@ func cleanup(client dsiface.Client, key *datastore.Key) error {
 	defer cf()
 	err := client.Delete(ctx, key)
 	if err != nil && err != datastore.ErrNoSuchEntity {
-		tc, ok := client.(*testClient)
+		tc, ok := client.(*dsfake.Client)
 		if ok {
-			tc.DumpKeys()
+			keys := tc.GetKeys()
+			log.Println(keys)
 		}
 		return err
 	}
@@ -74,7 +76,7 @@ func cleanup(client dsiface.Client, key *datastore.Key) error {
 }
 
 func TestTrackerAddDelete(t *testing.T) {
-	client := newTestClient()
+	client := dsfake.NewClient()
 	dsKey := datastore.NameKey("TestTrackerAddDelete", "jobs", nil)
 	dsKey.Namespace = "gardener"
 	defer must(t, cleanup(client, dsKey))
@@ -113,7 +115,7 @@ func TestTrackerAddDelete(t *testing.T) {
 // This tests basic Add and update of one jobs, and verifies
 // correct error returned when trying to update a non-existent job.
 func TestUpdate(t *testing.T) {
-	client := newTestClient()
+	client := dsfake.NewClient()
 	dsKey := datastore.NameKey("TestUpdate", "jobs", nil)
 	dsKey.Namespace = "gardener"
 	defer must(t, cleanup(client, dsKey))
@@ -144,7 +146,7 @@ func TestUpdate(t *testing.T) {
 // This tests whether AddJob and SetStatus generate appropriate
 // errors when job doesn't exist.
 func TestNonexistentJobAccess(t *testing.T) {
-	client := newTestClient()
+	client := dsfake.NewClient()
 	dsKey := datastore.NameKey("TestNonexistentJobAccess", "jobs", nil)
 	dsKey.Namespace = "gardener"
 	defer must(t, cleanup(client, dsKey))
