@@ -271,7 +271,10 @@ queueLoop:
 	return maxDate, nil
 }
 
-var dailyDelay = 3 * time.Hour
+// dailyDelay is set to 4 hours and 10 minutes to allow time for the maximum
+// possible pusher delay for the previous day, plus several GCS transfer jobs to
+// complete. At 04:10 UTC, the daily parsing should be possible.
+var dailyDelay = 4*time.Hour + 10*time.Minute
 
 // findNextRecentDay finds an appropriate date to start daily processing.
 func findNextRecentDay(start time.Time, skip int) time.Time {
