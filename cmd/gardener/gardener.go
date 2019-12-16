@@ -21,6 +21,7 @@ import (
 	"github.com/m-lab/go/prometheusx"
 
 	"github.com/m-lab/etl-gardener/cloud"
+	job "github.com/m-lab/etl-gardener/job-service"
 	"github.com/m-lab/etl-gardener/reproc"
 	"github.com/m-lab/etl-gardener/rex"
 
@@ -286,6 +287,11 @@ func main() {
 
 	// TODO - do we want different health checks for manager mode?
 	http.HandleFunc("/alive", healthCheck)
+	svc, err := job.NewJobService(time.Date(2009, 2, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		log.Fatal("Could not initialize job service")
+	}
+	http.HandleFunc("/job", svc.JobHandler)
 	http.HandleFunc("/ready", healthCheck)
 
 	switch env.ServiceMode {
