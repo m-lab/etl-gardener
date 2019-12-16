@@ -46,11 +46,13 @@ func (svc *Service) NextJob() tracker.Job {
 		svc.advanceDate()
 	}
 	job := svc.jobTypes[svc.nextIndex]
+	job.Date = svc.date
 	svc.nextIndex++
 	return job
 }
 
 // JobHandler handle requests for new jobs.
+// TODO - should update tracker instance.
 func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 	// Must be a post because it changes state.
 	if req.Method != http.MethodPost {
@@ -78,5 +80,6 @@ func NewJobService(startDate time.Time) (*Service, error) {
 		tracker.Job{Bucket: "archive-measurement-lab", Experiment: "ndt", Datatype: "tcpinfo"},
 	}
 
-	return &Service{startDate: startDate, date: startDate, dateFilter: nil, jobTypes: types}, nil
+	start := startDate.UTC().Truncate(24 * time.Hour)
+	return &Service{startDate: start, date: start, dateFilter: nil, jobTypes: types}, nil
 }
