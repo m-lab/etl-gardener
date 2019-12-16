@@ -256,12 +256,6 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func jobHandler(w http.ResponseWriter, r *http.Request) {
-	// This is a real hardcoded task to return.
-	log.Println(r.RequestURI)
-	fmt.Fprint(w, "archive-measurement-lab/ndt/tcpinfo/2019/10/01")
-}
-
 // ###############################################################################
 //  Main
 // ###############################################################################
@@ -287,18 +281,17 @@ func main() {
 
 	// TODO - do we want different health checks for manager mode?
 	http.HandleFunc("/alive", healthCheck)
-	svc, err := job.NewJobService(time.Date(2009, 2, 1, 0, 0, 0, 0, time.UTC))
-	if err != nil {
-		log.Fatal("Could not initialize job service")
-	}
-	http.HandleFunc("/job", svc.JobHandler)
 	http.HandleFunc("/ready", healthCheck)
 
 	switch env.ServiceMode {
 	case "manager":
 		// This is new new "manager" mode, in which Gardener provides /job and /update apis
 		// for parsers to get work and report progress.
-		http.HandleFunc("/job", jobHandler) // healthCheck works correctly
+		svc, err := job.NewJobService(time.Date(2009, 2, 1, 0, 0, 0, 0, time.UTC))
+		if err != nil {
+			log.Fatal("Could not initialize job service")
+		}
+		http.HandleFunc("/job", svc.JobHandler)
 		healthy = true
 		log.Println("Running as manager service")
 	case "legacy":
