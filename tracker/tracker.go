@@ -58,6 +58,8 @@ type State string
 const (
 	Init          State = "init"
 	Parsing       State = "parsing"
+	ParseError    State = "parseError"
+	ParseComplete State = "postProcessing" // Ready for post processing, but not started yet.
 	Stabilizing   State = "stabilizing"
 	Deduplicating State = "deduplicating"
 	Joining       State = "joining"

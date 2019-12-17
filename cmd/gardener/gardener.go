@@ -19,8 +19,10 @@ import (
 	"time"
 
 	"github.com/m-lab/go/prometheusx"
+	"github.com/m-lab/go/rtx"
 
 	"github.com/m-lab/etl-gardener/cloud"
+	job "github.com/m-lab/etl-gardener/job-service"
 	"github.com/m-lab/etl-gardener/reproc"
 	"github.com/m-lab/etl-gardener/rex"
 
@@ -255,12 +257,6 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func jobHandler(w http.ResponseWriter, r *http.Request) {
-	// This is a real hardcoded task to return.
-	log.Println(r.RequestURI)
-	fmt.Fprint(w, "archive-measurement-lab/ndt/tcpinfo/2019/10/01")
-}
-
 // ###############################################################################
 //  Main
 // ###############################################################################
@@ -292,7 +288,9 @@ func main() {
 	case "manager":
 		// This is new new "manager" mode, in which Gardener provides /job and /update apis
 		// for parsers to get work and report progress.
-		http.HandleFunc("/job", jobHandler) // healthCheck works correctly
+		svc, err := job.NewJobService(time.Date(2009, 2, 1, 0, 0, 0, 0, time.UTC))
+		rtx.Must(err, "Could not initialize job service")
+		http.HandleFunc("/job", svc.JobHandler)
 		healthy = true
 		log.Println("Running as manager service")
 	case "legacy":
