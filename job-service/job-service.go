@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"regexp"
 	"sync"
 	"time"
 
@@ -20,19 +19,13 @@ type Service struct {
 
 	startDate time.Time // The date to restart at.
 	date      time.Time // The date currently being dispatched.
-	// Filter to apply to dates if we want to process a subset for sanity checking.
-	// For production, this will always be nil.
-	dateFilter *regexp.Regexp
-	jobTypes   []tracker.Job // The job prefixes to be iterated through.
-	nextIndex  int           // index of TypeSource to dispatch next.
+
+	jobTypes  []tracker.Job // The job prefixes to be iterated through.
+	nextIndex int           // index of TypeSource to dispatch next.
 }
 
 func (svc *Service) advanceDate() {
 	date := svc.date.UTC().Add(24 * time.Hour).Truncate(24 * time.Hour)
-	// Skip until we find a date that matches the date filter.
-	for svc.dateFilter != nil && !svc.dateFilter.MatchString(date.Format("2006/01/02")) {
-		date = date.UTC().Add(24 * time.Hour).Truncate(24 * time.Hour)
-	}
 	if time.Since(date) < 36*time.Hour {
 		date = svc.startDate
 	}
@@ -83,5 +76,5 @@ func NewJobService(startDate time.Time) (*Service, error) {
 	}
 
 	start := startDate.UTC().Truncate(24 * time.Hour)
-	return &Service{startDate: start, date: start, dateFilter: nil, jobTypes: types}, nil
+	return &Service{startDate: start, date: start, jobTypes: types}, nil
 }

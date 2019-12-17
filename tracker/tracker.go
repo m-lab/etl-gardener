@@ -75,10 +75,8 @@ const (
 // Status should be updated only by the Tracker, which will
 // ensure correct serialization and Saver updates.
 type Status struct {
-	UpdateTime      time.Time // Time of last update.
-	HeartbeatTime   time.Time // Time of last ETL heartbeat.
-	ArchivesToParse int       // Estimate of number of archives that parser will parse.
-	ArchivesParsed  int       // Number of archives completed so far.
+	UpdateTime    time.Time // Time of last update.
+	HeartbeatTime time.Time // Time of last ETL heartbeat.
 
 	State     State  // String defining the current state.
 	LastError string // The most recent error encountered.
