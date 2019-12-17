@@ -9,10 +9,13 @@ import (
 	"context"
 	_ "expvar"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/m-lab/go/osx"
 )
 
 func TestLegacyModeSetup(t *testing.T) {
@@ -25,10 +28,8 @@ func TestLegacyModeSetup(t *testing.T) {
 		"START_DATE":      "20090220",
 	}
 	for k, v := range vars {
-		err := os.Setenv(k, v)
-		if err != nil {
-			t.Fatal(err)
-		}
+		cleanup := osx.MustSetenv(k, v)
+		defer cleanup()
 	}
 
 	LoadEnv()
@@ -46,10 +47,8 @@ func TestManagerMode(t *testing.T) {
 		"ARCHIVE_BUCKET": "archive-mlab-testing",
 	}
 	for k, v := range vars {
-		err := os.Setenv(k, v)
-		if err != nil {
-			t.Fatal(err)
-		}
+		cleanup := osx.MustSetenv(k, v)
+		defer cleanup()
 	}
 
 	go main()
@@ -62,5 +61,17 @@ func TestManagerMode(t *testing.T) {
 	data, err := ioutil.ReadAll(resp.Body)
 	if string(data) != "ok" {
 		t.Fatal(string(data))
+	}
+}
+
+func TestEnv(t *testing.T) {
+	vars := map[string]string{
+		"SERVICE_MODE":   "manager",
+		"PROJECT":        "foobar",
+		"ARCHIVE_BUCKET": "archive-mlab-testing",
+	}
+	for k := range vars {
+		v := os.Getenv(k)
+		log.Println(k, v)
 	}
 }

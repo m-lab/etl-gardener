@@ -13,12 +13,11 @@ import (
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
-func now() time.Time {
-	return time.Date(2011, 2, 6, 1, 2, 3, 4, time.UTC)
-}
-
 func TestService_NextJob(t *testing.T) {
-	monkey.Patch(time.Now, now)
+	// This allows predictable behavior from time.Since in the advanceDate function.
+	monkey.Patch(time.Now, func() time.Time {
+		return time.Date(2011, 2, 6, 1, 2, 3, 4, time.UTC)
+	})
 	defer monkey.Unpatch(time.Now)
 
 	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)

@@ -18,11 +18,13 @@ import (
 type Service struct {
 	lock sync.Mutex
 
-	startDate  time.Time      // The date to restart at.
-	date       time.Time      // The date currently being dispatched.
-	dateFilter *regexp.Regexp // filter to apply to dates.
-	jobTypes   []tracker.Job  // The job prefixes to be iterated through.
-	nextIndex  int            // index of TypeSource to dispatch next.
+	startDate time.Time // The date to restart at.
+	date      time.Time // The date currently being dispatched.
+	// Filter to apply to dates if we want to process a subset for sanity checking.
+	// For production, this will always be nil.
+	dateFilter *regexp.Regexp
+	jobTypes   []tracker.Job // The job prefixes to be iterated through.
+	nextIndex  int           // index of TypeSource to dispatch next.
 }
 
 func (svc *Service) advanceDate() {
