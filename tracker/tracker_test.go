@@ -75,6 +75,17 @@ func cleanup(client dsiface.Client, key *datastore.Key) error {
 	return nil
 }
 
+func TestJobPath(t *testing.T) {
+	withType := tracker.Job{"bucket", "exp", "type", startDate}
+	if withType.Path() != "gs://bucket/exp/type/"+startDate.Format("2006/01/02") {
+		t.Error("wrong path:", withType.Path())
+	}
+	withoutType := tracker.Job{"bucket", "exp", "", startDate}
+	if withoutType.Path() != "gs://bucket/exp/"+startDate.Format("2006/01/02") {
+		t.Error("wrong path", withType.Path())
+	}
+}
+
 func TestTrackerAddDelete(t *testing.T) {
 	client := dsfake.NewClient()
 	dsKey := datastore.NameKey("TestTrackerAddDelete", "jobs", nil)
