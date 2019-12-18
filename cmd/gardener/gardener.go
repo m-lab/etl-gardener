@@ -288,7 +288,8 @@ func main() {
 	case "manager":
 		// This is new new "manager" mode, in which Gardener provides /job and /update apis
 		// for parsers to get work and report progress.
-		svc, err := job.NewJobService(time.Date(2009, 2, 1, 0, 0, 0, 0, time.UTC))
+		// For now, we just start in Aug 2019, and handle only new data.
+		svc, err := job.NewJobService(time.Date(2019, 8, 1, 0, 0, 0, 0, time.UTC))
 		rtx.Must(err, "Could not initialize job service")
 		http.HandleFunc("/job", svc.JobHandler)
 		healthy = true
