@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -38,6 +39,16 @@ func NewJob(bucket, exp, typ string, date time.Time) Job {
 		Experiment: exp,
 		Datatype:   typ,
 		Date:       date.UTC().Truncate(24 * time.Hour)}
+}
+
+// Path returns the GCS path prefix to the job data.
+func (j *Job) Path() string {
+	if len(j.Datatype) > 0 {
+		return fmt.Sprintf("gs://%s/%s/%s/%s",
+			j.Bucket, j.Experiment, j.Datatype, j.Date.Format("2006/01/02"))
+	}
+	return fmt.Sprintf("gs://%s/%s/%s",
+		j.Bucket, j.Experiment, j.Date.Format("2006/01/02"))
 }
 
 // Error declarations
