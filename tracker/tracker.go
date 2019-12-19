@@ -45,10 +45,10 @@ func NewJob(bucket, exp, typ string, date time.Time) Job {
 func (j *Job) Path() string {
 	if len(j.Datatype) > 0 {
 		return fmt.Sprintf("gs://%s/%s/%s/%s",
-			j.Bucket, j.Experiment, j.Datatype, j.Date.Format("2006/01/02"))
+			j.Bucket, j.Experiment, j.Datatype, j.Date.Format("2006/01/02/"))
 	}
 	return fmt.Sprintf("gs://%s/%s/%s",
-		j.Bucket, j.Experiment, j.Date.Format("2006/01/02"))
+		j.Bucket, j.Experiment, j.Date.Format("2006/01/02/"))
 }
 
 // Error declarations
