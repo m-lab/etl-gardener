@@ -6,8 +6,14 @@ import (
 	"net/http"
 )
 
+// Handler provides handlers for update, heartbeat, etc.
 type Handler struct {
 	tracker *Tracker
+}
+
+// NewHandler returns a Handler that sends updates to provided Tracker.
+func NewHandler(tr *Tracker) *Handler {
+	return &Handler{tr}
 }
 
 func getJob(jobString string) (Job, error) {
