@@ -77,11 +77,11 @@ func cleanup(client dsiface.Client, key *datastore.Key) error {
 
 func TestJobPath(t *testing.T) {
 	withType := tracker.Job{"bucket", "exp", "type", startDate}
-	if withType.Path() != "gs://bucket/exp/type/"+startDate.Format("2006/01/02") {
+	if withType.Path() != "gs://bucket/exp/type/"+startDate.Format("2006/01/02/") {
 		t.Error("wrong path:", withType.Path())
 	}
 	withoutType := tracker.Job{"bucket", "exp", "", startDate}
-	if withoutType.Path() != "gs://bucket/exp/"+startDate.Format("2006/01/02") {
+	if withoutType.Path() != "gs://bucket/exp/"+startDate.Format("2006/01/02/") {
 		t.Error("wrong path", withType.Path())
 	}
 }
