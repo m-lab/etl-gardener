@@ -23,32 +23,32 @@ func TestService_NextJob(t *testing.T) {
 	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)
 	svc, _ := job.NewJobService(start)
 	j := svc.NextJob()
-	w := tracker.Job{Bucket: "archive-measurement-lab", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}
+	w := tracker.Job{Bucket: "archive-mlab-sandbox", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}
 	diff := deep.Equal(w, j)
 	if diff != nil {
 		t.Fatal(diff)
 	}
 	j = svc.NextJob()
-	w = tracker.Job{Bucket: "archive-measurement-lab", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Truncate(24 * time.Hour)}
+	w = tracker.Job{Bucket: "archive-mlab-sandbox", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Truncate(24 * time.Hour)}
 	diff = deep.Equal(w, j)
 	if diff != nil {
 		t.Fatal(diff)
 	}
 	j = svc.NextJob()
-	w = tracker.Job{Bucket: "archive-measurement-lab", Experiment: "ndt", Datatype: "ndt5", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}
+	w = tracker.Job{Bucket: "archive-mlab-sandbox", Experiment: "ndt", Datatype: "ndt5", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}
 	diff = deep.Equal(w, j)
 	if diff != nil {
 		t.Fatal(diff)
 	}
 	j = svc.NextJob()
-	w = tracker.Job{Bucket: "archive-measurement-lab", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}
+	w = tracker.Job{Bucket: "archive-mlab-sandbox", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}
 	diff = deep.Equal(w, j)
 	if diff != nil {
 		t.Fatal(diff)
 	}
 	// Wrap
 	j = svc.NextJob()
-	w = tracker.Job{Bucket: "archive-measurement-lab", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}
+	w = tracker.Job{Bucket: "archive-mlab-sandbox", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}
 	diff = deep.Equal(w, j)
 	if diff != nil {
 		t.Fatal(diff)
@@ -72,7 +72,7 @@ func TestJobHandler(t *testing.T) {
 		t.Fatal(resp.Code)
 	}
 
-	want := `{"Bucket":"archive-measurement-lab","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`
+	want := `{"Bucket":"archive-mlab-sandbox","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`
 	if want != resp.Body.String() {
 		t.Fatal(resp.Body.String())
 	}

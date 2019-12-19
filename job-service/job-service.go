@@ -71,8 +71,9 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 // NewJobService creates the default job service.
 func NewJobService(startDate time.Time) (*Service, error) {
 	types := []tracker.Job{
-		tracker.Job{Bucket: "archive-measurement-lab", Experiment: "ndt", Datatype: "ndt5"},
-		tracker.Job{Bucket: "archive-measurement-lab", Experiment: "ndt", Datatype: "tcpinfo"},
+		// Hack for sandbox only.
+		tracker.Job{Bucket: "archive-mlab-sandbox", Experiment: "ndt", Datatype: "ndt5"},
+		tracker.Job{Bucket: "archive-mlab-sandbox", Experiment: "ndt", Datatype: "tcpinfo"},
 	}
 
 	start := startDate.UTC().Truncate(24 * time.Hour)
