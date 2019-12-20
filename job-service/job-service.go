@@ -2,7 +2,6 @@
 package job
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"sync"
@@ -56,12 +55,7 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 	}
 	job := svc.NextJob()
 
-	js, err := json.Marshal(job)
-	if err != nil {
-		resp.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	_, err = resp.Write(js)
+	_, err := resp.Write(job.Marshal())
 	if err != nil {
 		log.Println(err)
 	}
