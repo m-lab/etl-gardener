@@ -21,7 +21,7 @@ func TestService_NextJob(t *testing.T) {
 	defer monkey.Unpatch(time.Now)
 
 	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)
-	svc, _ := job.NewJobService(start)
+	svc, _ := job.NewJobService(nil, start)
 	j := svc.NextJob()
 	w := tracker.Job{Bucket: "archive-mlab-sandbox", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}
 	diff := deep.Equal(w, j)
@@ -57,7 +57,7 @@ func TestService_NextJob(t *testing.T) {
 
 func TestJobHandler(t *testing.T) {
 	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)
-	svc, _ := job.NewJobService(start)
+	svc, _ := job.NewJobService(nil, start)
 	req := httptest.NewRequest("", "/job", nil)
 	resp := httptest.NewRecorder()
 	svc.JobHandler(resp, req)

@@ -7,16 +7,22 @@ import (
 	"net/http"
 )
 
-// URL is a string representing an url.
-type URL = string
-
-// Server is a string representing a server, e.g. http://10.100.1.2:8080
-type Server = string
-
 // UpdateURL makes an update request URL.
-func UpdateURL(server Server, job Job, state State, detail string) (URL, error) {
+func UpdateURL(base string, job Job, state State, detail string) string {
 	return fmt.Sprintf("%s/update?job=%s&state=%s&detail=%s",
-		server, string(job.Marshal()), state, detail), nil
+		base, string(job.Marshal()), state, detail)
+}
+
+// HeartbeatURL makes an update request URL.
+func HeartbeatURL(base string, job Job) string {
+	return fmt.Sprintf("%s/heartbeat?job=%s",
+		base, string(job.Marshal()))
+}
+
+// ErrorURL makes an update request URL.
+func ErrorURL(base string, job Job, errString string) string {
+	return fmt.Sprintf("%s/error?job=%s&error=%s",
+		base, string(job.Marshal()), errString)
 }
 
 // Handler provides handlers for update, heartbeat, etc.
@@ -96,8 +102,8 @@ func (h *Handler) errorFunc(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	jobErr := req.Form.Get("Error")
-	job, err := getJob(req.Form.Get("Job"))
+	jobErr := req.Form.Get("error")
+	job, err := getJob(req.Form.Get("job"))
 	if err != nil {
 		resp.WriteHeader(http.StatusUnprocessableEntity)
 		return

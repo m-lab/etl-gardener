@@ -18,6 +18,10 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/datastore"
+	"github.com/GoogleCloudPlatform/google-cloud-go-testing/datastore/dsiface"
+	"github.com/m-lab/etl-gardener/tracker"
+
 	"github.com/m-lab/go/prometheusx"
 	"github.com/m-lab/go/rtx"
 
@@ -257,6 +261,21 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func mustStandardTracker() *tracker.Tracker {
+	client, err := datastore.NewClient(context.Background(), env.Project)
+	rtx.Must(err, "datastore client")
+	dsKey := datastore.NameKey("tracker", "jobs", nil)
+	dsKey.Namespace = "gardener"
+
+	tk, err := tracker.InitTracker(context.Background(), dsiface.AdaptClient(client), dsKey, 0)
+	rtx.Must(err, "tracker init")
+	if tk == nil {
+		log.Fatal("nil tracker")
+	}
+
+	return tk
+}
+
 // ###############################################################################
 //  Main
 // ###############################################################################
@@ -288,8 +307,12 @@ func main() {
 	case "manager":
 		// This is new new "manager" mode, in which Gardener provides /job and /update apis
 		// for parsers to get work and report progress.
+		tk := mustStandardTracker()
+		handler := tracker.NewHandler(tk)
+		handler.Register(http.DefaultServeMux)
+
 		// For now, we just start in Aug 2019, and handle only new data.
-		svc, err := job.NewJobService(time.Date(2019, 8, 1, 0, 0, 0, 0, time.UTC))
+		svc, err := job.NewJobService(tk, time.Date(2019, 8, 1, 0, 0, 0, 0, time.UTC))
 		rtx.Must(err, "Could not initialize job service")
 		http.HandleFunc("/job", svc.JobHandler)
 		healthy = true
