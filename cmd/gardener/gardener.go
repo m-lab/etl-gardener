@@ -217,6 +217,9 @@ func taskHandlerFromEnv(ctx context.Context, client *http.Client) (*reproc.TaskH
 // until we get annotation fixed to use the actual data date instead of NOW.
 const StartDateRFC3339 = "2017-05-01T00:00:00Z"
 
+// Job state tracker, when operating in manager mode.
+var globalTracker *tracker.Tracker
+
 // ###############################################################################
 //  Top level service control code.
 // ###############################################################################
@@ -238,6 +241,9 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "</br></br>\n")
 
 	// TODO - attach the environment to the context.
+	if globalTracker != nil {
+		globalTracker.WriteHTMLStatusTo(r.Context(), w)
+	}
 	state.WriteHTMLStatusTo(r.Context(), w, env.Project, env.Experiment)
 	fmt.Fprintf(w, "</br>\n")
 
@@ -307,12 +313,12 @@ func main() {
 	case "manager":
 		// This is new new "manager" mode, in which Gardener provides /job and /update apis
 		// for parsers to get work and report progress.
-		tk := mustStandardTracker()
-		handler := tracker.NewHandler(tk)
+		globalTracker := mustStandardTracker()
+		handler := tracker.NewHandler(globalTracker)
 		handler.Register(http.DefaultServeMux)
 
 		// For now, we just start in Aug 2019, and handle only new data.
-		svc, err := job.NewJobService(tk, time.Date(2019, 8, 1, 0, 0, 0, 0, time.UTC))
+		svc, err := job.NewJobService(globalTracker, time.Date(2019, 8, 1, 0, 0, 0, 0, time.UTC))
 		rtx.Must(err, "Could not initialize job service")
 		http.HandleFunc("/job", svc.JobHandler)
 		healthy = true

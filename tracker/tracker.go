@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"sync"
 	"time"
@@ -334,4 +335,17 @@ func (tr *Tracker) GetAll() JobMap {
 		m[k] = v
 	}
 	return m
+}
+
+// WriteHTMLStatusTo writes out the status of all jobs to the html writer.
+func (tr *Tracker) WriteHTMLStatusTo(ctx context.Context, w io.Writer) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	jobs := tr.GetAll()
+
+	for j := range jobs {
+		// TODO format this as columns?
+		fmt.Fprintf(w, "%s %s</br>\n", j, jobs[j])
+	}
+	return nil
 }
