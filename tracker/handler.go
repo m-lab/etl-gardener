@@ -3,8 +3,21 @@ package tracker
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 )
+
+// URL is a string representing an url.
+type URL = string
+
+// Server is a string representing a server, e.g. http://10.100.1.2:8080
+type Server = string
+
+// UpdateURL makes an update request URL.
+func UpdateURL(server Server, job Job, state State, detail string) (URL, error) {
+	return fmt.Sprintf("%s/update?job=%s&state=%s&detail=%s",
+		server, string(job.Marshal()), state, detail), nil
+}
 
 // Handler provides handlers for update, heartbeat, etc.
 type Handler struct {
@@ -34,7 +47,7 @@ func (h *Handler) heartbeat(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	job, err := getJob(req.Form.Get("Job"))
+	job, err := getJob(req.Form.Get("job"))
 	if err != nil {
 		resp.WriteHeader(http.StatusUnprocessableEntity)
 		return
@@ -55,16 +68,18 @@ func (h *Handler) update(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	state := req.Form.Get("State")
-	job, err := getJob(req.Form.Get("Job"))
+	job, err := getJob(req.Form.Get("job"))
 	if err != nil {
 		resp.WriteHeader(http.StatusUnprocessableEntity)
 		return
 	}
+	state := req.Form.Get("state")
 	if state == "" {
 		resp.WriteHeader(http.StatusFailedDependency)
 		return
 	}
+	// detail := req.Form.Get("detail")
+
 	if err := h.tracker.SetStatus(job, State(state)); err != nil {
 		resp.WriteHeader(http.StatusGone)
 		return

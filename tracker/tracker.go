@@ -51,6 +51,12 @@ func (j *Job) Path() string {
 		j.Bucket, j.Experiment, j.Date.Format("2006/01/02"))
 }
 
+// Marshal marshals the job to json.
+func (j *Job) Marshal() []byte {
+	b, _ := json.Marshal(j)
+	return b
+}
+
 // Error declarations
 var (
 	ErrClientIsNil            = errors.New("nil datastore client")
