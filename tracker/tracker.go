@@ -22,6 +22,7 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/GoogleCloudPlatform/google-cloud-go-testing/datastore/dsiface"
+	"github.com/m-lab/etl-gardener/metrics"
 )
 
 // Job describes a reprocessing "Job", which includes
@@ -270,6 +271,8 @@ func (tr *Tracker) AddJob(job Job) error {
 		return ErrJobAlreadyExists
 	}
 
+	// TODO - should call this JobsInFlight, to avoid confusion with Tasks in parser.
+	metrics.TasksInFlight.Inc()
 	state := NewStatus()
 	tr.jobs[job] = state
 	return nil
@@ -287,6 +290,7 @@ func (tr *Tracker) updateJob(job Job, state Status) error {
 
 	if state.isDone() {
 		delete(tr.jobs, job)
+		metrics.TasksInFlight.Dec()
 	} else {
 		tr.jobs[job] = state
 	}
@@ -343,6 +347,7 @@ func (tr *Tracker) WriteHTMLStatusTo(ctx context.Context, w io.Writer) error {
 	defer cancel()
 	jobs := tr.GetAll()
 
+	fmt.Fprint(w, "<div>Tracker State</div>\n")
 	for j := range jobs {
 		// TODO format this as columns?
 		fmt.Fprintf(w, "%s %s</br>\n", j, jobs[j])
