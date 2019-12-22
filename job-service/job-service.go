@@ -61,11 +61,11 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 		err := svc.tracker.AddJob(job)
 		if err != nil {
 			log.Println(err)
+			resp.WriteHeader(http.StatusInternalServerError)
 			_, err = resp.Write([]byte("Job already exists.  Try again."))
 			if err != nil {
 				log.Println(err)
 			}
-			resp.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 	}

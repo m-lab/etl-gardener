@@ -133,6 +133,7 @@ func (h *Handler) errorFunc(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusGone)
 		return
 	}
+
 	h.tracker.SetStatus(job, ParseError)
 	resp.WriteHeader(http.StatusOK)
 }
