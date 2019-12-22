@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 	"github.com/m-lab/go/cloudtest/dsfake"
 )
 
-func testSetup(t *testing.T) (string, *tracker.Tracker, tracker.Job) {
+func testSetup(t *testing.T) (url.URL, *tracker.Tracker, tracker.Job) {
 	client := dsfake.NewClient()
 	dsKey := datastore.NameKey("TestTrackerAddDelete", "jobs", nil)
 	dsKey.Namespace = "gardener"
@@ -31,12 +32,16 @@ func testSetup(t *testing.T) (string, *tracker.Tracker, tracker.Job) {
 	h.Register(mux)
 
 	server := httptest.NewServer(mux)
+	url, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	return server.URL, tk, job
+	return *url, tk, job
 }
 
-func expectGet(t *testing.T, url string, code int) {
-	resp, err := http.Get(url)
+func expectGet(t *testing.T, url *url.URL, code int) {
+	resp, err := http.Get(url.String())
 	must(t, err)
 	if resp.StatusCode != code {
 		t.Fatalf("Expected %s, got %s", http.StatusText(code), resp.Status)
@@ -44,8 +49,8 @@ func expectGet(t *testing.T, url string, code int) {
 	resp.Body.Close()
 }
 
-func expectPost(t *testing.T, url string, code int) {
-	resp, err := http.Post(url, "application/x-www-form-urlencoded", nil)
+func expectPost(t *testing.T, url *url.URL, code int) {
+	resp, err := http.Post(url.String(), "application/x-www-form-urlencoded", nil)
 	must(t, err)
 	if resp.StatusCode != code {
 		t.Fatalf("Expected %s, got %s", http.StatusText(code), resp.Status)

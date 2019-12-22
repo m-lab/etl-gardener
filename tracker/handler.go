@@ -3,26 +3,42 @@ package tracker
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
+	"log"
 	"net/http"
+	"net/url"
 )
 
 // UpdateURL makes an update request URL.
-func UpdateURL(base string, job Job, state State, detail string) string {
-	return fmt.Sprintf("%s/update?job=%s&state=%s&detail=%s",
-		base, string(job.Marshal()), state, detail)
+func UpdateURL(base url.URL, job Job, state State, detail string) *url.URL {
+	base.Path += "update"
+	params := make(url.Values, 3)
+	params.Add("job", string(job.Marshal()))
+	params.Add("state", string(state))
+	params.Add("detail", detail)
+
+	base.RawQuery = params.Encode()
+	return &base
 }
 
 // HeartbeatURL makes an update request URL.
-func HeartbeatURL(base string, job Job) string {
-	return fmt.Sprintf("%s/heartbeat?job=%s",
-		base, string(job.Marshal()))
+func HeartbeatURL(base url.URL, job Job) *url.URL {
+	base.Path += "heartbeat"
+	params := make(url.Values, 3)
+	params.Add("job", string(job.Marshal()))
+
+	base.RawQuery = params.Encode()
+	return &base
 }
 
 // ErrorURL makes an update request URL.
-func ErrorURL(base string, job Job, errString string) string {
-	return fmt.Sprintf("%s/error?job=%s&error=%s",
-		base, string(job.Marshal()), errString)
+func ErrorURL(base url.URL, job Job, errString string) *url.URL {
+	base.Path += "error"
+	params := make(url.Values, 3)
+	params.Add("job", string(job.Marshal()))
+	params.Add("error", errString)
+
+	base.RawQuery = params.Encode()
+	return &base
 }
 
 // Handler provides handlers for update, heartbeat, etc.
@@ -66,6 +82,7 @@ func (h *Handler) heartbeat(resp http.ResponseWriter, req *http.Request) {
 }
 
 func (h *Handler) update(resp http.ResponseWriter, req *http.Request) {
+	log.Println(req.RemoteAddr)
 	if req.Method != http.MethodPost {
 		resp.WriteHeader(http.StatusMethodNotAllowed)
 		return
