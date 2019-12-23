@@ -278,9 +278,9 @@ func (tr *Tracker) AddJob(job Job) error {
 	return nil
 }
 
-// updateJob updates an existing job.
+// UpdateJob updates an existing job.
 // May return ErrJobNotFound if job no longer exists.
-func (tr *Tracker) updateJob(job Job, state Status) error {
+func (tr *Tracker) UpdateJob(job Job, state Status) error {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 	_, ok := tr.jobs[job]
@@ -305,7 +305,7 @@ func (tr *Tracker) SetStatus(job Job, newState State) error {
 	}
 	status.State = newState
 	status.UpdateTime = time.Now()
-	return tr.updateJob(job, status)
+	return tr.UpdateJob(job, status)
 }
 
 // Heartbeat updates a job's heartbeat time.
@@ -315,7 +315,7 @@ func (tr *Tracker) Heartbeat(job Job) error {
 		return err
 	}
 	status.HeartbeatTime = time.Now()
-	return tr.updateJob(job, status)
+	return tr.UpdateJob(job, status)
 }
 
 // SetJobError updates a job's error fields, and handles persistence.
@@ -327,7 +327,7 @@ func (tr *Tracker) SetJobError(job Job, errString string) error {
 	status.UpdateTime = time.Now()
 	status.LastError = errString
 	status.errors = append(status.errors, errString)
-	return tr.updateJob(job, status)
+	return tr.UpdateJob(job, status)
 }
 
 // GetAll returns the full job map.
