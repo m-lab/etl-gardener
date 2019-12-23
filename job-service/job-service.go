@@ -73,11 +73,11 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 	_, err := resp.Write(job.Marshal())
 	if err != nil {
 		log.Println(err)
+		// This should precede the Write(), but the Write failed, so this
+		// is likely ok.
 		resp.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
-	resp.WriteHeader(http.StatusOK)
 }
 
 // NewJobService creates the default job service.
