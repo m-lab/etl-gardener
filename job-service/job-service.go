@@ -2,7 +2,6 @@
 package job
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"sync"
@@ -16,6 +15,9 @@ import (
 // all TypeSources in the source bucket.
 type Service struct {
 	lock sync.Mutex
+
+	// Optional tracker to add jobs to.
+	tracker *tracker.Tracker
 
 	startDate time.Time // The date to restart at.
 	date      time.Time // The date currently being dispatched.
@@ -55,26 +57,37 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 	job := svc.NextJob()
+	if svc.tracker != nil {
+		err := svc.tracker.AddJob(job)
+		if err != nil {
+			log.Println(err)
+			resp.WriteHeader(http.StatusInternalServerError)
+			_, err = resp.Write([]byte("Job already exists.  Try again."))
+			if err != nil {
+				log.Println(err)
+			}
+			return
+		}
+	}
 
-	js, err := json.Marshal(job)
+	_, err := resp.Write(job.Marshal())
 	if err != nil {
+		log.Println(err)
+		// This should precede the Write(), but the Write failed, so this
+		// is likely ok.
 		resp.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	_, err = resp.Write(js)
-	if err != nil {
-		log.Println(err)
-	}
-	resp.WriteHeader(http.StatusOK)
 }
 
 // NewJobService creates the default job service.
-func NewJobService(startDate time.Time) (*Service, error) {
+func NewJobService(tk *tracker.Tracker, startDate time.Time) (*Service, error) {
 	types := []tracker.Job{
-		tracker.Job{Bucket: "archive-measurement-lab", Experiment: "ndt", Datatype: "ndt5"},
-		tracker.Job{Bucket: "archive-measurement-lab", Experiment: "ndt", Datatype: "tcpinfo"},
+		// Hack for sandbox only.
+		tracker.Job{Bucket: "archive-mlab-sandbox", Experiment: "ndt", Datatype: "ndt5"},
+		tracker.Job{Bucket: "archive-mlab-sandbox", Experiment: "ndt", Datatype: "tcpinfo"},
 	}
 
 	start := startDate.UTC().Truncate(24 * time.Hour)
-	return &Service{startDate: start, date: start, jobTypes: types}, nil
+	return &Service{tracker: tk, startDate: start, date: start, jobTypes: types}, nil
 }

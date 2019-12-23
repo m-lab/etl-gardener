@@ -15,12 +15,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"sync"
 	"time"
 
 	"cloud.google.com/go/datastore"
 	"github.com/GoogleCloudPlatform/google-cloud-go-testing/datastore/dsiface"
+	"github.com/m-lab/etl-gardener/metrics"
 )
 
 // Job describes a reprocessing "Job", which includes
@@ -49,6 +51,12 @@ func (j *Job) Path() string {
 	}
 	return fmt.Sprintf("gs://%s/%s/%s",
 		j.Bucket, j.Experiment, j.Date.Format("2006/01/02/"))
+}
+
+// Marshal marshals the job to json.
+func (j *Job) Marshal() []byte {
+	b, _ := json.Marshal(j)
+	return b
 }
 
 // Error declarations
@@ -263,14 +271,16 @@ func (tr *Tracker) AddJob(job Job) error {
 		return ErrJobAlreadyExists
 	}
 
+	// TODO - should call this JobsInFlight, to avoid confusion with Tasks in parser.
+	metrics.TasksInFlight.Inc()
 	state := NewStatus()
 	tr.jobs[job] = state
 	return nil
 }
 
-// updateJob updates an existing job.
+// UpdateJob updates an existing job.
 // May return ErrJobNotFound if job no longer exists.
-func (tr *Tracker) updateJob(job Job, state Status) error {
+func (tr *Tracker) UpdateJob(job Job, state Status) error {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 	_, ok := tr.jobs[job]
@@ -280,6 +290,7 @@ func (tr *Tracker) updateJob(job Job, state Status) error {
 
 	if state.isDone() {
 		delete(tr.jobs, job)
+		metrics.TasksInFlight.Dec()
 	} else {
 		tr.jobs[job] = state
 	}
@@ -294,7 +305,7 @@ func (tr *Tracker) SetStatus(job Job, newState State) error {
 	}
 	status.State = newState
 	status.UpdateTime = time.Now()
-	return tr.updateJob(job, status)
+	return tr.UpdateJob(job, status)
 }
 
 // Heartbeat updates a job's heartbeat time.
@@ -304,7 +315,7 @@ func (tr *Tracker) Heartbeat(job Job) error {
 		return err
 	}
 	status.HeartbeatTime = time.Now()
-	return tr.updateJob(job, status)
+	return tr.UpdateJob(job, status)
 }
 
 // SetJobError updates a job's error fields, and handles persistence.
@@ -316,7 +327,7 @@ func (tr *Tracker) SetJobError(job Job, errString string) error {
 	status.UpdateTime = time.Now()
 	status.LastError = errString
 	status.errors = append(status.errors, errString)
-	return tr.updateJob(job, status)
+	return tr.UpdateJob(job, status)
 }
 
 // GetAll returns the full job map.
@@ -328,4 +339,18 @@ func (tr *Tracker) GetAll() JobMap {
 		m[k] = v
 	}
 	return m
+}
+
+// WriteHTMLStatusTo writes out the status of all jobs to the html writer.
+func (tr *Tracker) WriteHTMLStatusTo(ctx context.Context, w io.Writer) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	jobs := tr.GetAll()
+
+	fmt.Fprint(w, "<div>Tracker State</div>\n")
+	for j := range jobs {
+		// TODO format this as columns?
+		fmt.Fprintf(w, "%s %s</br>\n", j, jobs[j])
+	}
+	return nil
 }

@@ -3,11 +3,52 @@ package tracker
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
+	"net/url"
 )
 
+// UpdateURL makes an update request URL.
+func UpdateURL(base url.URL, job Job, state State, detail string) *url.URL {
+	base.Path += "update"
+	params := make(url.Values, 3)
+	params.Add("job", string(job.Marshal()))
+	params.Add("state", string(state))
+	params.Add("detail", detail)
+
+	base.RawQuery = params.Encode()
+	return &base
+}
+
+// HeartbeatURL makes an update request URL.
+func HeartbeatURL(base url.URL, job Job) *url.URL {
+	base.Path += "heartbeat"
+	params := make(url.Values, 3)
+	params.Add("job", string(job.Marshal()))
+
+	base.RawQuery = params.Encode()
+	return &base
+}
+
+// ErrorURL makes an update request URL.
+func ErrorURL(base url.URL, job Job, errString string) *url.URL {
+	base.Path += "error"
+	params := make(url.Values, 3)
+	params.Add("job", string(job.Marshal()))
+	params.Add("error", errString)
+
+	base.RawQuery = params.Encode()
+	return &base
+}
+
+// Handler provides handlers for update, heartbeat, etc.
 type Handler struct {
 	tracker *Tracker
+}
+
+// NewHandler returns a Handler that sends updates to provided Tracker.
+func NewHandler(tr *Tracker) *Handler {
+	return &Handler{tr}
 }
 
 func getJob(jobString string) (Job, error) {
@@ -28,7 +69,7 @@ func (h *Handler) heartbeat(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	job, err := getJob(req.Form.Get("Job"))
+	job, err := getJob(req.Form.Get("job"))
 	if err != nil {
 		resp.WriteHeader(http.StatusUnprocessableEntity)
 		return
@@ -41,6 +82,7 @@ func (h *Handler) heartbeat(resp http.ResponseWriter, req *http.Request) {
 }
 
 func (h *Handler) update(resp http.ResponseWriter, req *http.Request) {
+	log.Println(req.RemoteAddr)
 	if req.Method != http.MethodPost {
 		resp.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -49,16 +91,18 @@ func (h *Handler) update(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	state := req.Form.Get("State")
-	job, err := getJob(req.Form.Get("Job"))
+	job, err := getJob(req.Form.Get("job"))
 	if err != nil {
 		resp.WriteHeader(http.StatusUnprocessableEntity)
 		return
 	}
+	state := req.Form.Get("state")
 	if state == "" {
 		resp.WriteHeader(http.StatusFailedDependency)
 		return
 	}
+	// detail := req.Form.Get("detail")
+
 	if err := h.tracker.SetStatus(job, State(state)); err != nil {
 		resp.WriteHeader(http.StatusGone)
 		return
@@ -75,8 +119,8 @@ func (h *Handler) errorFunc(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	jobErr := req.Form.Get("Error")
-	job, err := getJob(req.Form.Get("Job"))
+	jobErr := req.Form.Get("error")
+	job, err := getJob(req.Form.Get("job"))
 	if err != nil {
 		resp.WriteHeader(http.StatusUnprocessableEntity)
 		return
@@ -89,6 +133,7 @@ func (h *Handler) errorFunc(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusGone)
 		return
 	}
+
 	h.tracker.SetStatus(job, ParseError)
 	resp.WriteHeader(http.StatusOK)
 }
