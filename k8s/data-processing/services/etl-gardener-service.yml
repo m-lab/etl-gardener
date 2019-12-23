@@ -13,5 +13,7 @@ spec:
   selector:
     run: etl-gardener-universal
   sessionAffinity: None
-  type: LoadBalancer
-  loadBalancerIP: 10.100.1.2  # etl-gardener us-east1/default/default-gardener subnet - this hard codes the service address.
+  # Trying different approach, with etl in same cluster, like prometheus-service.yml
+  type: ClusterIP
+  # type: LoadBalancer
+  # loadBalancerIP: 10.100.1.2  # etl-gardener us-east1/default/default-gardener subnet - this hard codes the service address.
