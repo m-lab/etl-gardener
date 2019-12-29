@@ -129,6 +129,16 @@ deploy:
     all_branches: true
     condition: $TRAVIS_BRANCH == sandbox-* && $TRAVIS_EVENT_TYPE == push
 
+- provider: script
+  script:
+    DATE_SKIP="2" TASK_FILE_SKIP="4"
+    $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-sandbox data-processing ./apply-cluster.sh
+  skip_cleanup: true
+  on:
+    repo: m-lab/etl-gardener
+    all_branches: true
+    condition: $TRAVIS_BRANCH == universal-sandbox-* && $TRAVIS_EVENT_TYPE == push
+
 #########################################
 ## Staging
 - provider: script
