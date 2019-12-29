@@ -29,4 +29,4 @@ kexpand expand --ignore-missing-keys k8s/${CLUSTER}/*/*.yml \
 cat ${CFG}
 
 # This triggers deployment of the pod.
-kubectl apply -f ${CFG}
+kubectl apply -f ${CFG} --force
