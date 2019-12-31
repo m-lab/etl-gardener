@@ -3,8 +3,8 @@ kind: Service
 metadata:
   name: etl-gardener-service
   namespace: default
-  annotations:
-    cloud.google.com/load-balancer-type: "Internal"
+  # annotations:
+  #  cloud.google.com/load-balancer-type: "Internal"
 spec:
   ports:
   - port: 8080
