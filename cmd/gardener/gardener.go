@@ -273,7 +273,7 @@ func mustStandardTracker() *tracker.Tracker {
 	dsKey := datastore.NameKey("tracker", "jobs", nil)
 	dsKey.Namespace = "gardener"
 
-	tk, err := tracker.InitTracker(context.Background(), dsiface.AdaptClient(client), dsKey, 0)
+	tk, err := tracker.InitTracker(context.Background(), dsiface.AdaptClient(client), dsKey, time.Minute)
 	rtx.Must(err, "tracker init")
 	if tk == nil {
 		log.Fatal("nil tracker")
