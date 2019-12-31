@@ -255,7 +255,7 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "</body></html>\n")
 }
 
-func startStatusServer(port string) {
+func startStatusServer(port string) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", Status)
 	mux.HandleFunc("/status", Status)
@@ -266,6 +266,8 @@ func startStatusServer(port string) {
 		Handler: mux,
 	}
 	rtx.Must(httpx.ListenAndServeAsync(server), "Could not start status server")
+
+	return server
 }
 
 var healthy = false
@@ -316,7 +318,8 @@ func main() {
 	// Expose prometheus and pprof metrics on a separate port.
 	prometheusx.MustServeMetrics()
 
-	startStatusServer(":8081")
+	statusServer := startStatusServer(":8081")
+	defer statusServer.Close()
 
 	http.HandleFunc("/", Status)
 	http.HandleFunc("/status", Status)
