@@ -17,3 +17,18 @@ spec:
   type: ClusterIP
   # type: LoadBalancer
   # loadBalancerIP: 10.100.1.2  # etl-gardener us-east1/default/default-gardener subnet - this hard codes the service address.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: etl-gardener-status
+  namespace: default
+spec:
+  ports:
+  - port: 8081
+    protocol: TCP
+    targetPort: 8081
+  selector:
+    run: etl-gardener-universal
+  sessionAffinity: None
+  type: LoadBalancer

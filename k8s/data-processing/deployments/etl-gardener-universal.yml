@@ -52,6 +52,8 @@ spec:
           containerPort: 9090
         - name: service-port
           containerPort: 8080
+        - name: status-port  # This one will be external
+          containerPort: 8081
 
         livenessProbe:
           httpGet:

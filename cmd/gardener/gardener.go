@@ -22,6 +22,7 @@ import (
 	"github.com/GoogleCloudPlatform/google-cloud-go-testing/datastore/dsiface"
 	"github.com/m-lab/etl-gardener/tracker"
 
+	"github.com/m-lab/go/httpx"
 	"github.com/m-lab/go/prometheusx"
 	"github.com/m-lab/go/rtx"
 
@@ -254,6 +255,19 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "</body></html>\n")
 }
 
+func startStatusServer(port string) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", Status)
+	mux.HandleFunc("/status", Status)
+
+	// Start up the http server.
+	server := &http.Server{
+		Addr:    port,
+		Handler: mux,
+	}
+	rtx.Must(httpx.ListenAndServeAsync(server), "Could not start status server")
+}
+
 var healthy = false
 
 // healthCheck, for now, used for both /ready and /alive.
@@ -301,6 +315,8 @@ func main() {
 
 	// Expose prometheus and pprof metrics on a separate port.
 	prometheusx.MustServeMetrics()
+
+	startStatusServer(":8081")
 
 	http.HandleFunc("/", Status)
 	http.HandleFunc("/status", Status)
