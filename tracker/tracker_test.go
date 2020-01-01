@@ -1,6 +1,7 @@
 package tracker_test
 
 import (
+	"bytes"
 	"context"
 	"log"
 	"sync"
@@ -184,5 +185,24 @@ func TestNonexistentJobAccess(t *testing.T) {
 	err = tk.SetStatus(js, "foobar", "")
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)
+	}
+}
+
+func TestJobMapHTML(t *testing.T) {
+	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0)
+	must(t, err)
+
+	job := tracker.Job{}
+	err = tk.SetStatus(job, tracker.Parsing, "")
+	if err != tracker.ErrJobNotFound {
+		t.Error("Should be ErrJobNotFound", err)
+	}
+	js := tracker.NewJob("bucket", "exp", "type", startDate)
+	must(t, tk.AddJob(js))
+
+	buf := bytes.Buffer{}
+
+	if err = tk.WriteHTMLStatusTo(context.Background(), &buf); err != nil {
+		t.Fatal(err)
 	}
 }

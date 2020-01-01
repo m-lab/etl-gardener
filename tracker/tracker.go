@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"html/template"
+
 	"cloud.google.com/go/datastore"
 	"github.com/GoogleCloudPlatform/google-cloud-go-testing/datastore/dsiface"
 	"github.com/m-lab/etl-gardener/metrics"
@@ -173,6 +175,36 @@ func (jobs *JobMap) UnmarshalJSON(data []byte) error {
 		(*jobs)[pairs[i].Job] = pairs[i].State
 	}
 	return nil
+}
+
+var jobsTemplate = template.Must(template.New("").Parse(`
+	<h1>{{.Title}}</h1>
+	<table>
+	    {{range .Jobs}}
+		<tr>
+			<td> {{.Job}} </td> 
+			<td> {{.State}} </td>
+		</tr>
+	    {{end}}
+	</table>`))
+
+// WriteHTML writes a table containing the jobs and status.
+func (jobs JobMap) WriteHTML(w io.Writer) error {
+	type Pair struct {
+		Job   Job
+		State Status
+	}
+	type JobRep struct {
+		Title string
+		Jobs  []Pair
+	}
+	pairs := make([]Pair, 0, len(jobs))
+	for j := range jobs {
+		pairs = append(pairs, Pair{Job: j, State: jobs[j]})
+	}
+	jr := JobRep{Title: "Jobs", Jobs: pairs}
+
+	return jobsTemplate.Execute(w, jr)
 }
 
 // saverStruct is used only for saving and loading from datastore.
@@ -368,10 +400,6 @@ func (tr *Tracker) WriteHTMLStatusTo(ctx context.Context, w io.Writer) error {
 	jobs := tr.GetAll()
 
 	fmt.Fprint(w, "<div>Tracker State</div>\n")
-	for j := range jobs {
-		// TODO format this as columns?
-		fmt.Fprintf(w, "%s %s</br>\n", j, jobs[j])
-	}
 
-	return nil
+	return jobs.WriteHTML(w)
 }
