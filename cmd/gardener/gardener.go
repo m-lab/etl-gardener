@@ -332,7 +332,7 @@ func main() {
 	case "manager":
 		// This is new new "manager" mode, in which Gardener provides /job and /update apis
 		// for parsers to get work and report progress.
-		globalTracker := mustStandardTracker()
+		globalTracker = mustStandardTracker()
 		handler := tracker.NewHandler(globalTracker)
 		handler.Register(http.DefaultServeMux)
 
