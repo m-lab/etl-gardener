@@ -48,7 +48,7 @@ func TestConcurrentUpdates(t *testing.T) {
 			k := tracker.Job{"bucket", "ConcurrentUpdates", "type",
 				startDate.Add(time.Duration(24*rand.Intn(jobs)) * time.Hour)}
 			if i%5 == 0 {
-				err := tk.SetStatus(k, tracker.State(fmt.Sprintf("State:%d", i)))
+				err := tk.SetStatus(k, tracker.State(fmt.Sprintf("State:%d", i)), "")
 				if err != nil {
 					log.Fatal(err, " ", k)
 				}

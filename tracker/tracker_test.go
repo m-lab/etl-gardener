@@ -51,7 +51,7 @@ func completeJobs(t *testing.T, tk *tracker.Tracker, exp string, typ string, n i
 	date := startDate
 	for i := 0; i < n; i++ {
 		job := tracker.Job{"bucket", exp, typ, date}
-		err := tk.SetStatus(job, tracker.Complete)
+		err := tk.SetStatus(job, tracker.Complete, "")
 
 		if err != nil {
 			t.Error(err, job)
@@ -137,8 +137,8 @@ func TestUpdate(t *testing.T) {
 	createJobs(t, tk, "JobToUpdate", "type", 1)
 
 	job := tracker.Job{"bucket", "JobToUpdate", "type", startDate}
-	must(t, tk.SetStatus(job, tracker.Parsing))
-	must(t, tk.SetStatus(job, tracker.Stabilizing))
+	must(t, tk.SetStatus(job, tracker.Parsing, ""))
+	must(t, tk.SetStatus(job, tracker.Stabilizing, ""))
 
 	status, err := tk.GetStatus(job)
 	if err != nil {
@@ -148,7 +148,7 @@ func TestUpdate(t *testing.T) {
 		t.Error("Incorrect job state", job)
 	}
 
-	err = tk.SetStatus(tracker.Job{"bucket", "JobToUpdate", "other-type", startDate}, tracker.Stabilizing)
+	err = tk.SetStatus(tracker.Job{"bucket", "JobToUpdate", "other-type", startDate}, tracker.Stabilizing, "")
 	if err != tracker.ErrJobNotFound {
 		t.Error(err, "should have been ErrJobNotFound")
 	}
@@ -166,7 +166,7 @@ func TestNonexistentJobAccess(t *testing.T) {
 	must(t, err)
 
 	job := tracker.Job{}
-	err = tk.SetStatus(job, tracker.Parsing)
+	err = tk.SetStatus(job, tracker.Parsing, "")
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)
 	}
@@ -178,10 +178,10 @@ func TestNonexistentJobAccess(t *testing.T) {
 		t.Error("Should be ErrJobAlreadyExists", err)
 	}
 
-	must(t, tk.SetStatus(js, tracker.Complete))
+	must(t, tk.SetStatus(js, tracker.Complete, ""))
 
 	// Job should be gone now.
-	err = tk.SetStatus(js, "foobar")
+	err = tk.SetStatus(js, "foobar", "")
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)
 	}

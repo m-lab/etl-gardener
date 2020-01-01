@@ -59,6 +59,10 @@ func (j *Job) Marshal() []byte {
 	return b
 }
 
+func (j Job) String() string {
+	return fmt.Sprintf("%s:%s/%s", j.Date.Format("20060102"), j.Experiment, j.Datatype)
+}
+
 // Error declarations
 var (
 	ErrClientIsNil            = errors.New("nil datastore client")
@@ -94,8 +98,10 @@ const (
 // Status should be updated only by the Tracker, which will
 // ensure correct serialization and Saver updates.
 type Status struct {
-	UpdateTime    time.Time // Time of last update.
 	HeartbeatTime time.Time // Time of last ETL heartbeat.
+
+	UpdateTime   time.Time // Time of last update.
+	UpdateDetail string    // Note from last update
 
 	State     State  // String defining the current state.
 	LastError string // The most recent error encountered.
@@ -104,8 +110,21 @@ type Status struct {
 	errors []string // all errors related to the job.
 }
 
-func (j Status) isDone() bool {
-	return j.State == Complete
+func (s Status) String() string {
+	if len(s.LastError) > 0 {
+		return fmt.Sprintf("%s %s %s (%s)",
+			s.UpdateTime.Format("01/02~15:04:05"),
+			s.State, s.LastError,
+			s.UpdateDetail)
+	}
+	return fmt.Sprintf("%s %s (%s)",
+		s.UpdateTime.Format("01/02~15:04:05"),
+		s.State,
+		s.UpdateDetail)
+}
+
+func (s Status) isDone() bool {
+	return s.State == Complete
 }
 
 // NewStatus creates a new Status with provided parameters.
@@ -298,13 +317,14 @@ func (tr *Tracker) UpdateJob(job Job, state Status) error {
 }
 
 // SetStatus updates a job's state, and handles persistence.
-func (tr *Tracker) SetStatus(job Job, newState State) error {
+func (tr *Tracker) SetStatus(job Job, newState State, detail string) error {
 	status, err := tr.GetStatus(job)
 	if err != nil {
 		return err
 	}
 	status.State = newState
 	status.UpdateTime = time.Now()
+	status.UpdateDetail = detail
 	return tr.UpdateJob(job, status)
 }
 
@@ -352,5 +372,6 @@ func (tr *Tracker) WriteHTMLStatusTo(ctx context.Context, w io.Writer) error {
 		// TODO format this as columns?
 		fmt.Fprintf(w, "%s %s</br>\n", j, jobs[j])
 	}
+
 	return nil
 }

@@ -101,9 +101,9 @@ func (h *Handler) update(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusFailedDependency)
 		return
 	}
-	// detail := req.Form.Get("detail")
+	detail := req.Form.Get("detail")
 
-	if err := h.tracker.SetStatus(job, State(state)); err != nil {
+	if err := h.tracker.SetStatus(job, State(state), detail); err != nil {
 		resp.WriteHeader(http.StatusGone)
 		return
 	}
@@ -134,7 +134,7 @@ func (h *Handler) errorFunc(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	h.tracker.SetStatus(job, ParseError)
+	h.tracker.SetStatus(job, ParseError, "")
 	resp.WriteHeader(http.StatusOK)
 }
 
