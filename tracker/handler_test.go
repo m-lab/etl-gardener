@@ -19,7 +19,7 @@ func testSetup(t *testing.T) (url.URL, *tracker.Tracker, tracker.Job) {
 	dsKey.Namespace = "gardener"
 	defer must(t, cleanup(client, dsKey))
 
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0)
 	must(t, err)
 	if tk == nil {
 		t.Fatal("nil Tracker")

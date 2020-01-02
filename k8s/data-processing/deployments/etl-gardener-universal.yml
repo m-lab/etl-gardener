@@ -48,6 +48,8 @@ spec:
           value: "{{GCLOUD_PROJECT}}"
         - name: STATUS_PORT
           value: ":8081"
+        - name: JOB_EXPIRATION_TIME
+          value: "14400"  # Four hours.
 
         ports:
         - name: prometheus-port

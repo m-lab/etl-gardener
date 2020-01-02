@@ -257,12 +257,18 @@ type Tracker struct {
 	// The lock should be held whenever accessing the jobs JobMap
 	lock sync.Mutex
 	jobs JobMap // Map from Job to Status.
+
+	// Time after which stale job should be ignored or replaced.
+	expirationTime time.Duration
 }
 
 // InitTracker recovers the Tracker state from a Client object.
 // May return error if recovery fails.
-func InitTracker(ctx context.Context, client dsiface.Client, key *datastore.Key, saveInterval time.Duration) (*Tracker, error) {
-	// TODO implement recovery.
+func InitTracker(
+	ctx context.Context,
+	client dsiface.Client, key *datastore.Key,
+	saveInterval time.Duration, expirationTime time.Duration) (*Tracker, error) {
+
 	jobMap, err := loadJobMap(ctx, client, key)
 	if err != nil {
 		log.Println(err, key)
@@ -285,9 +291,8 @@ func (tr *Tracker) NumJobs() int {
 
 // getJSON creates a json encoding of the job map.
 func (tr *Tracker) getJSON() ([]byte, error) {
-	tr.lock.Lock()
-	defer tr.lock.Unlock()
-	return json.Marshal(tr.jobs)
+	jobs := tr.GetAll()
+	return json.Marshal(jobs)
 }
 
 // Sync snapshots the full job state and saves it to the datastore client.
@@ -397,12 +402,18 @@ func (tr *Tracker) SetJobError(job Job, errString string) error {
 }
 
 // GetAll returns the full job map.
+// It also cleans up any expired jobs from the tracker.
 func (tr *Tracker) GetAll() JobMap {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 	m := make(JobMap, len(tr.jobs))
 	for k, v := range tr.jobs {
-		m[k] = v
+		if tr.expirationTime > 0 && time.Since(v.UpdateTime) > tr.expirationTime {
+			// Remove any obsolete jobs.
+			delete(tr.jobs, k)
+		} else {
+			m[k] = v
+		}
 	}
 	return m
 }

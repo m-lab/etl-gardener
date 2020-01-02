@@ -22,6 +22,8 @@ type Service struct {
 	startDate time.Time // The date to restart at.
 	date      time.Time // The date currently being dispatched.
 
+	discardAge time.Duration // Time after which a stale job should be restarted.
+
 	jobTypes  []tracker.Job // The job prefixes to be iterated through.
 	nextIndex int           // index of TypeSource to dispatch next.
 }
@@ -89,5 +91,5 @@ func NewJobService(tk *tracker.Tracker, startDate time.Time) (*Service, error) {
 	}
 
 	start := startDate.UTC().Truncate(24 * time.Hour)
-	return &Service{tracker: tk, startDate: start, date: start, jobTypes: types}, nil
+	return &Service{tracker: tk, startDate: start, date: start, discardAge: discardAge, jobTypes: types}, nil
 }

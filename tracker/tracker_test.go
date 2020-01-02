@@ -93,7 +93,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	dsKey.Namespace = "gardener"
 	defer must(t, cleanup(client, dsKey))
 
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0)
 	must(t, err)
 	if tk == nil {
 		t.Fatal("nil Tracker")
@@ -108,7 +108,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	log.Println("Calling Sync")
 	must(t, tk.Sync())
 	// Check that the sync (and InitTracker) work.
-	restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
+	restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0)
 	must(t, err)
 
 	if restore.NumJobs() != 500 {
@@ -132,7 +132,7 @@ func TestUpdate(t *testing.T) {
 	dsKey.Namespace = "gardener"
 	defer must(t, cleanup(client, dsKey))
 
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0)
 	must(t, err)
 
 	createJobs(t, tk, "JobToUpdate", "type", 1)
@@ -163,7 +163,7 @@ func TestNonexistentJobAccess(t *testing.T) {
 	dsKey.Namespace = "gardener"
 	defer must(t, cleanup(client, dsKey))
 
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0)
 	must(t, err)
 
 	job := tracker.Job{}
@@ -189,7 +189,7 @@ func TestNonexistentJobAccess(t *testing.T) {
 }
 
 func TestJobMapHTML(t *testing.T) {
-	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0)
+	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0)
 	must(t, err)
 
 	job := tracker.Job{}
