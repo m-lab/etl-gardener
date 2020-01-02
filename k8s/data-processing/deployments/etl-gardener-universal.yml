@@ -46,6 +46,8 @@ spec:
           value: "{{GIT_COMMIT}}"
         - name: PROJECT
           value: "{{GCLOUD_PROJECT}}"
+        - name: STATUS_PORT
+          value: ":8081"
 
         ports:
         - name: prometheus-port
