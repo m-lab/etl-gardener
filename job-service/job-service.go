@@ -91,5 +91,5 @@ func NewJobService(tk *tracker.Tracker, startDate time.Time) (*Service, error) {
 	}
 
 	start := startDate.UTC().Truncate(24 * time.Hour)
-	return &Service{tracker: tk, startDate: start, date: start, discardAge: discardAge, jobTypes: types}, nil
+	return &Service{tracker: tk, startDate: start, date: start, jobTypes: types}, nil
 }
