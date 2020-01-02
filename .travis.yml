@@ -85,7 +85,7 @@ script:
 - $HOME/gopath/bin/goveralls -coverprofile=_merge.cov -service=travis-ci
 
 # Validate docker build.
-- docker build .
+# - docker build .
 
 #################################################################################
 # Deployment Section
