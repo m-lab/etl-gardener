@@ -179,11 +179,20 @@ func (jobs *JobMap) UnmarshalJSON(data []byte) error {
 
 var jobsTemplate = template.Must(template.New("").Parse(`
 	<h1>{{.Title}}</h1>
-	<table>
+	<style>
+	table, th, td {
+	  border: 2px solid black;
+	}
+	</style>
+	<table style="width:80%">
+		<tr>
+			<th> Job </th> 
+			<th> State </th>
+		</tr>
 	    {{range .Jobs}}
 		<tr>
 			<td> {{.Job}} </td> 
-			<td> {{.State}} </td>
+			<td> {{.State.}} </td>
 		</tr>
 	    {{end}}
 	</table>`))
