@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"sort"
 	"sync"
 	"time"
 
@@ -192,7 +193,7 @@ var jobsTemplate = template.Must(template.New("").Parse(`
 	    {{range .Jobs}}
 		<tr>
 			<td> {{.Job}} </td> 
-			<td> {{.State.}} </td>
+			<td> {{.State}} </td>
 		</tr>
 	    {{end}}
 	</table>`))
@@ -211,6 +212,10 @@ func (jobs JobMap) WriteHTML(w io.Writer) error {
 	for j := range jobs {
 		pairs = append(pairs, Pair{Job: j, State: jobs[j]})
 	}
+	sort.Slice(pairs,
+		func(i, j int) bool {
+			return pairs[i].State.UpdateTime.Before(pairs[j].State.UpdateTime)
+		})
 	jr := JobRep{Title: "Jobs", Jobs: pairs}
 
 	return jobsTemplate.Execute(w, jr)
