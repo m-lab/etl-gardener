@@ -274,7 +274,7 @@ func InitTracker(
 		log.Println(err, key)
 		jobMap = make(JobMap, 100)
 	}
-	t := Tracker{client: client, dsKey: key, jobs: jobMap}
+	t := Tracker{client: client, dsKey: key, jobs: jobMap, expirationTime: expirationTime}
 	if client != nil && saveInterval > 0 {
 		t.saveEvery(saveInterval)
 	}
@@ -334,6 +334,9 @@ func (tr *Tracker) GetStatus(job Job) (Status, error) {
 // AddJob adds a new job to the Tracker.
 // May return ErrJobAlreadyExists if job already exists.
 func (tr *Tracker) AddJob(job Job) error {
+	status := NewStatus()
+	status.UpdateTime = time.Now()
+
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 	_, ok := tr.jobs[job]
@@ -343,8 +346,7 @@ func (tr *Tracker) AddJob(job Job) error {
 
 	// TODO - should call this JobsInFlight, to avoid confusion with Tasks in parser.
 	metrics.TasksInFlight.Inc()
-	state := NewStatus()
-	tr.jobs[job] = state
+	tr.jobs[job] = status
 	return nil
 }
 
