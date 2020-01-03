@@ -1,6 +1,7 @@
 package tracker_test
 
 import (
+	"bytes"
 	"context"
 	"log"
 	"sync"
@@ -53,7 +54,7 @@ func completeJobs(t *testing.T, tk *tracker.Tracker, exp string, typ string, n i
 	date := startDate
 	for i := 0; i < n; i++ {
 		job := tracker.Job{"bucket", exp, typ, date}
-		err := tk.SetStatus(job, tracker.Complete)
+		err := tk.SetStatus(job, tracker.Complete, "")
 
 		if err != nil {
 			t.Error(err, job)
@@ -94,7 +95,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	dsKey.Namespace = "gardener"
 	defer must(t, cleanup(client, dsKey))
 
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0)
 	must(t, err)
 	if tk == nil {
 		t.Fatal("nil Tracker")
@@ -109,7 +110,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	log.Println("Calling Sync")
 	must(t, tk.Sync())
 	// Check that the sync (and InitTracker) work.
-	restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
+	restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0)
 	must(t, err)
 
 	if restore.NumJobs() != 500 {
@@ -133,14 +134,14 @@ func TestUpdate(t *testing.T) {
 	dsKey.Namespace = "gardener"
 	defer must(t, cleanup(client, dsKey))
 
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0)
 	must(t, err)
 
 	createJobs(t, tk, "JobToUpdate", "type", 1)
 
 	job := tracker.Job{"bucket", "JobToUpdate", "type", startDate}
-	must(t, tk.SetStatus(job, tracker.Parsing))
-	must(t, tk.SetStatus(job, tracker.Stabilizing))
+	must(t, tk.SetStatus(job, tracker.Parsing, ""))
+	must(t, tk.SetStatus(job, tracker.Stabilizing, ""))
 
 	status, err := tk.GetStatus(job)
 	if err != nil {
@@ -150,7 +151,7 @@ func TestUpdate(t *testing.T) {
 		t.Error("Incorrect job state", job)
 	}
 
-	err = tk.SetStatus(tracker.Job{"bucket", "JobToUpdate", "other-type", startDate}, tracker.Stabilizing)
+	err = tk.SetStatus(tracker.Job{"bucket", "JobToUpdate", "other-type", startDate}, tracker.Stabilizing, "")
 	if err != tracker.ErrJobNotFound {
 		t.Error(err, "should have been ErrJobNotFound")
 	}
@@ -164,14 +165,19 @@ func TestNonexistentJobAccess(t *testing.T) {
 	dsKey.Namespace = "gardener"
 	defer must(t, cleanup(client, dsKey))
 
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0)
 	must(t, err)
 
 	job := tracker.Job{}
-	err = tk.SetStatus(job, tracker.Parsing)
+	err = tk.SetStatus(job, tracker.Parsing, "")
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)
 	}
+	err = tk.UpdateJob(job, tracker.NewStatus())
+	if err != tracker.ErrJobNotFound {
+		t.Error("Should be ErrJobNotFound", err)
+	}
+
 	js := tracker.NewJob("bucket", "exp", "type", startDate)
 	must(t, tk.AddJob(js))
 
@@ -180,11 +186,59 @@ func TestNonexistentJobAccess(t *testing.T) {
 		t.Error("Should be ErrJobAlreadyExists", err)
 	}
 
-	must(t, tk.SetStatus(js, tracker.Complete))
+	must(t, tk.SetStatus(js, tracker.Complete, ""))
 
 	// Job should be gone now.
-	err = tk.SetStatus(js, "foobar")
+	err = tk.SetStatus(js, "foobar", "")
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)
 	}
+}
+
+func TestJobMapHTML(t *testing.T) {
+	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0)
+	must(t, err)
+
+	job := tracker.Job{}
+	err = tk.SetStatus(job, tracker.Parsing, "")
+	if err != tracker.ErrJobNotFound {
+		t.Error("Should be ErrJobNotFound", err)
+	}
+	js := tracker.NewJob("bucket", "exp", "type", startDate)
+	must(t, tk.AddJob(js))
+
+	buf := bytes.Buffer{}
+
+	if err = tk.WriteHTMLStatusTo(context.Background(), &buf); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExpiration(t *testing.T) {
+	client := dsfake.NewClient()
+	dsKey := datastore.NameKey("TestExpiration", "jobs", nil)
+	dsKey.Namespace = "gardener"
+	defer must(t, cleanup(client, dsKey))
+
+	// Expire jobs after 1 second of monkey time.
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 5*time.Millisecond, 10*time.Millisecond)
+	must(t, err)
+
+	job := tracker.NewJob("bucket", "exp", "type", startDate)
+	err = tk.SetStatus(job, tracker.Parsing, "")
+	if err != tracker.ErrJobNotFound {
+		t.Error("Should be ErrJobNotFound", err)
+	}
+	must(t, tk.AddJob(job))
+
+	err = tk.AddJob(job)
+	if err != tracker.ErrJobAlreadyExists {
+		t.Error("Should be ErrJobAlreadyExists", err)
+	}
+
+	// Let enough time go by that expirationTime passes, and saver runs.
+	time.Sleep(20 * time.Millisecond)
+
+	// Job should have been removed by saveEvery, so this should succeed.
+	must(t, tk.AddJob(job))
 }

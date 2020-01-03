@@ -15,12 +15,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html/template"
 	"io"
 	"log"
 	"sort"
 	"sync"
 	"time"
+
+	"html/template"
 
 	"cloud.google.com/go/datastore"
 	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
@@ -101,8 +102,10 @@ const (
 // Status should be updated only by the Tracker, which will
 // ensure correct serialization and Saver updates.
 type Status struct {
-	UpdateTime    time.Time // Time of last update.
 	HeartbeatTime time.Time // Time of last ETL heartbeat.
+
+	UpdateTime   time.Time // Time of last update.
+	UpdateDetail string    // Note from last update
 
 	State     State  // String defining the current state.
 	LastError string // The most recent error encountered.
@@ -111,8 +114,21 @@ type Status struct {
 	errors []string // all errors related to the job.
 }
 
-func (j Status) isDone() bool {
-	return j.State == Complete
+func (s Status) String() string {
+	if len(s.LastError) > 0 {
+		return fmt.Sprintf("%s %s %s (%s)",
+			s.UpdateTime.Format("01/02~15:04:05"),
+			s.State, s.LastError,
+			s.UpdateDetail)
+	}
+	return fmt.Sprintf("%s %s (%s)",
+		s.UpdateTime.Format("01/02~15:04:05"),
+		s.State,
+		s.UpdateDetail)
+}
+
+func (s Status) isDone() bool {
+	return s.State == Complete
 }
 
 // NewStatus creates a new Status with provided parameters.
@@ -242,17 +258,24 @@ type Tracker struct {
 	// The lock should be held whenever accessing the jobs JobMap
 	lock sync.Mutex
 	jobs JobMap // Map from Job to Status.
+
+	// Time after which stale job should be ignored or replaced.
+	expirationTime time.Duration
 }
 
 // InitTracker recovers the Tracker state from a Client object.
 // May return error if recovery fails.
-func InitTracker(ctx context.Context, client dsiface.Client, key *datastore.Key, saveInterval time.Duration) (*Tracker, error) {
+func InitTracker(
+	ctx context.Context,
+	client dsiface.Client, key *datastore.Key,
+	saveInterval time.Duration, expirationTime time.Duration) (*Tracker, error) {
+
 	jobMap, err := loadJobMap(ctx, client, key)
 	if err != nil {
 		log.Println(err, key)
 		jobMap = make(JobMap, 100)
 	}
-	t := Tracker{client: client, dsKey: key, jobs: jobMap}
+	t := Tracker{client: client, dsKey: key, jobs: jobMap, expirationTime: expirationTime}
 	if client != nil && saveInterval > 0 {
 		t.saveEvery(saveInterval)
 	}
@@ -275,6 +298,7 @@ func (tr *Tracker) getJSON() ([]byte, error) {
 
 // Sync snapshots the full job state and saves it to the datastore client.
 func (tr *Tracker) Sync() error {
+	log.Println("sync")
 	bytes, err := tr.getJSON()
 	if err != nil {
 		return err
@@ -312,6 +336,9 @@ func (tr *Tracker) GetStatus(job Job) (Status, error) {
 // AddJob adds a new job to the Tracker.
 // May return ErrJobAlreadyExists if job already exists.
 func (tr *Tracker) AddJob(job Job) error {
+	status := NewStatus()
+	status.UpdateTime = time.Now()
+
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 	_, ok := tr.jobs[job]
@@ -321,8 +348,7 @@ func (tr *Tracker) AddJob(job Job) error {
 
 	// TODO - should call this JobsInFlight, to avoid confusion with Tasks in parser.
 	metrics.TasksInFlight.Inc()
-	state := NewStatus()
-	tr.jobs[job] = state
+	tr.jobs[job] = status
 	return nil
 }
 
@@ -346,13 +372,14 @@ func (tr *Tracker) UpdateJob(job Job, state Status) error {
 }
 
 // SetStatus updates a job's state, and handles persistence.
-func (tr *Tracker) SetStatus(job Job, newState State) error {
+func (tr *Tracker) SetStatus(job Job, newState State, detail string) error {
 	status, err := tr.GetStatus(job)
 	if err != nil {
 		return err
 	}
 	status.State = newState
 	status.UpdateTime = time.Now()
+	status.UpdateDetail = detail
 	return tr.UpdateJob(job, status)
 }
 
@@ -379,12 +406,18 @@ func (tr *Tracker) SetJobError(job Job, errString string) error {
 }
 
 // GetAll returns the full job map.
+// It also cleans up any expired jobs from the tracker.
 func (tr *Tracker) GetAll() JobMap {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 	m := make(JobMap, len(tr.jobs))
 	for k, v := range tr.jobs {
-		m[k] = v
+		if tr.expirationTime > 0 && time.Since(v.UpdateTime) > tr.expirationTime {
+			// Remove any obsolete jobs.
+			delete(tr.jobs, k)
+		} else {
+			m[k] = v
+		}
 	}
 	return m
 }

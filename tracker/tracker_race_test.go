@@ -32,7 +32,7 @@ func TestConcurrentUpdates(t *testing.T) {
 
 	// For testing, push to the saver every 5 milliseconds.
 	saverInterval := 5 * time.Millisecond
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, saverInterval)
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, saverInterval, 0)
 	must(t, err)
 
 	jobs := 20
@@ -48,7 +48,7 @@ func TestConcurrentUpdates(t *testing.T) {
 			k := tracker.Job{"bucket", "ConcurrentUpdates", "type",
 				startDate.Add(time.Duration(24*rand.Intn(jobs)) * time.Hour)}
 			if i%5 == 0 {
-				err := tk.SetStatus(k, tracker.State(fmt.Sprintf("State:%d", i)))
+				err := tk.SetStatus(k, tracker.State(fmt.Sprintf("State:%d", i)), "")
 				if err != nil {
 					log.Fatal(err, " ", k)
 				}
@@ -71,7 +71,7 @@ func TestConcurrentUpdates(t *testing.T) {
 	// If verbose, dump the final state.
 	if testing.Verbose() {
 		must(t, tk.Sync())
-		restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0)
+		restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0)
 		must(t, err)
 
 		status := restore.GetAll()

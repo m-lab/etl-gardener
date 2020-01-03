@@ -255,6 +255,7 @@ func Status(w http.ResponseWriter, r *http.Request) {
 }
 
 func startStatusServer() *http.Server {
+	// TODO make this a flag before submitting.
 	statusPort := os.Getenv("STATUS_PORT")
 	if len(statusPort) == 0 {
 		statusPort = ":0"
@@ -292,7 +293,19 @@ func mustStandardTracker() *tracker.Tracker {
 	dsKey := datastore.NameKey("tracker", "jobs", nil)
 	dsKey.Namespace = "gardener"
 
-	tk, err := tracker.InitTracker(context.Background(), dsiface.AdaptClient(client), dsKey, 0)
+	// TODO - make this a flag before submitting!!!
+	expString, ok := os.LookupEnv("JOB_EXPIRATION_TIME")
+	exp := 0
+	if ok {
+		var err error
+		exp, err = strconv.Atoi(expString)
+		rtx.Must(err, "Invalid expiration time:", expString)
+	}
+
+	tk, err := tracker.InitTracker(
+		context.Background(),
+		dsiface.AdaptClient(client), dsKey,
+		time.Minute, time.Duration(exp)*time.Second)
 	rtx.Must(err, "tracker init")
 	if tk == nil {
 		log.Fatal("nil tracker")
