@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"bou.ke/monkey"
 	"cloud.google.com/go/datastore"
 	"github.com/GoogleCloudPlatform/google-cloud-go-testing/datastore/dsiface"
 	"github.com/m-lab/etl-gardener/tracker"
@@ -214,20 +213,13 @@ func TestJobMapHTML(t *testing.T) {
 }
 
 func TestExpiration(t *testing.T) {
-	// This allows us to manipulate the Since function to exercise expiration.
-	now := time.Date(2018, 2, 6, 1, 2, 3, 4, time.UTC)
-	monkey.Patch(time.Now, func() time.Time {
-		return now
-	})
-	defer monkey.Unpatch(time.Now)
-
 	client := dsfake.NewClient()
 	dsKey := datastore.NameKey("TestExpiration", "jobs", nil)
 	dsKey.Namespace = "gardener"
 	defer must(t, cleanup(client, dsKey))
 
 	// Expire jobs after 1 second of monkey time.
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 10*time.Millisecond, time.Second)
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 5*time.Millisecond, 10*time.Millisecond)
 	must(t, err)
 
 	job := tracker.NewJob("bucket", "exp", "type", startDate)
@@ -242,8 +234,8 @@ func TestExpiration(t *testing.T) {
 		t.Error("Should be ErrJobAlreadyExists", err)
 	}
 
-	now = now.Add(2 * time.Second)    // Jump ahead in time.
-	time.Sleep(20 * time.Millisecond) // Allow saver to run.
+	// Let enough time go by that expirationTime passes, and saver runs.
+	time.Sleep(20 * time.Millisecond)
 
 	// Job should have been removed by saveEvery, so this should succeed.
 	must(t, tk.AddJob(job))
