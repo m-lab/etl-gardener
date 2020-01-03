@@ -20,8 +20,8 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/GoogleCloudPlatform/google-cloud-go-testing/datastore/dsiface"
-	"github.com/m-lab/etl-gardener/tracker"
 
+	"github.com/m-lab/go/httpx"
 	"github.com/m-lab/go/prometheusx"
 	"github.com/m-lab/go/rtx"
 
@@ -29,8 +29,8 @@ import (
 	job "github.com/m-lab/etl-gardener/job-service"
 	"github.com/m-lab/etl-gardener/reproc"
 	"github.com/m-lab/etl-gardener/rex"
-
 	"github.com/m-lab/etl-gardener/state"
+	"github.com/m-lab/etl-gardener/tracker"
 
 	// Enable exported debug vars.  See https://golang.org/pkg/expvar/
 	_ "expvar"
@@ -254,6 +254,25 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "</body></html>\n")
 }
 
+func startStatusServer() *http.Server {
+	statusPort := os.Getenv("STATUS_PORT")
+	if len(statusPort) == 0 {
+		statusPort = ":0"
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", Status)
+	mux.HandleFunc("/status", Status)
+
+	// Start up the http server.
+	server := &http.Server{
+		Addr:    statusPort,
+		Handler: mux,
+	}
+	rtx.Must(httpx.ListenAndServeAsync(server), "Could not start status server")
+
+	return server
+}
+
 var healthy = false
 
 // healthCheck, for now, used for both /ready and /alive.
@@ -302,6 +321,10 @@ func main() {
 	// Expose prometheus and pprof metrics on a separate port.
 	prometheusx.MustServeMetrics()
 
+	statusServer := startStatusServer()
+	defer statusServer.Close()
+	log.Println("Status server at", statusServer.Addr)
+
 	http.HandleFunc("/", Status)
 	http.HandleFunc("/status", Status)
 
@@ -313,7 +336,7 @@ func main() {
 	case "manager":
 		// This is new new "manager" mode, in which Gardener provides /job and /update apis
 		// for parsers to get work and report progress.
-		globalTracker := mustStandardTracker()
+		globalTracker = mustStandardTracker()
 		handler := tracker.NewHandler(globalTracker)
 		handler.Register(http.DefaultServeMux)
 

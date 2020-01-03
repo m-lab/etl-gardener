@@ -46,12 +46,18 @@ spec:
           value: "{{GIT_COMMIT}}"
         - name: PROJECT
           value: "{{GCLOUD_PROJECT}}"
+        - name: STATUS_PORT
+          value: ":8081"
+        - name: JOB_EXPIRATION_TIME
+          value: "14400"  # Four hours.
 
         ports:
         - name: prometheus-port
           containerPort: 9090
         - name: service-port
           containerPort: 8080
+        - name: status-port  # This one will be external
+          containerPort: 8081
 
         livenessProbe:
           httpGet:

@@ -15,8 +15,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
+	"sort"
 	"sync"
 	"time"
 
@@ -57,6 +59,10 @@ func (j *Job) Path() string {
 func (j *Job) Marshal() []byte {
 	b, _ := json.Marshal(j)
 	return b
+}
+
+func (j Job) String() string {
+	return fmt.Sprintf("%s:%s/%s", j.Date.Format("20060102"), j.Experiment, j.Datatype)
 }
 
 // Error declarations
@@ -156,6 +162,49 @@ func (jobs *JobMap) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+var jobsTemplate = template.Must(template.New("").Parse(`
+	<h1>{{.Title}}</h1>
+	<style>
+	table, th, td {
+	  border: 2px solid black;
+	}
+	</style>
+	<table style="width:80%">
+		<tr>
+			<th> Job </th> 
+			<th> State </th>
+		</tr>
+	    {{range .Jobs}}
+		<tr>
+			<td> {{.Job}} </td> 
+			<td> {{.State}} </td>
+		</tr>
+	    {{end}}
+	</table>`))
+
+// WriteHTML writes a table containing the jobs and status.
+func (jobs JobMap) WriteHTML(w io.Writer) error {
+	type Pair struct {
+		Job   Job
+		State Status
+	}
+	type JobRep struct {
+		Title string
+		Jobs  []Pair
+	}
+	pairs := make([]Pair, 0, len(jobs))
+	for j := range jobs {
+		pairs = append(pairs, Pair{Job: j, State: jobs[j]})
+	}
+	sort.Slice(pairs,
+		func(i, j int) bool {
+			return pairs[i].State.UpdateTime.Before(pairs[j].State.UpdateTime)
+		})
+	jr := JobRep{Title: "Jobs", Jobs: pairs}
+
+	return jobsTemplate.Execute(w, jr)
+}
+
 // saverStruct is used only for saving and loading from datastore.
 type saverStruct struct {
 	SaveTime time.Time
@@ -197,7 +246,6 @@ type Tracker struct {
 // InitTracker recovers the Tracker state from a Client object.
 // May return error if recovery fails.
 func InitTracker(ctx context.Context, client dsiface.Client, key *datastore.Key, saveInterval time.Duration) (*Tracker, error) {
-	// TODO implement recovery.
 	jobMap, err := loadJobMap(ctx, client, key)
 	if err != nil {
 		log.Println(err, key)
@@ -220,9 +268,8 @@ func (tr *Tracker) NumJobs() int {
 
 // getJSON creates a json encoding of the job map.
 func (tr *Tracker) getJSON() ([]byte, error) {
-	tr.lock.Lock()
-	defer tr.lock.Unlock()
-	return json.Marshal(tr.jobs)
+	jobs := tr.GetAll()
+	return json.Marshal(jobs)
 }
 
 // Sync snapshots the full job state and saves it to the datastore client.
@@ -348,9 +395,6 @@ func (tr *Tracker) WriteHTMLStatusTo(ctx context.Context, w io.Writer) error {
 	jobs := tr.GetAll()
 
 	fmt.Fprint(w, "<div>Tracker State</div>\n")
-	for j := range jobs {
-		// TODO format this as columns?
-		fmt.Fprintf(w, "%s %s</br>\n", j, jobs[j])
-	}
-	return nil
+
+	return jobs.WriteHTML(w)
 }
