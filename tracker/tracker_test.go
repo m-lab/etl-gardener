@@ -172,6 +172,11 @@ func TestNonexistentJobAccess(t *testing.T) {
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)
 	}
+	err = tk.UpdateJob(job, tracker.NewStatus())
+	if err != tracker.ErrJobNotFound {
+		t.Error("Should be ErrJobNotFound", err)
+	}
+
 	js := tracker.NewJob("bucket", "exp", "type", startDate)
 	must(t, tk.AddJob(js))
 
