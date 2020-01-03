@@ -45,6 +45,7 @@ func TestManagerMode(t *testing.T) {
 		"SERVICE_MODE":   "manager",
 		"PROJECT":        "foobar",
 		"ARCHIVE_BUCKET": "archive-mlab-testing",
+		"STATUS_PORT":    ":0",
 	}
 	for k, v := range vars {
 		cleanup := osx.MustSetenv(k, v)
