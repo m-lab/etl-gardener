@@ -39,9 +39,9 @@ import (
 )
 
 var (
-	jobExpirationTime = flag.Duration("jobexpirationtime", 4*time.Hour, "Time after which stale jobs will be purged")
-	shutdownTimeout   = flag.Duration("shutdowntimeout", 1*time.Minute, "Graceful shutdown time allowance")
-	statusPort        = flag.String("statusport", ":0", "The public interface port where status (and pprof) will be published")
+	jobExpirationTime = flag.Duration("JOB_EXPIRATION_TIME", 4*time.Hour, "Time after which stale jobs will be purged")
+	shutdownTimeout   = flag.Duration("SHUTDOWN_TIMEOUT", 1*time.Minute, "Graceful shutdown time allowance")
+	statusPort        = flag.String("STATUS_PORT", ":0", "The public interface port where status (and pprof) will be published")
 
 	// Context and injected variables to allow smoke testing of main()
 	mainCtx, mainCancel = context.WithCancel(context.Background())
