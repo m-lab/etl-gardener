@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	_ "expvar"
 	"io/ioutil"
 	"log"
@@ -21,10 +22,12 @@ import (
 // Would have to use :0 for all servers to allow count > 1
 
 func TestLegacyModeSetup(t *testing.T) {
+	mainCtx, mainCancel = context.WithCancel(context.Background())
+
 	vars := map[string]string{
 		"PROJECT":         "mlab-testing",
 		"QUEUE_BASE":      "fake-queue-",
-		"NUM_QUEUES":      "123",
+		"NUM_QUEUES":      "3",
 		"EXPERIMENT":      "ndt",
 		"TASKFILE_BUCKET": "archive-mlab-testing",
 		"START_DATE":      "20090220",
@@ -48,18 +51,20 @@ func TestLegacyModeSetup(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer resp.Body.Close()
 		// For now, the service comes up immediately serving "ok" for /ready
 		data, err := ioutil.ReadAll(resp.Body)
 		if string(data) != "ok" {
 			t.Fatal(string(data))
 		}
+		resp.Body.Close()
 	}()
 
 	main()
 }
 
 func TestManagerMode(t *testing.T) {
+	mainCtx, mainCancel = context.WithCancel(context.Background())
+
 	vars := map[string]string{
 		"SERVICE_MODE":   "manager",
 		"PROJECT":        "mlab-testing",
