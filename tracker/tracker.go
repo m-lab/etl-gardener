@@ -116,10 +116,11 @@ type Status struct {
 
 func (s Status) String() string {
 	if len(s.LastError) > 0 {
-		return fmt.Sprintf("%s %s %s (%s)",
+		return fmt.Sprintf("%s %s (%s) %s",
 			s.UpdateTime.Format("01/02~15:04:05"),
-			s.State, s.LastError,
-			s.UpdateDetail)
+			s.State,
+			s.UpdateDetail,
+			s.LastError)
 	}
 	return fmt.Sprintf("%s %s (%s)",
 		s.UpdateTime.Format("01/02~15:04:05"),
