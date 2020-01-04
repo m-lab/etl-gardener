@@ -17,6 +17,9 @@ import (
 	"github.com/m-lab/go/osx"
 )
 
+// TODO - these tests currently fail with count=10
+// Would have to use :0 for all servers to allow count > 1
+
 func TestLegacyModeSetup(t *testing.T) {
 	vars := map[string]string{
 		"PROJECT":         "mlab-testing",
@@ -59,7 +62,7 @@ func TestLegacyModeSetup(t *testing.T) {
 func TestManagerMode(t *testing.T) {
 	vars := map[string]string{
 		"SERVICE_MODE":   "manager",
-		"PROJECT":        "foobar",
+		"PROJECT":        "mlab-testing",
 		"ARCHIVE_BUCKET": "archive-mlab-testing",
 		"STATUS_PORT":    ":0",
 	}
@@ -82,12 +85,28 @@ func TestManagerMode(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer resp.Body.Close()
 		// For now, the service comes up immediately serving "ok" for /ready
 		data, err := ioutil.ReadAll(resp.Body)
 		if string(data) != "ok" {
 			t.Fatal(string(data))
 		}
+		resp.Body.Close()
+
+		// Now get the status
+		for i := 0; i < 1000; i++ {
+			time.Sleep(10 * time.Millisecond)
+			resp, err = http.Get("http://localhost:8080")
+			if err == nil {
+				break
+			}
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		data, err = ioutil.ReadAll(resp.Body)
+		log.Print(string(data))
+		resp.Body.Close()
 	}()
 
 	main()

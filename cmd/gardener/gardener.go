@@ -265,6 +265,8 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "</body></html>\n")
 }
 
+var statusServerPort string
+
 func startStatusServer() *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", Status)
@@ -277,6 +279,7 @@ func startStatusServer() *http.Server {
 	}
 	rtx.Must(httpx.ListenAndServeAsync(server), "Could not start status server")
 
+	statusServerPort = strings.Split(server.Addr, "]")[1]
 	return server
 }
 
@@ -332,7 +335,7 @@ func main() {
 	runtime.SetBlockProfileRate(1000000) // One event per msec.
 
 	// Expose prometheus and pprof metrics on a separate port.
-	prometheusx.MustServeMetrics()
+	promServer := prometheusx.MustServeMetrics()
 
 	statusServer := startStatusServer()
 	statusServer.Shutdown(mainCtx)
@@ -398,6 +401,7 @@ func main() {
 	case <-mainCtx.Done():
 		ctx, cancel := context.WithTimeout(context.Background(), *shutdownTimeout)
 		defer cancel()
+		start := time.Now()
 		eg := errgroup.Group{}
 		eg.Go(func() error {
 			return server.Shutdown(ctx)
@@ -405,6 +409,10 @@ func main() {
 		eg.Go(func() error {
 			return statusServer.Shutdown(ctx)
 		})
+		eg.Go(func() error {
+			return promServer.Shutdown(ctx)
+		})
 		eg.Wait()
+		log.Println("Shutdown took", time.Since(start))
 	}
 }
