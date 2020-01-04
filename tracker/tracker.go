@@ -298,7 +298,6 @@ func (tr *Tracker) getJSON() ([]byte, error) {
 
 // Sync snapshots the full job state and saves it to the datastore client.
 func (tr *Tracker) Sync() error {
-	log.Println("sync")
 	bytes, err := tr.getJSON()
 	if err != nil {
 		return err
