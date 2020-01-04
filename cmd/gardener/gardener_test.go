@@ -6,7 +6,6 @@
 package main
 
 import (
-	"context"
 	_ "expvar"
 	"io/ioutil"
 	"log"
@@ -32,12 +31,29 @@ func TestLegacyModeSetup(t *testing.T) {
 		defer cleanup()
 	}
 
-	LoadEnv()
-	_, err := taskHandlerFromEnv(context.Background(), http.DefaultClient)
+	go func() {
+		defer mainCancel()
+		var resp *http.Response
+		var err error
+		for i := 0; i < 1000; i++ {
+			time.Sleep(10 * time.Millisecond)
+			resp, err = http.Get("http://localhost:8080/ready")
+			if err == nil {
+				break
+			}
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		// For now, the service comes up immediately serving "ok" for /ready
+		data, err := ioutil.ReadAll(resp.Body)
+		if string(data) != "ok" {
+			t.Fatal(string(data))
+		}
+	}()
 
-	if err != nil {
-		t.Fatal(err)
-	}
+	main()
 }
 
 func TestManagerMode(t *testing.T) {
@@ -52,17 +68,29 @@ func TestManagerMode(t *testing.T) {
 		defer cleanup()
 	}
 
-	go main()
+	go func() {
+		defer mainCancel()
+		var resp *http.Response
+		var err error
+		for i := 0; i < 1000; i++ {
+			time.Sleep(10 * time.Millisecond)
+			resp, err = http.Get("http://localhost:8080/ready")
+			if err == nil {
+				break
+			}
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		// For now, the service comes up immediately serving "ok" for /ready
+		data, err := ioutil.ReadAll(resp.Body)
+		if string(data) != "ok" {
+			t.Fatal(string(data))
+		}
+	}()
 
-	time.Sleep(time.Second)
-	resp, err := http.Get("http://localhost:8080/ready")
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, err := ioutil.ReadAll(resp.Body)
-	if string(data) != "ok" {
-		t.Fatal(string(data))
-	}
+	main()
 }
 
 func TestEnv(t *testing.T) {

@@ -49,7 +49,9 @@ spec:
         - name: STATUS_PORT
           value: ":8081"
         - name: JOB_EXPIRATION_TIME
-          value: "14400"  # Four hours.
+          value: "4h"
+        - name: SHUTDOWN_TIMEOUT
+          value: "1m"
 
         ports:
         - name: prometheus-port
