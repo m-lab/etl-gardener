@@ -12,11 +12,24 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/m-lab/go/osx"
 )
+
+// Retries for up to 10 seconds.
+func waitFor(url string) (resp *http.Response, err error) {
+	for i := 0; i < 1000; i++ {
+		time.Sleep(10 * time.Millisecond)
+		resp, err = http.Get(url)
+		if err == nil {
+			break
+		}
+	}
+	return resp, err
+}
 
 // TODO - these tests currently fail with count=10
 // Would have to use :0 for all servers to allow count > 1
@@ -39,15 +52,7 @@ func TestLegacyModeSetup(t *testing.T) {
 
 	go func() {
 		defer mainCancel()
-		var resp *http.Response
-		var err error
-		for i := 0; i < 1000; i++ {
-			time.Sleep(10 * time.Millisecond)
-			resp, err = http.Get("http://localhost:8080/ready")
-			if err == nil {
-				break
-			}
-		}
+		resp, err := waitFor("http://localhost:8080/ready")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -78,39 +83,32 @@ func TestManagerMode(t *testing.T) {
 
 	go func() {
 		defer mainCancel()
-		var resp *http.Response
-		var err error
-		for i := 0; i < 1000; i++ {
-			time.Sleep(10 * time.Millisecond)
-			resp, err = http.Get("http://localhost:8080/ready")
-			if err == nil {
-				break
-			}
-		}
+		resp, err := waitFor("http://localhost:8080/ready")
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		// For now, the service comes up immediately serving "ok" for /ready
 		data, err := ioutil.ReadAll(resp.Body)
 		if string(data) != "ok" {
 			t.Fatal(string(data))
 		}
 		resp.Body.Close()
+		log.Println("ok")
+
+		parts := strings.Split(statusServerAddr, "]")
+		port := parts[len(parts)-1]
+		log.Println(port)
 
 		// Now get the status
-		for i := 0; i < 1000; i++ {
-			time.Sleep(10 * time.Millisecond)
-			resp, err = http.Get("http://localhost:8080")
-			if err == nil {
-				break
-			}
-		}
+		resp, err = waitFor("http://localhost" + port)
 		if err != nil {
 			t.Fatal(err)
 		}
-
 		data, err = ioutil.ReadAll(resp.Body)
-		log.Print(string(data))
+		if !strings.Contains(string(data), "Jobs") {
+			t.Error("Should contain Jobs:\n", string(data))
+		}
 		resp.Body.Close()
 	}()
 

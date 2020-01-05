@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"runtime"
 	"strconv"
@@ -265,10 +266,20 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "</body></html>\n")
 }
 
+// Used for testing.
+var statusServerAddr string
+
 func startStatusServer() *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", Status)
 	mux.HandleFunc("/status", Status)
+
+	// Also allow pprof through the status server.
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 	// Start up the http server.
 	server := &http.Server{
@@ -277,7 +288,8 @@ func startStatusServer() *http.Server {
 	}
 	rtx.Must(httpx.ListenAndServeAsync(server), "Could not start status server")
 
-	log.Println("Status server at:", server.Addr)
+	statusServerAddr = server.Addr
+
 	return server
 }
 
@@ -334,14 +346,14 @@ func main() {
 
 	// Expose prometheus and pprof metrics on a separate port.
 	promServer := prometheusx.MustServeMetrics()
+	defer promServer.Close()
 
 	statusServer := startStatusServer()
-	statusServer.Shutdown(mainCtx)
 	defer statusServer.Close()
 	log.Println("Status server at", statusServer.Addr)
 
 	mux := http.NewServeMux()
-	// Start up the http server.
+	// Start up the main job and update server.
 	server := &http.Server{
 		Addr:    ":8080",
 		Handler: mux,
@@ -397,6 +409,7 @@ func main() {
 
 	select {
 	case <-mainCtx.Done():
+		log.Println("Shutting down servers")
 		ctx, cancel := context.WithTimeout(context.Background(), *shutdownTimeout)
 		defer cancel()
 		start := time.Now()
