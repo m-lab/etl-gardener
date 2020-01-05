@@ -190,12 +190,18 @@ var jobsTemplate = template.Must(template.New("").Parse(`
 	<table style="width:80%">
 		<tr>
 			<th> Job </th>
+			<th> UpdateTime </th>
 			<th> State </th>
+			<th> UpdateDetail </th>
+			<th> LastError </th>
 		</tr>
 	    {{range .Jobs}}
 		<tr>
 			<td> {{.Job}} </td>
-			<td> {{.State}} </td>
+			<td> {{.Status.UpdateTime.Format "01/02~15:04:05"}} </td>
+			<td> {{.Status.State}} </td>
+			<td> {{.Status.UpdateDetail}} </td>
+			<td> {{.Status.LastError}} </td>
 		</tr>
 	    {{end}}
 	</table>`))
@@ -203,8 +209,8 @@ var jobsTemplate = template.Must(template.New("").Parse(`
 // WriteHTML writes a table containing the jobs and status.
 func (jobs JobMap) WriteHTML(w io.Writer) error {
 	type Pair struct {
-		Job   Job
-		State Status
+		Job    Job
+		Status Status
 	}
 	type JobRep struct {
 		Title string
@@ -212,11 +218,11 @@ func (jobs JobMap) WriteHTML(w io.Writer) error {
 	}
 	pairs := make([]Pair, 0, len(jobs))
 	for j := range jobs {
-		pairs = append(pairs, Pair{Job: j, State: jobs[j]})
+		pairs = append(pairs, Pair{Job: j, Status: jobs[j]})
 	}
 	sort.Slice(pairs,
 		func(i, j int) bool {
-			return pairs[i].State.UpdateTime.Before(pairs[j].State.UpdateTime)
+			return pairs[i].Status.UpdateTime.Before(pairs[j].Status.UpdateTime)
 		})
 	jr := JobRep{Title: "Jobs", Jobs: pairs}
 
