@@ -199,7 +199,10 @@ var jobsTemplate = template.Must(template.New("").Parse(`
 		<tr>
 			<td> {{.Job}} </td>
 			<td> {{.Status.UpdateTime.Format "01/02~15:04:05"}} </td>
-			<td> {{.Status.State}} </td>
+			<td {{ if or (eq .Status.State "init") (eq .Status.State "postProcessing")}}
+					style="color: red;"
+					{{ else }}{{ end }}>
+			  {{.Status.State}} </td>
 			<td> {{.Status.UpdateDetail}} </td>
 			<td> {{.Status.LastError}} </td>
 		</tr>
@@ -226,7 +229,11 @@ func (jobs JobMap) WriteHTML(w io.Writer) error {
 		})
 	jr := JobRep{Title: "Jobs", Jobs: pairs}
 
-	return jobsTemplate.Execute(w, jr)
+	err := jobsTemplate.Execute(w, jr)
+	if err != nil {
+		log.Println(err)
+	}
+	return err
 }
 
 // saverStruct is used only for saving and loading from datastore.
