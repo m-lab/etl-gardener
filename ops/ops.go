@@ -1,0 +1,159 @@
+// Package ops provides code that observes the tracker state, and takes appropriate actions.
+package ops
+
+import (
+	"context"
+	"log"
+	"sync"
+	"time"
+
+	"cloud.google.com/go/bigquery"
+	"github.com/GoogleCloudPlatform/google-cloud-go-testing/bigquery/bqiface"
+
+	"github.com/m-lab/etl/etl"
+	"github.com/m-lab/go/dataset"
+
+	"github.com/m-lab/etl-gardener/cloud"
+	"github.com/m-lab/etl-gardener/cloud/bq"
+	"github.com/m-lab/etl-gardener/state"
+	"github.com/m-lab/etl-gardener/tracker"
+)
+
+// A ConditionFunc checks whether a Job meets some condition.
+// These functions may take a long time to complete, but should NOT use a lot of resources.
+type ConditionFunc = func(ctx context.Context, job tracker.Job) bool
+
+// An OpFunc performs an operation on a job, and updates its state.
+// These functions may take a long time to complete, and may be resource intensive.
+type OpFunc = func(ctx context.Context, tr *tracker.Tracker, job tracker.Job)
+
+// An Action describes an operation to be applied to jobs that meet the required condition.
+type Action struct {
+	state      tracker.State // State that action applies to.
+	condition  ConditionFunc // Condition that must be satisfied before applying action.
+	op         OpFunc        // Action to apply.
+	annotation string        // Annotation to be used for UpdateDetail while applying Op.
+}
+
+// Monitor "owns" all jobs in the states that have actions.
+type Monitor struct {
+	bqconfig cloud.BQConfig
+	actions  map[tracker.State]Action
+
+	lock       sync.Mutex
+	activeJobs map[tracker.Job]struct{} // The jobs currently being acted on.
+}
+
+func (m *Monitor) lockJob(j tracker.Job) bool {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	if _, ok := m.activeJobs[j]; ok {
+		return false
+	}
+	m.activeJobs[j] = struct{}{}
+	return true
+}
+
+func (m *Monitor) unlocker(j tracker.Job) func() {
+	return func() {
+		m.lock.Lock()
+		defer m.lock.Unlock()
+		delete(m.activeJobs, j)
+	}
+}
+
+// AddAction adds a specific action to the Monitor.
+func (m *Monitor) AddAction(state tracker.State, cond ConditionFunc, op OpFunc, annotation string) {
+	m.actions[state] = Action{state, cond, op, annotation}
+}
+
+// Watch polls the tracker, and takes appropriate actions.
+func (m *Monitor) Watch(ctx context.Context, tk *tracker.Tracker, period time.Duration) {
+	ticker := time.NewTicker(period)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case <-ticker.C:
+			jobs := tk.GetAll()
+			for j, s := range jobs {
+				// If job is not already active.
+				if m.lockJob(j) {
+
+					go func(a Action, unlocker func()) {
+						defer unlocker()
+						if a.condition(ctx, j) {
+							s.UpdateDetail = a.annotation
+							tk.UpdateJob(j, s)
+							// The op should also update the job state, detail, and error.
+							if a.op != nil {
+								a.op(ctx, tk, j)
+							}
+							delete(m.activeJobs, j)
+						}
+					}(m.actions[s.State], m.unlocker(j))
+				}
+			}
+		}
+	}
+}
+
+// TemplateTable creates BQ Table for legacy source templated table
+func TemplateTable(j tracker.Job, ds *dataset.Dataset) bqiface.Table {
+	tableName := etl.DirToTablename(j.Datatype)
+
+	src := ds.Table(tableName + "_" + j.Date.Format("20060102"))
+	return src
+}
+
+// This is a function I didn't want to port to the new architecture.  8-(
+func (m *Monitor) waitForStableTable(ctx context.Context, j tracker.Job) error {
+	log.Println("Stabilizing:", j)
+	// Wait for the streaming buffer to be nil.
+
+	// Code snippet adapted from dataset.NewDataset
+	c, err := bigquery.NewClient(ctx, m.bqconfig.BQProject, m.bqconfig.Options...)
+	if err != nil {
+		return err
+	}
+	bqClient := bqiface.AdaptClient(c)
+	ds := dataset.Dataset{Dataset: bqClient.Dataset(m.bqconfig.BQBatchDataset), BqClient: bqClient}
+
+	src := TemplateTable(j, &ds)
+	err = bq.WaitForStableTable(ctx, src)
+	if err != nil {
+		// When testing, we expect to get ErrTableNotFound here.
+		if err != state.ErrTableNotFound {
+			// t.SetError(ctx, err, "bq.WaitForStableTable")
+			return err
+		}
+	}
+
+	return nil
+}
+
+func trueCondition(ctx context.Context, j tracker.Job) bool { return true }
+
+func newStateFunc(state tracker.State) OpFunc {
+	return func(ctx context.Context, tk *tracker.Tracker, j tracker.Job) {
+		tk.SetStatus(j, state, "")
+	}
+}
+
+// StandardMonitor creates the standard monitor that handles several state transitions.
+// It is currently incomplete.
+func StandardMonitor(config cloud.BQConfig) *Monitor {
+	m := Monitor{bqconfig: config, actions: make(map[tracker.State]Action, 10), activeJobs: make(map[tracker.Job]struct{}, 10)}
+	m.AddAction(tracker.ParseComplete,
+		trueCondition,
+		newStateFunc(tracker.Stabilizing),
+		"Stabilizing")
+	m.AddAction(tracker.Stabilizing,
+		// HACK
+		func(ctx context.Context, j tracker.Job) bool { return m.waitForStableTable(ctx, j) == nil },
+		newStateFunc(tracker.Deduplicating),
+		"Deduplicating not implemented")
+	return &m
+}
