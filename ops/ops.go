@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/m-lab/go/logx"
+
 	"cloud.google.com/go/bigquery"
 	"github.com/GoogleCloudPlatform/google-cloud-go-testing/bigquery/bqiface"
 
@@ -18,6 +20,8 @@ import (
 	"github.com/m-lab/etl-gardener/state"
 	"github.com/m-lab/etl-gardener/tracker"
 )
+
+var debug = logx.Debug
 
 // A ConditionFunc checks whether a Job meets some condition.
 // These functions may take a long time to complete, but should NOT use a lot of resources.
@@ -50,12 +54,14 @@ func (m *Monitor) lockJob(j tracker.Job) bool {
 	if _, ok := m.activeJobs[j]; ok {
 		return false
 	}
+	//debug.Println("Locking", j)
 	m.activeJobs[j] = struct{}{}
 	return true
 }
 
 func (m *Monitor) unlocker(j tracker.Job) func() {
 	return func() {
+		//debug.Println("unlocking", j)
 		m.lock.Lock()
 		defer m.lock.Unlock()
 		delete(m.activeJobs, j)
@@ -77,23 +83,25 @@ func (m *Monitor) Watch(ctx context.Context, tk *tracker.Tracker, period time.Du
 			return
 
 		case <-ticker.C:
+			debug.Println("================")
 			jobs := tk.GetAll()
 			for j, s := range jobs {
-				// If job is not already active.
-				if m.lockJob(j) {
-
-					go func(a Action, unlocker func()) {
-						defer unlocker()
-						if a.condition(ctx, j) {
-							s.UpdateDetail = a.annotation
-							tk.UpdateJob(j, s)
-							// The op should also update the job state, detail, and error.
-							if a.op != nil {
-								a.op(ctx, tk, j)
+				if a, ok := m.actions[s.State]; ok {
+					// If job is not already active.
+					if m.lockJob(j) {
+						go func(j tracker.Job, a Action, unlocker func()) {
+							defer unlocker()
+							if a.condition(ctx, j) {
+								s.UpdateDetail = a.annotation
+								tk.UpdateJob(j, s)
+								// The op should also update the job state, detail, and error.
+								if a.op != nil {
+									a.op(ctx, tk, j)
+								}
+								delete(m.activeJobs, j)
 							}
-							delete(m.activeJobs, j)
-						}
-					}(m.actions[s.State], m.unlocker(j))
+						}(j, a, m.unlocker(j))
+					}
 				}
 			}
 		}
@@ -134,18 +142,30 @@ func (m *Monitor) waitForStableTable(ctx context.Context, j tracker.Job) error {
 	return nil
 }
 
-func trueCondition(ctx context.Context, j tracker.Job) bool { return true }
+func trueCondition(ctx context.Context, j tracker.Job) bool {
+	return true
+}
 
 func newStateFunc(state tracker.State) OpFunc {
 	return func(ctx context.Context, tk *tracker.Tracker, j tracker.Job) {
-		tk.SetStatus(j, state, "")
+		debug.Println(j, state)
+		err := tk.SetStatus(j, state, "")
+		if err != nil {
+			log.Println(err)
+		}
 	}
+}
+
+// NewMonitor creates a Monitor with no Actions
+func NewMonitor(config cloud.BQConfig) *Monitor {
+	m := Monitor{bqconfig: config, actions: make(map[tracker.State]Action, 10), activeJobs: make(map[tracker.Job]struct{}, 10)}
+	return &m
 }
 
 // StandardMonitor creates the standard monitor that handles several state transitions.
 // It is currently incomplete.
 func StandardMonitor(config cloud.BQConfig) *Monitor {
-	m := Monitor{bqconfig: config, actions: make(map[tracker.State]Action, 10), activeJobs: make(map[tracker.Job]struct{}, 10)}
+	m := NewMonitor(config)
 	m.AddAction(tracker.ParseComplete,
 		trueCondition,
 		newStateFunc(tracker.Stabilizing),
@@ -155,5 +175,5 @@ func StandardMonitor(config cloud.BQConfig) *Monitor {
 		func(ctx context.Context, j tracker.Job) bool { return m.waitForStableTable(ctx, j) == nil },
 		newStateFunc(tracker.Deduplicating),
 		"Deduplicating not implemented")
-	return &m
+	return m
 }
