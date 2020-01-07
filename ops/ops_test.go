@@ -52,7 +52,10 @@ func TestMonitor_Watch(t *testing.T) {
 		"Complete")
 	go m.Watch(ctx, tk, 100*time.Millisecond)
 
-	time.Sleep(2 * time.Second)
+	failTime := time.Now().Add(10 * time.Second)
+
+	for time.Now().Before(failTime) && tk.NumJobs() > 0 {
+	}
 	if tk.NumJobs() != 0 {
 		t.Error(tk.NumJobs())
 	}
