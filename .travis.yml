@@ -76,7 +76,7 @@ script:
   fi
 
 # Also run some concurrency sensitive tests with -race
-- go test -v ./tracker/... -race
+- go test -v ./tracker/... ./ops/... -race
 
 # Combine coverage of unit tests and integration tests and send the results to coveralls.
 - $HOME/gopath/bin/gocovmerge _*.cov > _merge.cov
