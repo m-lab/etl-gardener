@@ -1,4 +1,5 @@
 // Package ops provides code that observes the tracker state, and takes appropriate actions.
+// It basically implements a simple state machine.
 package ops
 
 import (
@@ -43,36 +44,58 @@ type Action struct {
 
 // Monitor "owns" all jobs in the states that have actions.
 type Monitor struct {
-	bqconfig cloud.BQConfig
-	actions  map[tracker.State]Action
+	bqconfig cloud.BQConfig           // static after creation
+	actions  map[tracker.State]Action // static after creation
 
-	lock       sync.Mutex
-	activeJobs map[tracker.Job]struct{} // The jobs currently being acted on.
+	lock      sync.Mutex               // protects jobClaims
+	jobClaims map[tracker.Job]struct{} // Claimed jobs currently being acted on.
 }
 
-func (m *Monitor) tryLockJob(j tracker.Job) bool {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	if _, ok := m.activeJobs[j]; ok {
-		return false
-	}
-	//debug.Println("Locking", j)
-	m.activeJobs[j] = struct{}{}
-	return true
-}
-
-func (m *Monitor) unlocker(j tracker.Job) func() {
+// releaser creates a function that releases the claim on a job.
+func (m *Monitor) releaser(j tracker.Job) func() {
 	return func() {
-		//debug.Println("unlocking", j)
 		m.lock.Lock()
 		defer m.lock.Unlock()
-		delete(m.activeJobs, j)
+		delete(m.jobClaims, j)
 	}
+}
+
+// Returns releaser if successful, nil otherwise.
+func (m *Monitor) tryClaimJob(j tracker.Job) func() {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	if _, ok := m.jobClaims[j]; ok {
+		return nil
+	}
+	m.jobClaims[j] = struct{}{}
+	return m.releaser(j)
 }
 
 // AddAction adds a specific action to the Monitor.
 func (m *Monitor) AddAction(state tracker.State, cond ConditionFunc, op ActionFunc, annotation string) {
 	m.actions[state] = Action{state, cond, op, annotation}
+}
+
+// applyAction tries to claim a job and apply an action.  Returns false if the job is already claimed.
+func (m *Monitor) tryApplyAction(ctx context.Context, tk *tracker.Tracker, a Action, j tracker.Job, s tracker.Status) bool {
+	// If job is not already claimed.
+	releaser := m.tryClaimJob(j)
+	if releaser == nil {
+		return false
+	}
+	go func(j tracker.Job, s tracker.Status, a Action, releaser func()) {
+		defer releaser()
+		if a.condition(ctx, j) {
+			// These jobs may be deleted by other calls to GetAll, so tk.UpdateJob may fail.
+			// s.UpdateDetail = a.annotation
+			// tk.UpdateJob(j, s)
+			// The op should also update the job state, detail, and error.
+			if a.action != nil {
+				a.action(ctx, tk, j, s)
+			}
+		}
+	}(j, s, a, releaser)
+	return true
 }
 
 // Watch polls the tracker, and takes appropriate actions.
@@ -88,23 +111,11 @@ func (m *Monitor) Watch(ctx context.Context, tk *tracker.Tracker, period time.Du
 			debug.Println("================")
 			// These jobs may be deleted by other calls to GetAll, so tk.UpdateJob may fail.
 			jobs := tk.GetAll()
+			// Iterate over the job/status map...
 			for j, s := range jobs {
+				// If job is in a state that has an associated action...
 				if a, ok := m.actions[s.State]; ok {
-					// If job is not already active.
-					if m.tryLockJob(j) {
-						go func(j tracker.Job, s tracker.Status, a Action, unlocker func()) {
-							defer unlocker()
-							if a.condition(ctx, j) {
-								// These jobs may be deleted by other calls to GetAll, so tk.UpdateJob may fail.
-								// s.UpdateDetail = a.annotation
-								// tk.UpdateJob(j, s)
-								// The op should also update the job state, detail, and error.
-								if a.action != nil {
-									a.action(ctx, tk, j, s)
-								}
-							}
-						}(j, s, a, m.unlocker(j))
-					}
+					m.tryApplyAction(ctx, tk, a, j, s)
 				}
 			}
 		}
@@ -127,6 +138,6 @@ func newStateFunc(state tracker.State) ActionFunc {
 
 // NewMonitor creates a Monitor with no Actions
 func NewMonitor(config cloud.BQConfig) *Monitor {
-	m := Monitor{bqconfig: config, actions: make(map[tracker.State]Action, 10), activeJobs: make(map[tracker.Job]struct{}, 10)}
+	m := Monitor{bqconfig: config, actions: make(map[tracker.State]Action, 10), jobClaims: make(map[tracker.Job]struct{}, 10)}
 	return &m
 }
