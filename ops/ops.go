@@ -1,10 +1,5 @@
 // Package ops provides code that observes the tracker state, and takes appropriate actions.
 // It basically implements a simple state machine.
-
-// The package assumes that there is only one Action associated with a State, and
-// that States with Actions are never operated on independently by some other agent,
-// such as the Parser.  Should this cease to be true, then the claim mechanism
-// should be moved into the tracker.
 package ops
 
 import (
@@ -13,6 +8,8 @@ import (
 	"time"
 
 	"github.com/m-lab/go/logx"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/tracker"
@@ -26,9 +23,30 @@ ultimately update the Job's State.
 
 A Monitor is initialized by adding Actions for each State that should be handled.  The client
 code should then invoke "go Watch(...)" to start watching the tracker for eligible Jobs.
+
+The package assumes that there is only one Action associated with a State, and
+that States with Actions are never operated on independently by some other agent,
+such as the Parser.  Should this cease to be true, then the claim mechanism
+should be moved into the tracker.
 */
 
 var debug = logx.Debug
+
+var actionDuration = promauto.NewHistogramVec(
+	prometheus.HistogramOpts{
+		Name: "gardener_action_duration",
+		Help: "Histogram of duration of actions",
+		Buckets: []float64{
+			0.1, 0.14, 0.20, 0.27, 0.37, 0.52, 0.72,
+			1, 1.4, 2.0, 2.7, 3.7, 5.2, 7.2,
+			10, 14, 20, 27, 37, 52, 72,
+			100, 140, 200, 270, 370, 520, 720,
+			1000, 1400, 2000, 2700, 3700, 5200, 7200,
+			10000, 14000, 20000, 27000, 37000, 52000, 72000,
+		},
+	},
+	[]string{"action"},
+)
 
 // A ConditionFunc checks whether a Job meets some condition.
 // These functions may take a long time to complete, but should NOT use a lot of resources.
@@ -40,6 +58,8 @@ type ActionFunc = func(ctx context.Context, tr *tracker.Tracker, job tracker.Job
 
 // An Action describes an operation to be applied to jobs that meet the required condition.
 type Action struct {
+	Name string
+
 	state tracker.State // State that action applies to.
 
 	// condition or action may be nil if not required
@@ -84,8 +104,8 @@ func (m *Monitor) tryClaimJob(j tracker.Job) func() {
 }
 
 // AddAction adds a specific action to the Monitor.
-func (m *Monitor) AddAction(state tracker.State, cond ConditionFunc, op ActionFunc, annotation string) {
-	m.actions[state] = Action{state, cond, op, annotation}
+func (m *Monitor) AddAction(name string, state tracker.State, cond ConditionFunc, op ActionFunc, annotation string) {
+	m.actions[state] = Action{name, state, cond, op, annotation}
 }
 
 // applyAction tries to claim a job and apply an action.  Returns false if the job is already claimed.
@@ -103,7 +123,9 @@ func (m *Monitor) tryApplyAction(ctx context.Context, a Action, j tracker.Job, s
 			// tk.UpdateJob(j, s)
 			// The op should also update the job state, detail, and error.
 			if a.action != nil {
+				start := time.Now()
 				a.action(ctx, m.tk, j, s)
+				actionDuration.WithLabelValues(a.Name).Observe(time.Since(start).Seconds())
 			}
 		}
 	}(j, s, a, releaser)
