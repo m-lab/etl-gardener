@@ -76,7 +76,7 @@ script:
   fi
 
 # Also run some concurrency sensitive tests with -race
-- go test -v ./tracker/... -race
+- go test -v ./tracker/... ./ops/... -race
 
 # Combine coverage of unit tests and integration tests and send the results to coveralls.
 - $HOME/gopath/bin/gocovmerge _*.cov > _merge.cov
@@ -122,7 +122,6 @@ deploy:
     &&
     DATE_SKIP="2" TASK_FILE_SKIP="4"
     $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-sandbox data-processing ./apply-cluster.sh
-  skip_cleanup: true
   on:
     repo: m-lab/etl-gardener
     all_branches: true
@@ -145,7 +144,6 @@ deploy:
     $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-staging data-processing-cluster ./apply-cluster.sh
     &&
     $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-staging data-processing ./apply-cluster.sh
-  skip_cleanup: true
   on:
     repo: m-lab/etl-gardener
     all_branches: true
@@ -156,7 +154,6 @@ deploy:
 - provider: script
   script:
     $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-oti data-processing-cluster ./apply-cluster.sh
-  skip_cleanup: true
   on:
     repo: m-lab/etl-gardener
     all_branches: true
