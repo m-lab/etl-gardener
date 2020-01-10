@@ -1,5 +1,5 @@
 // Package ops provides code that observes the tracker state, and takes appropriate actions.
-package ops
+package ops_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"github.com/m-lab/go/logx"
 
 	"github.com/m-lab/etl-gardener/cloud"
+	"github.com/m-lab/etl-gardener/ops"
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/go/rtx"
 )
@@ -17,6 +18,16 @@ import (
 func init() {
 	// Always prepend the filename and line number.
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
+func newStateFunc(state tracker.State) ops.ActionFunc {
+	return func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
+		log.Println(j, state)
+		err := tk.SetStatus(j, state)
+		if err != nil {
+			log.Println(err)
+		}
+	}
 }
 
 func TestMonitor_Watch(t *testing.T) {
@@ -29,28 +40,28 @@ func TestMonitor_Watch(t *testing.T) {
 	tk.AddJob(tracker.NewJob("bucket", "exp2", "type", time.Now()))
 	tk.AddJob(tracker.NewJob("bucket", "exp2", "type2", time.Now()))
 
-	m := NewMonitor(cloud.BQConfig{})
+	m := ops.NewMonitor(cloud.BQConfig{}, tk)
 	m.AddAction(tracker.Init,
-		trueCondition,
+		nil,
 		newStateFunc(tracker.Parsing),
 		"Init")
 	m.AddAction(tracker.Parsing,
-		trueCondition,
+		nil,
 		newStateFunc(tracker.ParseComplete),
 		"Stabilizing")
 	m.AddAction(tracker.ParseComplete,
-		trueCondition,
+		nil,
 		newStateFunc(tracker.Stabilizing),
 		"Stabilizing")
 	m.AddAction(tracker.Stabilizing,
-		trueCondition,
+		nil,
 		newStateFunc(tracker.Deduplicating),
 		"Deduplicating")
 	m.AddAction(tracker.Stabilizing,
-		trueCondition,
+		nil,
 		newStateFunc(tracker.Complete),
 		"Complete")
-	go m.Watch(ctx, tk, 100*time.Millisecond)
+	go m.Watch(ctx, 10*time.Millisecond)
 
 	failTime := time.Now().Add(10 * time.Second)
 

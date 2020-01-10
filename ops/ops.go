@@ -1,10 +1,14 @@
 // Package ops provides code that observes the tracker state, and takes appropriate actions.
 // It basically implements a simple state machine.
+
+// The package assumes that there is only one Action associated with a State, and
+// that States with Actions are never operated on independently by some other agent,
+// such as the Parser.  Should this cease to be true, then the claim mechanism
+// should be moved into the tracker.
 package ops
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
 
@@ -36,16 +40,24 @@ type ActionFunc = func(ctx context.Context, tr *tracker.Tracker, job tracker.Job
 
 // An Action describes an operation to be applied to jobs that meet the required condition.
 type Action struct {
-	state      tracker.State // State that action applies to.
-	condition  ConditionFunc // Condition that must be satisfied before applying action.
-	action     ActionFunc    // Action to apply.
-	annotation string        // Annotation to be used for UpdateDetail while applying Op
+	state tracker.State // State that action applies to.
+
+	// condition or action may be nil if not required
+	// condition that must be satisfied before applying action.
+	condition ConditionFunc
+	// action performs an action on the job, and
+	// updates the state when complete.  It may place the job into an error state.
+	action ActionFunc
+
+	annotation string // Annotation to be used for UpdateDetail while applying Op
 }
 
 // Monitor "owns" all jobs in the states that have actions.
 type Monitor struct {
 	bqconfig cloud.BQConfig           // static after creation
 	actions  map[tracker.State]Action // static after creation
+
+	tk *tracker.Tracker
 
 	lock      sync.Mutex               // protects jobClaims
 	jobClaims map[tracker.Job]struct{} // Claimed jobs currently being acted on.
@@ -77,7 +89,7 @@ func (m *Monitor) AddAction(state tracker.State, cond ConditionFunc, op ActionFu
 }
 
 // applyAction tries to claim a job and apply an action.  Returns false if the job is already claimed.
-func (m *Monitor) tryApplyAction(ctx context.Context, tk *tracker.Tracker, a Action, j tracker.Job, s tracker.Status) bool {
+func (m *Monitor) tryApplyAction(ctx context.Context, a Action, j tracker.Job, s tracker.Status) bool {
 	// If job is not already claimed.
 	releaser := m.tryClaimJob(j)
 	if releaser == nil {
@@ -85,13 +97,13 @@ func (m *Monitor) tryApplyAction(ctx context.Context, tk *tracker.Tracker, a Act
 	}
 	go func(j tracker.Job, s tracker.Status, a Action, releaser func()) {
 		defer releaser()
-		if a.condition(ctx, j) {
+		if a.condition == nil || a.condition(ctx, j) {
 			// These jobs may be deleted by other calls to GetAll, so tk.UpdateJob may fail.
 			// s.UpdateDetail = a.annotation
 			// tk.UpdateJob(j, s)
 			// The op should also update the job state, detail, and error.
 			if a.action != nil {
-				a.action(ctx, tk, j, s)
+				a.action(ctx, m.tk, j, s)
 			}
 		}
 	}(j, s, a, releaser)
@@ -99,8 +111,9 @@ func (m *Monitor) tryApplyAction(ctx context.Context, tk *tracker.Tracker, a Act
 }
 
 // Watch polls the tracker, and takes appropriate actions.
-func (m *Monitor) Watch(ctx context.Context, tk *tracker.Tracker, period time.Duration) {
+func (m *Monitor) Watch(ctx context.Context, period time.Duration) {
 	ticker := time.NewTicker(period)
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -108,36 +121,23 @@ func (m *Monitor) Watch(ctx context.Context, tk *tracker.Tracker, period time.Du
 			return
 
 		case <-ticker.C:
-			debug.Println("================")
+			debug.Println("===== Monitor Loop Starting =====")
 			// These jobs may be deleted by other calls to GetAll, so tk.UpdateJob may fail.
-			jobs := tk.GetAll()
+			jobs := m.tk.GetAll()
 			// Iterate over the job/status map...
 			for j, s := range jobs {
 				// If job is in a state that has an associated action...
 				if a, ok := m.actions[s.State]; ok {
-					m.tryApplyAction(ctx, tk, a, j, s)
+					m.tryApplyAction(ctx, a, j, s)
 				}
 			}
 		}
 	}
 }
 
-func trueCondition(ctx context.Context, j tracker.Job) bool {
-	return true
-}
-
-func newStateFunc(state tracker.State) ActionFunc {
-	return func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
-		debug.Println(j, state)
-		err := tk.SetStatus(j, state)
-		if err != nil {
-			log.Println(err)
-		}
-	}
-}
-
 // NewMonitor creates a Monitor with no Actions
-func NewMonitor(config cloud.BQConfig) *Monitor {
-	m := Monitor{bqconfig: config, actions: make(map[tracker.State]Action, 10), jobClaims: make(map[tracker.Job]struct{}, 10)}
+func NewMonitor(config cloud.BQConfig, tk *tracker.Tracker) *Monitor {
+	m := Monitor{bqconfig: config, actions: make(map[tracker.State]Action, 10),
+		tk: tk, jobClaims: make(map[tracker.Job]struct{}, 10)}
 	return &m
 }
