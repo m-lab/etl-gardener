@@ -137,7 +137,7 @@ func (m *Monitor) Watch(ctx context.Context, period time.Duration) {
 
 // NewMonitor creates a Monitor with no Actions
 func NewMonitor(config cloud.BQConfig, tk *tracker.Tracker) *Monitor {
-	m := Monitor{bqconfig: config, actions: make(map[tracker.State]Action, 10),
-		tk: tk, jobClaims: make(map[tracker.Job]struct{}, 10)}
+	m := Monitor{bqconfig: config, actions: make(map[tracker.State]Action),
+		tk: tk, jobClaims: make(map[tracker.Job]struct{})}
 	return &m
 }

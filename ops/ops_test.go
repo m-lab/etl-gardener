@@ -48,19 +48,19 @@ func TestMonitor_Watch(t *testing.T) {
 	m.AddAction(tracker.Parsing,
 		nil,
 		newStateFunc(tracker.ParseComplete),
-		"Stabilizing")
+		"Parsing")
 	m.AddAction(tracker.ParseComplete,
 		nil,
 		newStateFunc(tracker.Stabilizing),
-		"Stabilizing")
+		"PostProcessing")
 	m.AddAction(tracker.Stabilizing,
 		nil,
 		newStateFunc(tracker.Deduplicating),
-		"Deduplicating")
-	m.AddAction(tracker.Stabilizing,
+		"Checking for stability")
+	m.AddAction(tracker.Deduplicating,
 		nil,
 		newStateFunc(tracker.Complete),
-		"Complete")
+		"Deduplicating")
 	go m.Watch(ctx, 10*time.Millisecond)
 
 	failTime := time.Now().Add(10 * time.Second)
