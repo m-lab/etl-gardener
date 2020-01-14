@@ -17,12 +17,13 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"github.com/GoogleCloudPlatform/google-cloud-go-testing/storage/stiface"
-	"github.com/m-lab/etl-gardener/cloud"
+	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"google.golang.org/api/iterator"
 	"google.golang.org/appengine/taskqueue"
+
+	"github.com/m-lab/etl-gardener/cloud"
 )
 
 // *******************************************************************

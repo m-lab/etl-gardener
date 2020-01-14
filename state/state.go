@@ -13,10 +13,12 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
-	"github.com/GoogleCloudPlatform/google-cloud-go-testing/bigquery/bqiface"
-	"github.com/m-lab/etl-gardener/metrics"
+	"github.com/googleapis/google-cloud-go-testing/bigquery/bqiface"
+
 	"github.com/m-lab/etl/etl"
 	"github.com/m-lab/go/dataset"
+
+	"github.com/m-lab/etl-gardener/metrics"
 )
 
 // State indicates the state of a single Task in flight.
