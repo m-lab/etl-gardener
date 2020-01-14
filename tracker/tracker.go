@@ -180,14 +180,15 @@ func (jobs *JobMap) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-var jobsTemplate = template.Must(template.New("").Parse(`
+var jobsTemplate = template.Must(template.New("").Parse(
+	fmt.Sprintf(`
 	<h1>{{.Title}}</h1>
 	<style>
 	table, th, td {
 	  border: 2px solid black;
 	}
 	</style>
-	<table style="width:80%">
+	<table style="width:80%%">
 		<tr>
 			<th> Job </th>
 			<th> UpdateTime </th>
@@ -199,7 +200,7 @@ var jobsTemplate = template.Must(template.New("").Parse(`
 		<tr>
 			<td> {{.Job}} </td>
 			<td> {{.Status.UpdateTime.Format "01/02~15:04:05"}} </td>
-			<td {{ if or (eq .Status.State "init") (eq .Status.State "postProcessing")}}
+			<td {{ if or (eq .Status.State "%s") (eq .Status.State "%s")}}
 					style="color: red;"
 					{{ else }}{{ end }}>
 			  {{.Status.State}} </td>
@@ -207,7 +208,7 @@ var jobsTemplate = template.Must(template.New("").Parse(`
 			<td> {{.Status.LastError}} </td>
 		</tr>
 	    {{end}}
-	</table>`))
+	</table>`, Init, ParseComplete)))
 
 // WriteHTML writes a table containing the jobs and status.
 func (jobs JobMap) WriteHTML(w io.Writer) error {

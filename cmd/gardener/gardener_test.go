@@ -96,12 +96,8 @@ func TestManagerMode(t *testing.T) {
 		resp.Body.Close()
 		log.Println("ok")
 
-		parts := strings.Split(statusServerAddr, "]")
-		port := parts[len(parts)-1]
-		log.Println(port)
-
 		// Now get the status
-		resp, err = waitFor("http://localhost" + port)
+		resp, err = waitFor("http://" + statusServerAddr)
 		if err != nil {
 			t.Fatal(err)
 		}
