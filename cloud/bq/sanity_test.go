@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
-	"github.com/GoogleCloudPlatform/google-cloud-go-testing/bigquery/bqiface"
+	"github.com/googleapis/google-cloud-go-testing/bigquery/bqiface"
+	"google.golang.org/api/option"
+
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/go/dataset"
-	"google.golang.org/api/option"
 )
 
 func init() {

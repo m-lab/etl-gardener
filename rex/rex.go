@@ -17,17 +17,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/GoogleCloudPlatform/google-cloud-go-testing/storage/stiface"
-
 	"cloud.google.com/go/storage"
-	"github.com/GoogleCloudPlatform/google-cloud-go-testing/bigquery/bqiface"
+	"github.com/googleapis/google-cloud-go-testing/bigquery/bqiface"
+	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
+	"google.golang.org/api/option"
+
+	"github.com/m-lab/go/dataset"
+
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/cloud/bq"
 	"github.com/m-lab/etl-gardener/cloud/tq"
 	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/etl-gardener/state"
-	"github.com/m-lab/go/dataset"
-	"google.golang.org/api/option"
 )
 
 func isTest() bool {

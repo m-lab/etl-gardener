@@ -7,9 +7,9 @@ import (
 	"log"
 	"testing"
 
-	"github.com/GoogleCloudPlatform/google-cloud-go-testing/datastore/dsiface"
-
 	"cloud.google.com/go/datastore"
+	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
+
 	"github.com/m-lab/etl-gardener/tracker"
 )
 

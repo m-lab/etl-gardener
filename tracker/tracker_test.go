@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
-	"github.com/GoogleCloudPlatform/google-cloud-go-testing/datastore/dsiface"
-	"github.com/m-lab/etl-gardener/tracker"
+	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
+
 	"github.com/m-lab/go/cloudtest/dsfake"
+
+	"github.com/m-lab/etl-gardener/tracker"
 )
 
 func init() {

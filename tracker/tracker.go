@@ -23,7 +23,8 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
-	"github.com/GoogleCloudPlatform/google-cloud-go-testing/datastore/dsiface"
+	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
+
 	"github.com/m-lab/etl-gardener/metrics"
 )
 
@@ -171,12 +172,12 @@ var jobsTemplate = template.Must(template.New("").Parse(`
 	</style>
 	<table style="width:80%">
 		<tr>
-			<th> Job </th> 
+			<th> Job </th>
 			<th> State </th>
 		</tr>
 	    {{range .Jobs}}
 		<tr>
-			<td> {{.Job}} </td> 
+			<td> {{.Job}} </td>
 			<td> {{.State}} </td>
 		</tr>
 	    {{end}}

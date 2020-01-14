@@ -9,13 +9,14 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"github.com/GoogleCloudPlatform/google-cloud-go-testing/storage/stiface"
+	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
+	"google.golang.org/api/iterator"
+	"google.golang.org/api/option"
+
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/reproc"
 	"github.com/m-lab/etl-gardener/rex"
 	"github.com/m-lab/etl-gardener/state"
-	"google.golang.org/api/iterator"
-	"google.golang.org/api/option"
 )
 
 func init() {

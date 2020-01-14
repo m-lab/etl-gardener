@@ -17,10 +17,11 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
-	"github.com/GoogleCloudPlatform/google-cloud-go-testing/bigquery/bqiface"
-	"github.com/m-lab/go/dataset"
+	"github.com/googleapis/google-cloud-go-testing/bigquery/bqiface"
 	"golang.org/x/net/context"
 	"google.golang.org/api/iterator"
+
+	"github.com/m-lab/go/dataset"
 )
 
 var (
