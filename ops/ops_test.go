@@ -23,7 +23,7 @@ func init() {
 func newStateFunc(state tracker.State) ops.ActionFunc {
 	return func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
 		log.Println(j, state)
-		err := tk.SetStatus(j, state)
+		err := tk.SetStatus(j, state, "")
 		if err != nil {
 			log.Println(err)
 		}
@@ -34,7 +34,7 @@ func TestMonitor_Watch(t *testing.T) {
 	logx.LogxDebug.Set("true")
 
 	ctx, cancel := context.WithCancel(context.Background())
-	tk, err := tracker.InitTracker(ctx, nil, nil, 0)
+	tk, err := tracker.InitTracker(ctx, nil, nil, 0, 0)
 	rtx.Must(err, "tk init")
 	tk.AddJob(tracker.NewJob("bucket", "exp", "type", time.Now()))
 	tk.AddJob(tracker.NewJob("bucket", "exp2", "type", time.Now()))
