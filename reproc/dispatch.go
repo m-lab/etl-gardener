@@ -13,11 +13,14 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/m-lab/etl-gardener/metrics"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/m-lab/etl-gardener/state"
 )
@@ -173,7 +176,8 @@ func (th *TaskHandler) waitForPreviousTask(ctx context.Context, t state.Task) er
 // AddTask adds a new task, blocking until the task has been accepted.
 // This will typically be repeated called by another goroutine responsible
 // for driving the reprocessing.
-// May return ErrTerminating, if th has started termination.
+// May return ErrTerminating, if th has started termination, or context.Canceled
+// if main context has been canceled.
 // TODO: Add prometheus metrics.
 //
 // More detail:
@@ -333,11 +337,18 @@ func doDispatchLoop(ctx context.Context, handler *TaskHandler, bucket string, ex
 
 		prefix := fmt.Sprintf("gs://%s/%s/", bucket, expAndType) + next.Format("2006/01/02/")
 
-		// Note that this blocks until a queue is available.
+		// Note that this blocks until a queue is available or context expires.
 		err := handler.AddTask(ctx, prefix)
 		if err != nil {
-			// Only error expected here is ErrTerminating
-			log.Println(err)
+			if err == context.Canceled || err == ErrTerminating {
+				log.Println("Exitting doDispatchLoop")
+				return
+			}
+			if status.Code(err) == codes.Canceled {
+				log.Println("Exitting doDispatchLoop")
+				return
+			}
+			log.Println("Unhandled error:", err, reflect.TypeOf(err))
 		}
 
 		// Advance to next date, possibly skipping days if DATE_SKIP env var was set.

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"runtime"
 	"strconv"
@@ -20,7 +21,9 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
+	"golang.org/x/sync/errgroup"
 
+	"github.com/m-lab/go/flagx"
 	"github.com/m-lab/go/httpx"
 	"github.com/m-lab/go/prometheusx"
 	"github.com/m-lab/go/rtx"
@@ -34,6 +37,15 @@ import (
 
 	// Enable exported debug vars.  See https://golang.org/pkg/expvar/
 	_ "expvar"
+)
+
+var (
+	jobExpirationTime = flag.Duration("job_expiration_time", 4*time.Hour, "Time after which stale jobs will be purged")
+	shutdownTimeout   = flag.Duration("shutdown_timeout", 1*time.Minute, "Graceful shutdown time allowance")
+	statusPort        = flag.String("status_port", ":0", "The public interface port where status (and pprof) will be published")
+
+	// Context and injected variables to allow smoke testing of main()
+	mainCtx, mainCancel = context.WithCancel(context.Background())
 )
 
 func init() {
@@ -254,21 +266,29 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "</body></html>\n")
 }
 
+// Used for testing.
+var statusServerAddr string
+
 func startStatusServer() *http.Server {
-	statusPort := os.Getenv("STATUS_PORT")
-	if len(statusPort) == 0 {
-		statusPort = ":0"
-	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", Status)
 	mux.HandleFunc("/status", Status)
 
+	// Also allow pprof through the status server.
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
 	// Start up the http server.
 	server := &http.Server{
-		Addr:    statusPort,
+		Addr:    *statusPort,
 		Handler: mux,
 	}
 	rtx.Must(httpx.ListenAndServeAsync(server), "Could not start status server")
+
+	statusServerAddr = server.Addr
 
 	return server
 }
@@ -292,7 +312,10 @@ func mustStandardTracker() *tracker.Tracker {
 	dsKey := datastore.NameKey("tracker", "jobs", nil)
 	dsKey.Namespace = "gardener"
 
-	tk, err := tracker.InitTracker(context.Background(), dsiface.AdaptClient(client), dsKey, 0)
+	tk, err := tracker.InitTracker(
+		context.Background(),
+		dsiface.AdaptClient(client), dsKey,
+		time.Minute, *jobExpirationTime)
 	rtx.Must(err, "tracker init")
 	if tk == nil {
 		log.Fatal("nil tracker")
@@ -306,7 +329,10 @@ func mustStandardTracker() *tracker.Tracker {
 // ###############################################################################
 
 func main() {
-	flag.Parse() // For prometheus listen address.
+	defer mainCancel()
+
+	flag.Parse()
+	rtx.Must(flagx.ArgsFromEnv(flag.CommandLine), "Could not get args from env")
 
 	LoadEnv()
 	if env.Error != nil {
@@ -319,18 +345,26 @@ func main() {
 	runtime.SetBlockProfileRate(1000000) // One event per msec.
 
 	// Expose prometheus and pprof metrics on a separate port.
-	prometheusx.MustServeMetrics()
+	promServer := prometheusx.MustServeMetrics()
+	defer promServer.Close()
 
 	statusServer := startStatusServer()
 	defer statusServer.Close()
 	log.Println("Status server at", statusServer.Addr)
 
-	http.HandleFunc("/", Status)
-	http.HandleFunc("/status", Status)
+	mux := http.NewServeMux()
+	// Start up the main job and update server.
+	server := &http.Server{
+		Addr:    ":8080",
+		Handler: mux,
+	}
+
+	mux.HandleFunc("/", Status)
+	mux.HandleFunc("/status", Status)
 
 	// TODO - do we want different health checks for manager mode?
-	http.HandleFunc("/alive", healthCheck)
-	http.HandleFunc("/ready", healthCheck)
+	mux.HandleFunc("/alive", healthCheck)
+	mux.HandleFunc("/ready", healthCheck)
 
 	switch env.ServiceMode {
 	case "manager":
@@ -338,21 +372,18 @@ func main() {
 		// for parsers to get work and report progress.
 		globalTracker = mustStandardTracker()
 		handler := tracker.NewHandler(globalTracker)
-		handler.Register(http.DefaultServeMux)
+		handler.Register(mux)
 
 		// For now, we just start in Aug 2019, and handle only new data.
 		svc, err := job.NewJobService(globalTracker, time.Date(2019, 8, 1, 0, 0, 0, 0, time.UTC))
 		rtx.Must(err, "Could not initialize job service")
-		http.HandleFunc("/job", svc.JobHandler)
+		mux.HandleFunc("/job", svc.JobHandler)
 		healthy = true
 		log.Println("Running as manager service")
 	case "legacy":
 		// This is the "legacy" mode, that manages work through task queues.
 		// TODO - this creates a storage client, which should be closed on termination.
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		th, err := taskHandlerFromEnv(ctx, http.DefaultClient)
+		th, err := taskHandlerFromEnv(mainCtx, http.DefaultClient)
 
 		if err != nil {
 			log.Println(err)
@@ -361,7 +392,7 @@ func main() {
 
 		// If RunDispatchLoop() returns an err instead of nil, healthy will be
 		// set as false and eventually it will cause kubernetes to roll back.
-		err = reproc.RunDispatchLoop(ctx, th, env.Project, env.Bucket, env.Experiment, env.StartDate, env.DateSkip)
+		err = reproc.RunDispatchLoop(mainCtx, th, env.Project, env.Bucket, env.Experiment, env.StartDate, env.DateSkip)
 		if err != nil {
 			healthy = false
 			log.Println("Running as unhealthy service")
@@ -374,5 +405,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	rtx.Must(httpx.ListenAndServeAsync(server), "Could not start main server")
+
+	select {
+	case <-mainCtx.Done():
+		log.Println("Shutting down servers")
+		ctx, cancel := context.WithTimeout(context.Background(), *shutdownTimeout)
+		defer cancel()
+		start := time.Now()
+		eg := errgroup.Group{}
+		eg.Go(func() error {
+			return server.Shutdown(ctx)
+		})
+		eg.Go(func() error {
+			return statusServer.Shutdown(ctx)
+		})
+		eg.Go(func() error {
+			return promServer.Shutdown(ctx)
+		})
+		eg.Wait()
+		log.Println("Shutdown took", time.Since(start))
+	}
 }

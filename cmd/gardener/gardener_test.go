@@ -12,17 +12,35 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/m-lab/go/osx"
 )
 
+// Retries for up to 10 seconds.
+func waitFor(url string) (resp *http.Response, err error) {
+	for i := 0; i < 1000; i++ {
+		time.Sleep(10 * time.Millisecond)
+		resp, err = http.Get(url)
+		if err == nil {
+			break
+		}
+	}
+	return resp, err
+}
+
+// TODO - these tests currently fail with count=10
+// Would have to use :0 for all servers to allow count > 1
+
 func TestLegacyModeSetup(t *testing.T) {
+	mainCtx, mainCancel = context.WithCancel(context.Background())
+
 	vars := map[string]string{
 		"PROJECT":         "mlab-testing",
 		"QUEUE_BASE":      "fake-queue-",
-		"NUM_QUEUES":      "123",
+		"NUM_QUEUES":      "3",
 		"EXPERIMENT":      "ndt",
 		"TASKFILE_BUCKET": "archive-mlab-testing",
 		"START_DATE":      "20090220",
@@ -32,18 +50,29 @@ func TestLegacyModeSetup(t *testing.T) {
 		defer cleanup()
 	}
 
-	LoadEnv()
-	_, err := taskHandlerFromEnv(context.Background(), http.DefaultClient)
+	go func() {
+		defer mainCancel()
+		resp, err := waitFor("http://localhost:8080/ready")
+		if err != nil {
+			t.Fatal(err)
+		}
+		// For now, the service comes up immediately serving "ok" for /ready
+		data, err := ioutil.ReadAll(resp.Body)
+		if string(data) != "ok" {
+			t.Fatal(string(data))
+		}
+		resp.Body.Close()
+	}()
 
-	if err != nil {
-		t.Fatal(err)
-	}
+	main()
 }
 
 func TestManagerMode(t *testing.T) {
+	mainCtx, mainCancel = context.WithCancel(context.Background())
+
 	vars := map[string]string{
 		"SERVICE_MODE":   "manager",
-		"PROJECT":        "foobar",
+		"PROJECT":        "mlab-testing",
 		"ARCHIVE_BUCKET": "archive-mlab-testing",
 		"STATUS_PORT":    ":0",
 	}
@@ -52,17 +81,34 @@ func TestManagerMode(t *testing.T) {
 		defer cleanup()
 	}
 
-	go main()
+	go func() {
+		defer mainCancel()
+		resp, err := waitFor("http://localhost:8080/ready")
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	time.Sleep(time.Second)
-	resp, err := http.Get("http://localhost:8080/ready")
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, err := ioutil.ReadAll(resp.Body)
-	if string(data) != "ok" {
-		t.Fatal(string(data))
-	}
+		// For now, the service comes up immediately serving "ok" for /ready
+		data, err := ioutil.ReadAll(resp.Body)
+		if string(data) != "ok" {
+			t.Fatal(string(data))
+		}
+		resp.Body.Close()
+		log.Println("ok")
+
+		// Now get the status
+		resp, err = waitFor("http://" + statusServerAddr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err = ioutil.ReadAll(resp.Body)
+		if !strings.Contains(string(data), "Jobs") {
+			t.Error("Should contain Jobs:\n", string(data))
+		}
+		resp.Body.Close()
+	}()
+
+	main()
 }
 
 func TestEnv(t *testing.T) {
