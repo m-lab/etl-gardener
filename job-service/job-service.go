@@ -109,7 +109,7 @@ func post(ctx context.Context, url url.URL) ([]byte, int, error) {
 		return nil, 0, postErr // Documentation says we can ignore body.
 	}
 
-	// Gauranteed to have a non-nil response and body.
+	// Guaranteed to have a non-nil response and body.
 	defer resp.Body.Close()
 	b, err := ioutil.ReadAll(resp.Body) // Documentation recommends reading body.
 	return b, resp.StatusCode, err
