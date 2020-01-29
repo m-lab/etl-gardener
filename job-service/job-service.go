@@ -2,8 +2,13 @@
 package job
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -90,4 +95,39 @@ func NewJobService(tk *tracker.Tracker, startDate time.Time) (*Service, error) {
 
 	start := startDate.UTC().Truncate(24 * time.Hour)
 	return &Service{tracker: tk, startDate: start, date: start, jobTypes: types}, nil
+}
+
+// NextJob is used by clients to fetch the next job from the service.
+func NextJob(ctx context.Context, base url.URL) (tracker.Job, error) {
+	jobURL := base
+	jobURL.Path = "job"
+
+	job := tracker.Job{}
+
+	resp, err := http.Post(jobURL.String(), "application/x-www-form-urlencoded", nil)
+	if err != nil {
+		return job, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		var b []byte
+		b, err = ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return job, err
+		}
+		if len(b) > 0 {
+			err = errors.New(string(b))
+			return job, err
+		}
+
+		err = errors.New(resp.Status)
+		return job, err
+	}
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return job, err
+	}
+
+	err = json.Unmarshal(b, &job)
+	return job, err
 }
