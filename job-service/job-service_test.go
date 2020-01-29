@@ -196,7 +196,7 @@ func TestJobClient(t *testing.T) {
 	}
 
 	j, err = job.NextJob(ctx, *gURL)
-	if err.Error() != "500 Internal Server Error" {
+	if err.Error() != "Internal Server Error" {
 		t.Fatal("Should be internal server error", err)
 	}
 }

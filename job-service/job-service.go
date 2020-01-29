@@ -97,6 +97,24 @@ func NewJobService(tk *tracker.Tracker, startDate time.Time) (*Service, error) {
 	return &Service{tracker: tk, startDate: start, date: start, jobTypes: types}, nil
 }
 
+func post(ctx context.Context, url url.URL) ([]byte, int, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	req, reqErr := http.NewRequestWithContext(ctx, "POST", url.String(), nil)
+	if reqErr != nil {
+		return nil, 0, reqErr
+	}
+	resp, postErr := http.DefaultClient.Do(req)
+	if postErr != nil {
+		return nil, 0, postErr // Documentation says we can ignore body.
+	}
+
+	// Gauranteed to have a non-nil response and body.
+	defer resp.Body.Close()
+	b, err := ioutil.ReadAll(resp.Body) // Documentation recommends reading body.
+	return b, resp.StatusCode, err
+}
+
 // NextJob is used by clients to fetch the next job from the service.
 func NextJob(ctx context.Context, base url.URL) (tracker.Job, error) {
 	jobURL := base
@@ -104,28 +122,12 @@ func NextJob(ctx context.Context, base url.URL) (tracker.Job, error) {
 
 	job := tracker.Job{}
 
-	resp, err := http.Post(jobURL.String(), "application/x-www-form-urlencoded", nil)
+	b, status, err := post(ctx, jobURL)
 	if err != nil {
 		return job, err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		var b []byte
-		b, err = ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return job, err
-		}
-		if len(b) > 0 {
-			err = errors.New(string(b))
-			return job, err
-		}
-
-		err = errors.New(resp.Status)
-		return job, err
-	}
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return job, err
+	if status != http.StatusOK {
+		return job, errors.New(http.StatusText(status))
 	}
 
 	err = json.Unmarshal(b, &job)
