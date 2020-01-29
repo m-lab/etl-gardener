@@ -4,8 +4,11 @@ package job_test
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +16,7 @@ import (
 	"github.com/go-test/deep"
 	job "github.com/m-lab/etl-gardener/job-service"
 	"github.com/m-lab/etl-gardener/tracker"
+	"github.com/m-lab/go/rtx"
 )
 
 func TestService_NextJob(t *testing.T) {
@@ -127,5 +131,72 @@ func TestEarlyWrapping(t *testing.T) {
 				t.Error(err)
 			}
 		}
+	}
+}
+
+type fakeGardener struct {
+	t *testing.T // for logging
+
+	lock       sync.Mutex
+	jobs       []tracker.Job
+	heartbeats int
+	updates    int
+}
+
+func (g *fakeGardener) AddJob(job tracker.Job) {
+	g.jobs = append(g.jobs, job)
+}
+
+func (g *fakeGardener) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	rtx.Must(r.ParseForm(), "bad request")
+	if r.Method != http.MethodPost {
+		log.Fatal("Should be POST") // Not t.Fatal because this is asynchronous.
+	}
+	g.lock.Lock()
+	g.lock.Unlock()
+	switch r.URL.Path {
+	case "/job":
+		if len(g.jobs) < 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		j := g.jobs[0]
+		g.jobs = g.jobs[1:]
+		w.Write(j.Marshal())
+	case "/heartbeat":
+		g.t.Log(r.URL.Path, r.URL.Query())
+		g.heartbeats++
+
+	case "/update":
+		g.t.Log(r.URL.Path, r.URL.Query())
+		g.updates++
+
+	default:
+		log.Fatal(r.URL) // Not t.Fatal because this is asynchronous.
+	}
+}
+
+func TestJobClient(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// set up a fake gardener service.
+	fg := fakeGardener{t: t, jobs: make([]tracker.Job, 0)}
+	fg.AddJob(tracker.NewJob("foobar", "ndt", "ndt5", time.Date(2019, 01, 01, 0, 0, 0, 0, time.UTC)))
+	gardener := httptest.NewServer(&fg)
+	defer gardener.Close()
+	gURL, err := url.Parse(gardener.URL)
+	rtx.Must(err, "bad url")
+
+	j, err := job.NextJob(ctx, *gURL)
+	rtx.Must(err, "next job")
+
+	if j.Path() != "gs://foobar/ndt/ndt5/2019/01/01/" {
+		t.Error(j.Path())
+	}
+
+	j, err = job.NextJob(ctx, *gURL)
+	if err.Error() != "Internal Server Error" {
+		t.Fatal("Should be internal server error", err)
 	}
 }
