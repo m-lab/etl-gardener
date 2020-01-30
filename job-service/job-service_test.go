@@ -27,34 +27,34 @@ func TestService_NextJob(t *testing.T) {
 	defer monkey.Unpatch(time.Now)
 
 	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)
-	svc, _ := job.NewJobService(nil, start)
+	svc, _ := job.NewJobService(nil, "fake-bucket", start)
 	j := svc.NextJob()
-	w := tracker.Job{Bucket: "archive-mlab-sandbox", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}
+	w := tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}
 	diff := deep.Equal(w, j)
 	if diff != nil {
 		t.Fatal(diff)
 	}
 	j = svc.NextJob()
-	w = tracker.Job{Bucket: "archive-mlab-sandbox", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Truncate(24 * time.Hour)}
+	w = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Truncate(24 * time.Hour)}
 	diff = deep.Equal(w, j)
 	if diff != nil {
 		t.Fatal(diff)
 	}
 	j = svc.NextJob()
-	w = tracker.Job{Bucket: "archive-mlab-sandbox", Experiment: "ndt", Datatype: "ndt5", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}
+	w = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}
 	diff = deep.Equal(w, j)
 	if diff != nil {
 		t.Fatal(diff)
 	}
 	j = svc.NextJob()
-	w = tracker.Job{Bucket: "archive-mlab-sandbox", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}
+	w = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}
 	diff = deep.Equal(w, j)
 	if diff != nil {
 		t.Fatal(diff)
 	}
 	// Wrap
 	j = svc.NextJob()
-	w = tracker.Job{Bucket: "archive-mlab-sandbox", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}
+	w = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}
 	diff = deep.Equal(w, j)
 	if diff != nil {
 		t.Fatal(diff)
@@ -63,7 +63,7 @@ func TestService_NextJob(t *testing.T) {
 
 func TestJobHandler(t *testing.T) {
 	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)
-	svc, _ := job.NewJobService(nil, start)
+	svc, _ := job.NewJobService(nil, "fake-bucket", start)
 	req := httptest.NewRequest("", "/job", nil)
 	resp := httptest.NewRecorder()
 	svc.JobHandler(resp, req)
@@ -78,7 +78,7 @@ func TestJobHandler(t *testing.T) {
 		t.Fatal(resp.Code)
 	}
 
-	want := `{"Bucket":"archive-mlab-sandbox","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`
+	want := `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`
 	if want != resp.Body.String() {
 		t.Fatal(resp.Body.String())
 	}
@@ -96,19 +96,19 @@ func TestEarlyWrapping(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	svc, _ := job.NewJobService(tk, start)
+	svc, _ := job.NewJobService(tk, "fake-bucket", start)
 
 	// If a job is still present in the tracker when it wraps, /job returns an error.
 	results := []struct {
 		code int
 		body string
 	}{
-		{code: 200, body: `{"Bucket":"archive-mlab-sandbox","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`},
-		{code: 200, body: `{"Bucket":"archive-mlab-sandbox","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-03T00:00:00Z"}`},
-		{code: 200, body: `{"Bucket":"archive-mlab-sandbox","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-04T00:00:00Z"}`},
-		{code: 200, body: `{"Bucket":"archive-mlab-sandbox","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-04T00:00:00Z"}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-03T00:00:00Z"}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-04T00:00:00Z"}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-04T00:00:00Z"}`},
 		// This one should work, because we complete it in the loop.
-		{code: 200, body: `{"Bucket":"archive-mlab-sandbox","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`},
 		{code: 500, body: `Job already exists.  Try again.`},
 	}
 
