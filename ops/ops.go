@@ -82,6 +82,7 @@ type Action struct {
 
 // Monitor "owns" all jobs in the states that have actions.
 type Monitor struct {
+	// TODO add bqClient, to allow fakes for testing.
 	bqconfig cloud.BQConfig           // static after creation
 	actions  map[tracker.State]Action // static after creation
 

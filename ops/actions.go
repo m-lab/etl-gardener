@@ -55,7 +55,6 @@ func (m *Monitor) waitForStableTable(ctx context.Context, j tracker.Job) error {
 	if err != nil {
 		// When testing, we expect to get ErrTableNotFound here.
 		if err != state.ErrTableNotFound {
-			// t.SetError(ctx, err, "bq.WaitForStableTable")
 			return err
 		}
 	}

@@ -321,6 +321,17 @@ func (tr *Tracker) NumJobs() int {
 	return len(tr.jobs)
 }
 
+// NumFailed returns the number of failed jobs.
+func (tr *Tracker) NumFailed() int {
+	jobs := tr.GetAll()
+	counts := make(map[State]int, 20)
+
+	for _, s := range jobs {
+		counts[s.State]++
+	}
+	return counts[Failed]
+}
+
 // getJSON creates a json encoding of the job map.
 func (tr *Tracker) getJSON() ([]byte, error) {
 	jobs := tr.GetAll()
