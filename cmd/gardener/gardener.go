@@ -30,6 +30,7 @@ import (
 
 	"github.com/m-lab/etl-gardener/cloud"
 	job "github.com/m-lab/etl-gardener/job-service"
+	"github.com/m-lab/etl-gardener/ops"
 	"github.com/m-lab/etl-gardener/reproc"
 	"github.com/m-lab/etl-gardener/rex"
 	"github.com/m-lab/etl-gardener/state"
@@ -371,6 +372,17 @@ func main() {
 		// This is new new "manager" mode, in which Gardener provides /job and /update apis
 		// for parsers to get work and report progress.
 		globalTracker = mustStandardTracker()
+
+		// TODO - refactor this block.
+		config := cloud.Config{
+			Project: env.Project,
+			Client:  http.DefaultClient}
+		bqConfig := NewBQConfig(config)
+		bqConfig.BQFinalDataset = "base_tables"
+		bqConfig.BQBatchDataset = "batch"
+		monitor := ops.StandardMonitor(bqConfig, globalTracker)
+		go monitor.Watch(mainCtx, 5*time.Second)
+
 		handler := tracker.NewHandler(globalTracker)
 		handler.Register(mux)
 
