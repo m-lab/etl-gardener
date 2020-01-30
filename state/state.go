@@ -377,11 +377,11 @@ func (ds *DatastoreSaver) FetchTask(ctx context.Context, expt string, name strin
 // WriteHTMLStatusTo writes HTML formatted task status.
 func WriteHTMLStatusTo(ctx context.Context, w io.Writer, project string, expt string) error {
 	ds, err := NewDatastoreSaver(ctx, project)
-	defer ds.Client.Close()
 	if err != nil {
 		fmt.Fprintln(w, "Error creating Datastore client:", err)
 		return err
 	}
+	defer ds.Client.Close()
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	tasks, err := ds.FetchAllTasks(ctx, expt)

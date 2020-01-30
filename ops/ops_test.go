@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/m-lab/go/logx"
+	"github.com/m-lab/go/rtx"
 
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/ops"
 	"github.com/m-lab/etl-gardener/tracker"
-	"github.com/m-lab/go/rtx"
 )
 
 func init() {

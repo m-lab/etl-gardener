@@ -4,6 +4,7 @@ package ops
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 
@@ -28,6 +29,13 @@ The package assumes that there is only one Action associated with a State, and
 that States with Actions are never operated on independently by some other agent,
 such as the Parser.  Should this cease to be true, then the claim mechanism
 should be moved into the tracker.
+
+Note that when Gardener restarts, it fetches the current state from datastore, and
+creates the monitor.  In the new monitor, none of the tracker items will have leases,
+so the Monitor will automatically restart the appropriate Actions.
+
+TODO - Actions must all be recoverable - that is, if Gardener is terminated during
+an Action, it should recover when Gardener restarts the action on startup.
 */
 
 var debug = logx.Debug
@@ -140,6 +148,7 @@ func (m *Monitor) Watch(ctx context.Context, period time.Duration) {
 	for {
 		select {
 		case <-ctx.Done():
+			log.Println("Monitor.Watch terminating")
 			return
 
 		case <-ticker.C:
