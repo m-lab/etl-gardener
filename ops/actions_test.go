@@ -2,7 +2,6 @@ package ops_test
 
 import (
 	"context"
-	"net/http"
 	"testing"
 	"time"
 
@@ -24,7 +23,7 @@ func TestTableUtils(t *testing.T) {
 	dryRun, _ := cloud.DryRunClient()
 	config := cloud.Config{
 		Project: project,
-		Client:  http.DefaultClient,
+		Client:  nil,
 		Options: []option.ClientOption{option.WithHTTPClient(dryRun)},
 	}
 	bqConfig := cloud.BQConfig{Config: config, BQFinalDataset: "final", BQBatchDataset: "batch"}

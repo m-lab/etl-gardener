@@ -376,7 +376,7 @@ func main() {
 		// TODO - refactor this block.
 		config := cloud.Config{
 			Project: env.Project,
-			Client:  http.DefaultClient}
+			Client:  nil}
 		bqConfig := NewBQConfig(config)
 		bqConfig.BQFinalDataset = "base_tables"
 		bqConfig.BQBatchDataset = "batch"
