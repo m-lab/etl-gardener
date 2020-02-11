@@ -57,10 +57,10 @@ func isTest() bool {
 	return flag.Lookup("test.v") != nil
 }
 
-func newStateFunc(state tracker.State) ActionFunc {
+func newStateFunc(state tracker.State, detail string) ActionFunc {
 	return func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
 		log.Println(j, state)
-		err := tk.SetStatus(j, state, "") // TODO support annotation.
+		err := tk.SetStatus(j, state, detail)
 		if err != nil {
 			log.Println(err)
 		}
@@ -76,7 +76,7 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 	}
 	m.AddAction(tracker.ParseComplete,
 		nil,
-		newStateFunc(tracker.Stabilizing),
+		newStateFunc(tracker.Stabilizing, "-"),
 		"Changing to Stabilizing")
 	m.AddAction(tracker.Stabilizing,
 		// TODO - determine whether we need to stabilize or can just go ahead with the dedup
@@ -84,7 +84,7 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 		func(ctx context.Context, j tracker.Job) bool {
 			return m.waitForStableTable(ctx, j) == nil
 		},
-		newStateFunc(tracker.Deduplicating),
+		newStateFunc(tracker.Deduplicating, "-"),
 		"Stabilizing")
 	m.AddAction(tracker.Deduplicating,
 		// HACK

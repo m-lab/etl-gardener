@@ -412,7 +412,7 @@ func (tr *Tracker) UpdateJob(job Job, state Status) error {
 	return nil
 }
 
-// SetStatus updates a job's state, and handles persistence.
+// SetStatus updates a job's state in memory.
 func (tr *Tracker) SetStatus(job Job, newState State, detail string) error {
 	status, err := tr.GetStatus(job)
 	if err != nil {
@@ -420,7 +420,9 @@ func (tr *Tracker) SetStatus(job Job, newState State, detail string) error {
 	}
 	status.State = newState
 	status.UpdateTime = time.Now()
-	status.UpdateDetail = detail
+	if detail != "-" {
+		status.UpdateDetail = detail
+	}
 	status.UpdateCount++
 	return tr.UpdateJob(job, status)
 }
