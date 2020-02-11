@@ -117,6 +117,10 @@ func TestTrackerAddDelete(t *testing.T) {
 		t.Fatal("Incorrect number of jobs", restore.NumJobs())
 	}
 
+	if tk.NumFailed() != 0 {
+		t.Error("Should not be any failed jobs")
+	}
+
 	completeJobs(t, tk, "500Jobs", "type", numJobs)
 
 	must(t, tk.Sync())
@@ -124,6 +128,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	if tk.NumJobs() != 0 {
 		t.Error("Job cleanup failed", tk.NumJobs())
 	}
+
 }
 
 // This tests basic Add and update of one jobs, and verifies
@@ -154,6 +159,15 @@ func TestUpdate(t *testing.T) {
 	err = tk.SetStatus(tracker.Job{"bucket", "JobToUpdate", "other-type", startDate}, tracker.Stabilizing, "")
 	if err != tracker.ErrJobNotFound {
 		t.Error(err, "should have been ErrJobNotFound")
+	}
+
+	if tk.NumFailed() != 0 {
+		t.Fatal("NumFailed should be 0", tk.NumFailed())
+	}
+
+	must(t, tk.SetJobError(job, "Fake Error"))
+	if tk.NumFailed() != 1 {
+		t.Fatal("NumFailed should be 1", tk.NumFailed())
 	}
 }
 

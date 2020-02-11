@@ -8,6 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"cloud.google.com/go/bigquery"
+	"github.com/googleapis/google-cloud-go-testing/bigquery/bqiface"
+	"github.com/m-lab/go/dataset"
 	"github.com/m-lab/go/logx"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -66,8 +69,6 @@ type ActionFunc = func(ctx context.Context, tr *tracker.Tracker, job tracker.Job
 
 // An Action describes an operation to be applied to jobs that meet the required condition.
 type Action struct {
-	Name string
-
 	state tracker.State // State that action applies to.
 
 	// condition or action may be nil if not required
@@ -80,10 +81,19 @@ type Action struct {
 	annotation string // Annotation to be used for UpdateDetail while applying Op
 }
 
+// Name returns the name of the state that the action applies to.
+func (a Action) Name() string {
+	return string(a.state)
+}
+
 // Monitor "owns" all jobs in the states that have actions.
 type Monitor struct {
-	bqconfig cloud.BQConfig           // static after creation
-	actions  map[tracker.State]Action // static after creation
+	// TODO add bqClient, to allow fakes for testing.
+	bqconfig cloud.BQConfig  // static after creation
+	batchDS  dataset.Dataset // static after creation
+	finalDS  dataset.Dataset // static after creation
+
+	actions map[tracker.State]Action // static after creation
 
 	tk *tracker.Tracker
 
@@ -112,8 +122,8 @@ func (m *Monitor) tryClaimJob(j tracker.Job) func() {
 }
 
 // AddAction adds a specific action to the Monitor.
-func (m *Monitor) AddAction(name string, state tracker.State, cond ConditionFunc, op ActionFunc, annotation string) {
-	m.actions[state] = Action{name, state, cond, op, annotation}
+func (m *Monitor) AddAction(state tracker.State, cond ConditionFunc, op ActionFunc, annotation string) {
+	m.actions[state] = Action{state, cond, op, annotation}
 }
 
 // applyAction tries to claim a job and apply an action.  Returns false if the job is already claimed.
@@ -133,7 +143,7 @@ func (m *Monitor) tryApplyAction(ctx context.Context, a Action, j tracker.Job, s
 			if a.action != nil {
 				start := time.Now()
 				a.action(ctx, m.tk, j, s)
-				actionDuration.WithLabelValues(a.Name).Observe(time.Since(start).Seconds())
+				actionDuration.WithLabelValues(a.Name()).Observe(time.Since(start).Seconds())
 			}
 		}
 	}(j, s, a, releaser)
@@ -167,8 +177,17 @@ func (m *Monitor) Watch(ctx context.Context, period time.Duration) {
 }
 
 // NewMonitor creates a Monitor with no Actions
-func NewMonitor(config cloud.BQConfig, tk *tracker.Tracker) *Monitor {
-	m := Monitor{bqconfig: config, actions: make(map[tracker.State]Action),
+func NewMonitor(clientCtx context.Context, config cloud.BQConfig, tk *tracker.Tracker) (*Monitor, error) {
+	// Code snippet adapted from dataset.NewDataset
+	c, err := bigquery.NewClient(clientCtx, config.BQProject, config.Options...)
+	if err != nil {
+		return nil, err
+	}
+	bqClient := bqiface.AdaptClient(c)
+	batchDS := dataset.Dataset{Dataset: bqClient.Dataset(config.BQBatchDataset), BqClient: bqClient}
+	finalDS := dataset.Dataset{Dataset: bqClient.Dataset(config.BQFinalDataset), BqClient: bqClient}
+
+	m := Monitor{bqconfig: config, batchDS: batchDS, finalDS: finalDS, actions: make(map[tracker.State]Action),
 		tk: tk, jobClaims: make(map[tracker.Job]struct{})}
-	return &m
+	return &m, nil
 }

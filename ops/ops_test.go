@@ -40,24 +40,25 @@ func TestMonitor_Watch(t *testing.T) {
 	tk.AddJob(tracker.NewJob("bucket", "exp2", "type", time.Now()))
 	tk.AddJob(tracker.NewJob("bucket", "exp2", "type2", time.Now()))
 
-	m := ops.NewMonitor(cloud.BQConfig{}, tk)
-	m.AddAction("Init", tracker.Init,
+	m, err := ops.NewMonitor(context.Background(), cloud.BQConfig{}, tk)
+	rtx.Must(err, "NewMonitor failure")
+	m.AddAction(tracker.Init,
 		nil,
 		newStateFunc(tracker.Parsing),
 		"Init")
-	m.AddAction("Parsing", tracker.Parsing,
+	m.AddAction(tracker.Parsing,
 		nil,
 		newStateFunc(tracker.ParseComplete),
 		"Parsing")
-	m.AddAction("ParseComplete", tracker.ParseComplete,
+	m.AddAction(tracker.ParseComplete,
 		nil,
 		newStateFunc(tracker.Stabilizing),
 		"PostProcessing")
-	m.AddAction("Stabilizing", tracker.Stabilizing,
+	m.AddAction(tracker.Stabilizing,
 		nil,
 		newStateFunc(tracker.Deduplicating),
 		"Checking for stability")
-	m.AddAction("Deduplicating", tracker.Deduplicating,
+	m.AddAction(tracker.Deduplicating,
 		nil,
 		newStateFunc(tracker.Complete),
 		"Deduplicating")

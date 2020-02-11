@@ -90,6 +90,7 @@ const (
 	Stabilizing   State = "stabilizing"
 	Deduplicating State = "deduplicating"
 	Joining       State = "joining"
+	Finishing     State = "finishing"
 	Failed        State = "failed"
 	// Note that GetStatus will never return Complete, as the
 	// Job is removed when SetJobState is called with Complete.
@@ -104,8 +105,10 @@ const (
 type Status struct {
 	HeartbeatTime time.Time // Time of last ETL heartbeat.
 
+	StartTime    time.Time // Time the job was initialized.
 	UpdateTime   time.Time // Time of last update.
 	UpdateDetail string    // Note from last update
+	UpdateCount  int       // Number of updates
 
 	State     State  // String defining the current state.
 	LastError string // The most recent error encountered.
@@ -132,11 +135,17 @@ func (s Status) isDone() bool {
 	return s.State == Complete
 }
 
+// Elapsed returns the elapsed time of the Job, rounded to nearest second.
+func (s Status) Elapsed() time.Duration {
+	return s.UpdateTime.Sub(s.StartTime).Round(time.Second)
+}
+
 // NewStatus creates a new Status with provided parameters.
 func NewStatus() Status {
 	return Status{
-		State:  Init,
-		errors: make([]string, 0, 1),
+		State:     Init,
+		errors:    make([]string, 0, 1),
+		StartTime: time.Now(),
 	}
 }
 
@@ -188,23 +197,27 @@ var jobsTemplate = template.Must(template.New("").Parse(
 	  border: 2px solid black;
 	}
 	</style>
-	<table style="width:80%%">
+	<table style="width:100%%">
 		<tr>
 			<th> Job </th>
+			<th> Elapsed </th>
 			<th> UpdateTime </th>
 			<th> State </th>
-			<th> UpdateDetail </th>
-			<th> LastError </th>
+			<th> Detail </th>
+			<th> Updates </th>
+			<th> Error </th>
 		</tr>
 	    {{range .Jobs}}
 		<tr>
 			<td> {{.Job}} </td>
+			<td> {{.Status.Elapsed}} </td>
 			<td> {{.Status.UpdateTime.Format "01/02~15:04:05"}} </td>
 			<td {{ if or (eq .Status.State "%s") (eq .Status.State "%s")}}
 					style="color: red;"
 					{{ else }}{{ end }}>
 			  {{.Status.State}} </td>
 			<td> {{.Status.UpdateDetail}} </td>
+			<td> {{.Status.UpdateCount}} </td>
 			<td> {{.Status.LastError}} </td>
 		</tr>
 	    {{end}}
@@ -224,9 +237,12 @@ func (jobs JobMap) WriteHTML(w io.Writer) error {
 	for j := range jobs {
 		pairs = append(pairs, Pair{Job: j, Status: jobs[j]})
 	}
+	// Order by age.
+	// TODO - color code by how recently there has been an update.  We generally
+	// expect some update every 5 to 10 minutes.
 	sort.Slice(pairs,
 		func(i, j int) bool {
-			return pairs[i].Status.UpdateTime.Before(pairs[j].Status.UpdateTime)
+			return pairs[i].Status.StartTime.Before(pairs[j].Status.StartTime)
 		})
 	jr := JobRep{Title: "Jobs", Jobs: pairs}
 
@@ -303,6 +319,17 @@ func (tr *Tracker) NumJobs() int {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 	return len(tr.jobs)
+}
+
+// NumFailed returns the number of failed jobs.
+func (tr *Tracker) NumFailed() int {
+	jobs := tr.GetAll()
+	counts := make(map[State]int, 20)
+
+	for _, s := range jobs {
+		counts[s.State]++
+	}
+	return counts[Failed]
 }
 
 // getJSON creates a json encoding of the job map.
@@ -385,7 +412,7 @@ func (tr *Tracker) UpdateJob(job Job, state Status) error {
 	return nil
 }
 
-// SetStatus updates a job's state, and handles persistence.
+// SetStatus updates a job's state in memory.
 func (tr *Tracker) SetStatus(job Job, newState State, detail string) error {
 	status, err := tr.GetStatus(job)
 	if err != nil {
@@ -393,7 +420,10 @@ func (tr *Tracker) SetStatus(job Job, newState State, detail string) error {
 	}
 	status.State = newState
 	status.UpdateTime = time.Now()
-	status.UpdateDetail = detail
+	if detail != "-" {
+		status.UpdateDetail = detail
+	}
+	status.UpdateCount++
 	return tr.UpdateJob(job, status)
 }
 
@@ -415,6 +445,8 @@ func (tr *Tracker) SetJobError(job Job, errString string) error {
 	}
 	status.UpdateTime = time.Now()
 	status.LastError = errString
+	// For now, we set state to failed.  We may want something different in future.
+	status.State = Failed
 	status.errors = append(status.errors, errString)
 	return tr.UpdateJob(job, status)
 }
@@ -428,6 +460,8 @@ func (tr *Tracker) GetAll() JobMap {
 	for k, v := range tr.jobs {
 		if tr.expirationTime > 0 && time.Since(v.UpdateTime) > tr.expirationTime {
 			// Remove any obsolete jobs.
+			metrics.TasksInFlight.Dec()
+			log.Println("Deleting stale job", k)
 			delete(tr.jobs, k)
 		} else {
 			m[k] = v
