@@ -40,7 +40,8 @@ func TestMonitor_Watch(t *testing.T) {
 	tk.AddJob(tracker.NewJob("bucket", "exp2", "type", time.Now()))
 	tk.AddJob(tracker.NewJob("bucket", "exp2", "type2", time.Now()))
 
-	m := ops.NewMonitor(cloud.BQConfig{}, tk)
+	m, err := ops.NewMonitor(context.Background(), cloud.BQConfig{}, tk)
+	rtx.Must(err, "NewMonitor failure")
 	m.AddAction(tracker.Init,
 		nil,
 		newStateFunc(tracker.Parsing),

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"cloud.google.com/go/bigquery"
 	"github.com/googleapis/google-cloud-go-testing/bigquery/bqiface"
 	"github.com/m-lab/go/dataset"
 
@@ -42,16 +41,8 @@ func (m *Monitor) waitForStableTable(ctx context.Context, j tracker.Job) error {
 	log.Println("Stabilizing:", j)
 	// Wait for the streaming buffer to be nil.
 
-	// Code snippet adapted from dataset.NewDataset
-	c, err := bigquery.NewClient(ctx, m.bqconfig.BQProject, m.bqconfig.Options...)
-	if err != nil {
-		return err
-	}
-	bqClient := bqiface.AdaptClient(c)
-	ds := dataset.Dataset{Dataset: bqClient.Dataset(m.bqconfig.BQBatchDataset), BqClient: bqClient}
-
-	src := TemplateTable(j, &ds)
-	err = bq.WaitForStableTable(ctx, src)
+	src := TemplateTable(j, &m.batchDS)
+	err := bq.WaitForStableTable(ctx, src)
 	if err != nil {
 		// When testing, we expect to get ErrTableNotFound here.
 		if err != state.ErrTableNotFound {
@@ -78,14 +69,18 @@ func newStateFunc(state tracker.State) ActionFunc {
 
 // NewStandardMonitor creates the standard monitor that handles several state transitions.
 // TODO Finishing action is incomplete.
-func NewStandardMonitor(config cloud.BQConfig, tk *tracker.Tracker) *Monitor {
-	m := NewMonitor(config, tk)
+func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.Tracker) (*Monitor, error) {
+	m, err := NewMonitor(ctx, config, tk)
+	if err != nil {
+		return nil, err
+	}
 	m.AddAction(tracker.ParseComplete,
 		nil,
 		newStateFunc(tracker.Stabilizing),
 		"Changing to Stabilizing")
 	m.AddAction(tracker.Stabilizing,
-		// HACK
+		// TODO - determine whether we need to stabilize or can just go ahead with the dedup
+		// query, which should capture the streaming buffer.
 		func(ctx context.Context, j tracker.Job) bool {
 			return m.waitForStableTable(ctx, j) == nil
 		},
@@ -131,18 +126,11 @@ func NewStandardMonitor(config cloud.BQConfig, tk *tracker.Tracker) *Monitor {
 			tk.SetStatus(j, tracker.Complete, "delete took "+time.Since(start).Round(100*time.Millisecond).String())
 		},
 		"Deleting template table")
-	return m
+	return m, nil
 }
 
 func (m *Monitor) deleteSrc(ctx context.Context, j tracker.Job) error {
-	c, err := bigquery.NewClient(ctx, m.bqconfig.BQProject, m.bqconfig.Options...)
-	if err != nil {
-		return err
-	}
-	bqClient := bqiface.AdaptClient(c)
-	ds := dataset.Dataset{Dataset: bqClient.Dataset(m.bqconfig.BQBatchDataset), BqClient: bqClient}
-
-	src := TemplateTable(j, &ds)
+	src := TemplateTable(j, &m.batchDS)
 
 	delCtx, cf := context.WithTimeout(ctx, time.Minute)
 	defer cf()
@@ -151,25 +139,17 @@ func (m *Monitor) deleteSrc(ctx context.Context, j tracker.Job) error {
 
 func (m *Monitor) dedup(ctx context.Context, j tracker.Job) error {
 	// Launch the dedup request, and save the JobID
-	// Code snippet adapted from dataset.NewDataset
-	c, err := bigquery.NewClient(ctx, m.bqconfig.BQProject, m.bqconfig.Options...)
-	if err != nil {
-		return err
-	}
-	bqClient := bqiface.AdaptClient(c)
-	ds := dataset.Dataset{Dataset: bqClient.Dataset(m.bqconfig.BQBatchDataset), BqClient: bqClient}
-
-	src := TemplateTable(j, &ds)
-	dest := PartitionedTable(j, &ds)
+	src := TemplateTable(j, &m.batchDS)
+	dest := PartitionedTable(j, &m.batchDS)
 
 	log.Println("Dedupping", src.FullyQualifiedName())
 	// TODO move Dedup??
 	// TODO - implement backoff?
-	bqJob, err := bq.Dedup(ctx, &ds, src.TableID(), dest)
+	bqJob, err := bq.Dedup(ctx, &m.batchDS, src.TableID(), dest)
 	if err != nil {
 		if err == io.EOF {
 			if isTest() {
-				bqJob, err = ds.BqClient.JobFromID(ctx, "fakeJobID")
+				bqJob, err = m.batchDS.BqClient.JobFromID(ctx, "fakeJobID")
 				return nil
 			}
 		} else {

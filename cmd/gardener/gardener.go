@@ -380,7 +380,8 @@ func main() {
 		bqConfig := NewBQConfig(config)
 		bqConfig.BQFinalDataset = "base_tables"
 		bqConfig.BQBatchDataset = "batch"
-		monitor := ops.StandardMonitor(bqConfig, globalTracker)
+		monitor, err := ops.NewStandardMonitor(mainCtx, bqConfig, globalTracker)
+		rtx.Must(err, "NewStandardMonitor failed")
 		go monitor.Watch(mainCtx, 5*time.Second)
 
 		handler := tracker.NewHandler(globalTracker)
