@@ -76,22 +76,22 @@ func newStateFunc(state tracker.State) ActionFunc {
 	}
 }
 
-// StandardMonitor creates the standard monitor that handles several state transitions.
-// It is currently incomplete.
-func StandardMonitor(config cloud.BQConfig, tk *tracker.Tracker) *Monitor {
+// NewStandardMonitor creates the standard monitor that handles several state transitions.
+// TODO Finishing action is incomplete.
+func NewStandardMonitor(config cloud.BQConfig, tk *tracker.Tracker) *Monitor {
 	m := NewMonitor(config, tk)
-	m.AddAction("ParseComplete", tracker.ParseComplete,
+	m.AddAction(tracker.ParseComplete,
 		nil,
 		newStateFunc(tracker.Stabilizing),
 		"Changing to Stabilizing")
-	m.AddAction("Stabilizing", tracker.Stabilizing,
+	m.AddAction(tracker.Stabilizing,
 		// HACK
 		func(ctx context.Context, j tracker.Job) bool {
 			return m.waitForStableTable(ctx, j) == nil
 		},
 		newStateFunc(tracker.Deduplicating),
 		"Stabilizing")
-	m.AddAction("Deduplicating", tracker.Deduplicating,
+	m.AddAction(tracker.Deduplicating,
 		// HACK
 		nil,
 		func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
@@ -111,10 +111,11 @@ func StandardMonitor(config cloud.BQConfig, tk *tracker.Tracker) *Monitor {
 			tk.SetStatus(j, tracker.Finishing, "dedup took "+time.Since(start).Round(100*time.Millisecond).String())
 		},
 		"Deduplicating")
-	m.AddAction("Deleting", tracker.Finishing,
+	m.AddAction(tracker.Finishing,
 		nil,
 		func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
 			start := time.Now()
+			// TODO - need to copy partition to final location.
 			// TODO - pass tracker to dedup, so dedup can record the JobID.
 			err := m.deleteSrc(ctx, j)
 			if err != nil {

@@ -66,8 +66,6 @@ type ActionFunc = func(ctx context.Context, tr *tracker.Tracker, job tracker.Job
 
 // An Action describes an operation to be applied to jobs that meet the required condition.
 type Action struct {
-	Name string
-
 	state tracker.State // State that action applies to.
 
 	// condition or action may be nil if not required
@@ -78,6 +76,11 @@ type Action struct {
 	action ActionFunc
 
 	annotation string // Annotation to be used for UpdateDetail while applying Op
+}
+
+// Name returns the name of the state that the action applies to.
+func (a Action) Name() string {
+	return string(a.state)
 }
 
 // Monitor "owns" all jobs in the states that have actions.
@@ -113,8 +116,8 @@ func (m *Monitor) tryClaimJob(j tracker.Job) func() {
 }
 
 // AddAction adds a specific action to the Monitor.
-func (m *Monitor) AddAction(name string, state tracker.State, cond ConditionFunc, op ActionFunc, annotation string) {
-	m.actions[state] = Action{name, state, cond, op, annotation}
+func (m *Monitor) AddAction(state tracker.State, cond ConditionFunc, op ActionFunc, annotation string) {
+	m.actions[state] = Action{state, cond, op, annotation}
 }
 
 // applyAction tries to claim a job and apply an action.  Returns false if the job is already claimed.
@@ -134,7 +137,7 @@ func (m *Monitor) tryApplyAction(ctx context.Context, a Action, j tracker.Job, s
 			if a.action != nil {
 				start := time.Now()
 				a.action(ctx, m.tk, j, s)
-				actionDuration.WithLabelValues(a.Name).Observe(time.Since(start).Seconds())
+				actionDuration.WithLabelValues(a.Name()).Observe(time.Since(start).Seconds())
 			}
 		}
 	}(j, s, a, releaser)

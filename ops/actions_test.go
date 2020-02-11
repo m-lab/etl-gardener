@@ -57,18 +57,19 @@ func TestStandardMonitor(t *testing.T) {
 	tk.AddJob(tracker.NewJob("bucket", "exp2", "type", time.Now()))
 	tk.AddJob(tracker.NewJob("bucket", "exp2", "type2", time.Now()))
 
-	m := ops.StandardMonitor(cloud.BQConfig{}, tk)
-	m.AddAction("Init", tracker.Init,
+	m := ops.NewStandardMonitor(cloud.BQConfig{}, tk)
+	// We add some new actions in place of the Parser activity.
+	m.AddAction(tracker.Init,
 		nil,
 		newStateFunc(tracker.Parsing),
 		"Init")
-	m.AddAction("Parsing", tracker.Parsing,
+	m.AddAction(tracker.Parsing,
 		nil,
 		newStateFunc(tracker.ParseComplete),
 		"Parsing")
 
 	// Substitute, since we don't want to use real bq backend.
-	m.AddAction("Stabilizing", tracker.Stabilizing,
+	m.AddAction(tracker.Stabilizing,
 		nil,
 		newStateFunc(tracker.Deduplicating),
 		"Checking for stability")
