@@ -87,8 +87,9 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 
 // NewJobService creates the default job service.
 func NewJobService(tk *tracker.Tracker, bucket string, startDate time.Time) (*Service, error) {
+	// TODO construct the jobs from storage bucket.
+	// TODO add bigquery destination table, based on project and data type.
 	types := []tracker.Job{
-		// Hack for sandbox only.
 		tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "ndt5"},
 		tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "tcpinfo"},
 	}
