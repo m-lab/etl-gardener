@@ -6,6 +6,7 @@ import (
 	"context"
 	"log"
 	"testing"
+	"time"
 
 	"cloud.google.com/go/datastore"
 	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
@@ -39,7 +40,8 @@ func TestWithDatastore(t *testing.T) {
 	}
 
 	log.Println("Calling Sync")
-	must(t, tk.Sync())
+	_, err = tk.Sync(time.Time{})
+	must(t, err)
 	// Check that the sync (and InitTracker) work.
 	restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0)
 	must(t, err)
@@ -50,7 +52,8 @@ func TestWithDatastore(t *testing.T) {
 
 	completeJobs(t, tk, "500Jobs", "type", numJobs)
 
-	must(t, tk.Sync())
+	_, err = tk.Sync(time.Time{})
+	must(t, err)
 
 	if tk.NumJobs() != 0 {
 		t.Error("Job cleanup failed", tk.NumJobs())
