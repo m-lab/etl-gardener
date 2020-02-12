@@ -280,7 +280,7 @@ type saverStruct struct {
 }
 
 func loadFromDatastore(ctx context.Context, client dsiface.Client, key *datastore.Key) (saverStruct, error) {
-	state := saverStruct{Jobs: make([]byte, 0, 100000)}
+	state := saverStruct{Jobs: make([]byte, 0)}
 	if client == nil {
 		return state, ErrClientIsNil
 	}
@@ -366,14 +366,14 @@ func (tr *Tracker) NumFailed() int {
 // Returns time last saved, which may or may not be updated.
 func (tr *Tracker) Sync(lastSave time.Time) (time.Time, error) {
 	jobs, lastInit, lastMod := tr.GetState()
-	jsonJobs, err := jobs.MarshalJSON()
-	if err != nil {
-		return lastSave, err
-	}
-
 	if lastMod.Before(lastSave) {
 		logx.Debug.Println("Skipping save", lastMod, lastSave)
 		return lastSave, nil
+	}
+
+	jsonJobs, err := jobs.MarshalJSON()
+	if err != nil {
+		return lastSave, err
 	}
 
 	// Save the full state.
