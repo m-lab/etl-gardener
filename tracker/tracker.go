@@ -36,6 +36,9 @@ type Job struct {
 	Experiment string
 	Datatype   string
 	Date       time.Time
+
+	// BigQuery destination table
+	DestinationTable string `json:",omitempty"`
 }
 
 // NewJob creates a new job object.
