@@ -45,8 +45,13 @@ func TestConcurrentUpdates(t *testing.T) {
 	// Execute large number of concurrent updates and heartbeats.
 	for i := 0; i < changes; i++ {
 		go func(i int) {
-			k := tracker.Job{"bucket", "ConcurrentUpdates", "type",
-				startDate.Add(time.Duration(24*rand.Intn(jobs)) * time.Hour)}
+			k := tracker.Job{
+				Bucket:           "bucket",
+				Experiment:       "ConcurrentUpdates",
+				Datatype:         "type",
+				Date:             startDate.Add(time.Duration(24*rand.Intn(jobs)) * time.Hour),
+				DestinationTable: "project.dataset.table",
+			}
 			if i%5 == 0 {
 				err := tk.SetStatus(k, tracker.State(fmt.Sprintf("State:%d", i)), "")
 				if err != nil {
@@ -70,11 +75,12 @@ func TestConcurrentUpdates(t *testing.T) {
 
 	// If verbose, dump the final state.
 	if testing.Verbose() {
-		must(t, tk.Sync())
+		_, err := tk.Sync(time.Time{})
+		must(t, err)
 		restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0)
 		must(t, err)
 
-		status := restore.GetAll()
+		status, _, _ := restore.GetState()
 		for k, v := range status {
 			log.Println(k, v)
 		}
