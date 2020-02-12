@@ -164,7 +164,7 @@ func (m *Monitor) Watch(ctx context.Context, period time.Duration) {
 		case <-ticker.C:
 			debug.Println("===== Monitor Loop Starting =====")
 			// These jobs may be deleted by other calls to GetAll, so tk.UpdateJob may fail.
-			jobs := m.tk.GetAll()
+			jobs, _, _ := m.tk.GetState()
 			// Iterate over the job/status map...
 			for j, s := range jobs {
 				// If job is in a state that has an associated action...
