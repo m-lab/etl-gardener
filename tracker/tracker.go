@@ -43,8 +43,19 @@ type Job struct {
 }
 
 // NewJob creates a new job object.
+// DEPRECATED
 // NB:  The date will be converted to UTC and truncated to day boundary!
-func NewJob(bucket, exp, typ string, date time.Time, table string) Job {
+func NewJob(bucket, exp, typ string, date time.Time) Job {
+	return Job{Bucket: bucket,
+		Experiment: exp,
+		Datatype:   typ,
+		Date:       date.UTC().Truncate(24 * time.Hour),
+	}
+}
+
+// NewJobWithDestination creates a new job object.
+// NB:  The date will be converted to UTC and truncated to day boundary!
+func NewJobWithDestination(bucket, exp, typ string, date time.Time, table string) Job {
 	return Job{Bucket: bucket,
 		Experiment:       exp,
 		Datatype:         typ,

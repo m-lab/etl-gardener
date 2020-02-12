@@ -33,7 +33,7 @@ func TestTableUtils(t *testing.T) {
 	bqClient := bqiface.AdaptClient(c)
 	ds := dataset.Dataset{Dataset: bqClient.Dataset(bqConfig.BQBatchDataset), BqClient: bqClient}
 
-	j := tracker.NewJob("bucket", "exp", "type", time.Date(2019, 12, 1, 0, 0, 0, 0, time.UTC), "")
+	j := tracker.NewJobWithDestination("bucket", "exp", "type", time.Date(2019, 12, 1, 0, 0, 0, 0, time.UTC), "")
 	src := ops.TemplateTable(j, &ds)
 	dest := ops.PartitionedTable(j, &ds)
 
@@ -52,9 +52,9 @@ func TestStandardMonitor(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	tk, err := tracker.InitTracker(ctx, nil, nil, 0, 0)
 	rtx.Must(err, "tk init")
-	tk.AddJob(tracker.NewJob("bucket", "exp", "type", time.Now(), ""))
-	tk.AddJob(tracker.NewJob("bucket", "exp2", "type", time.Now(), ""))
-	tk.AddJob(tracker.NewJob("bucket", "exp2", "type2", time.Now(), ""))
+	tk.AddJob(tracker.NewJobWithDestination("bucket", "exp", "type", time.Now(), ""))
+	tk.AddJob(tracker.NewJobWithDestination("bucket", "exp2", "type", time.Now(), ""))
+	tk.AddJob(tracker.NewJobWithDestination("bucket", "exp2", "type2", time.Now(), ""))
 
 	m, err := ops.NewStandardMonitor(context.Background(), cloud.BQConfig{}, tk)
 	rtx.Must(err, "NewMonitor failure")

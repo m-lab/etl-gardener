@@ -38,7 +38,7 @@ func createJobs(t *testing.T, tk *tracker.Tracker, exp string, typ string, n int
 	date := startDate
 	for i := 0; i < n; i++ {
 		go func(date time.Time) {
-			job := tracker.NewJob("bucket", exp, typ, date, "project.dataset.table")
+			job := tracker.NewJobWithDestination("bucket", exp, typ, date, "project.dataset.table")
 			err := tk.AddJob(job)
 			if err != nil {
 				t.Error(err)
@@ -199,7 +199,7 @@ func TestNonexistentJobAccess(t *testing.T) {
 		t.Error("Should be ErrJobNotFound", err)
 	}
 
-	js := tracker.NewJob("bucket", "exp", "type", startDate, "project.dataset.table")
+	js := tracker.NewJobWithDestination("bucket", "exp", "type", startDate, "project.dataset.table")
 	must(t, tk.AddJob(js))
 
 	err = tk.AddJob(js)
@@ -225,7 +225,7 @@ func TestJobMapHTML(t *testing.T) {
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)
 	}
-	js := tracker.NewJob("bucket", "exp", "type", startDate, "project.dataset.table")
+	js := tracker.NewJobWithDestination("bucket", "exp", "type", startDate, "project.dataset.table")
 	must(t, tk.AddJob(js))
 
 	buf := bytes.Buffer{}
@@ -245,7 +245,7 @@ func TestExpiration(t *testing.T) {
 	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 5*time.Millisecond, 10*time.Millisecond)
 	must(t, err)
 
-	job := tracker.NewJob("bucket", "exp", "type", startDate, "project.dataset.table")
+	job := tracker.NewJobWithDestination("bucket", "exp", "type", startDate, "project.dataset.table")
 	err = tk.SetStatus(job, tracker.Parsing, "")
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)
