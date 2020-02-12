@@ -26,7 +26,7 @@ func testSetup(t *testing.T) (url.URL, *tracker.Tracker, tracker.Job) {
 	}
 
 	date := time.Date(2019, 01, 02, 0, 0, 0, 0, time.UTC)
-	job := tracker.NewJob("bucket", "exp", "type", date)
+	job := tracker.NewJob("bucket", "exp", "type", date, "project.dataset.table")
 	mux := http.NewServeMux()
 	h := tracker.NewHandler(tk)
 	h.Register(mux)
