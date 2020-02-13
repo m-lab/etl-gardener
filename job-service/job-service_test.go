@@ -16,6 +16,7 @@ import (
 	"github.com/go-test/deep"
 	job "github.com/m-lab/etl-gardener/job-service"
 	"github.com/m-lab/etl-gardener/tracker"
+	"github.com/m-lab/go/bqx"
 	"github.com/m-lab/go/rtx"
 )
 
@@ -182,7 +183,8 @@ func TestJobClient(t *testing.T) {
 
 	// set up a fake gardener service.
 	fg := fakeGardener{t: t, jobs: make([]tracker.Job, 0)}
-	fg.AddJob(tracker.NewJobWithDestination("foobar", "ndt", "ndt5", time.Date(2019, 01, 01, 0, 0, 0, 0, time.UTC), ""))
+	fg.AddJob(tracker.NewJobWithDestination(
+		"foobar", "ndt", "ndt5", time.Date(2019, 01, 01, 0, 0, 0, 0, time.UTC), bqx.PDT{}))
 	gardener := httptest.NewServer(&fg)
 	defer gardener.Close()
 	gURL, err := url.Parse(gardener.URL)

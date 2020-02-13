@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+
+	"github.com/m-lab/go/logx"
 )
 
 // UpdateURL makes an update request URL.
@@ -75,6 +77,7 @@ func (h *Handler) heartbeat(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if err := h.tracker.Heartbeat(job); err != nil {
+		logx.Debug.Printf("%v %+v %v\n", err, job, job.DestinationTable)
 		resp.WriteHeader(http.StatusGone)
 		return
 	}
