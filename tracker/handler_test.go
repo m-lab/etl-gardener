@@ -2,14 +2,18 @@ package tracker_test
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
 
+	"github.com/m-lab/go/logx"
+
 	"cloud.google.com/go/datastore"
 	"github.com/m-lab/etl-gardener/tracker"
+	"github.com/m-lab/go/bqx"
 	"github.com/m-lab/go/cloudtest/dsfake"
 )
 
@@ -26,7 +30,8 @@ func testSetup(t *testing.T) (url.URL, *tracker.Tracker, tracker.Job) {
 	}
 
 	date := time.Date(2019, 01, 02, 0, 0, 0, 0, time.UTC)
-	job := tracker.NewJobWithDestination("bucket", "exp", "type", date, "project.dataset.table")
+	// TODO - for now, PDT is ignored by json, so it must be empty.
+	job := tracker.NewJobWithDestination("bucket", "exp", "type", date, bqx.PDT{})
 	mux := http.NewServeMux()
 	h := tracker.NewHandler(tk)
 	h.Register(mux)
@@ -53,6 +58,7 @@ func expectPost(t *testing.T, url *url.URL, code int) {
 	resp, err := http.Post(url.String(), "application/x-www-form-urlencoded", nil)
 	must(t, err)
 	if resp.StatusCode != code {
+		log.Output(2, resp.Status)
 		t.Fatalf("Expected %s, got %s", http.StatusText(code), resp.Status)
 	}
 	resp.Body.Close()
@@ -88,6 +94,7 @@ func TestUpdateHandler(t *testing.T) {
 }
 
 func TestHeartbeatHandler(t *testing.T) {
+	logx.LogxDebug.Set("true")
 	server, tk, job := testSetup(t)
 
 	url := tracker.HeartbeatURL(server, job)

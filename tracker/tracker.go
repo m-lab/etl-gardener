@@ -27,6 +27,7 @@ import (
 	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
 
 	"github.com/m-lab/etl-gardener/metrics"
+	"github.com/m-lab/go/bqx"
 	"github.com/m-lab/go/logx"
 )
 
@@ -39,7 +40,7 @@ type Job struct {
 	Date       time.Time
 
 	// BigQuery destination table
-	DestinationTable string `json:",omitempty"`
+	DestinationTable bqx.PDT `json:"-"`
 }
 
 // NewJob creates a new job object.
@@ -55,7 +56,7 @@ func NewJob(bucket, exp, typ string, date time.Time) Job {
 
 // NewJobWithDestination creates a new job object.
 // NB:  The date will be converted to UTC and truncated to day boundary!
-func NewJobWithDestination(bucket, exp, typ string, date time.Time, table string) Job {
+func NewJobWithDestination(bucket, exp, typ string, date time.Time, table bqx.PDT) Job {
 	return Job{Bucket: bucket,
 		Experiment:       exp,
 		Datatype:         typ,
