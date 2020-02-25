@@ -338,7 +338,7 @@ func (at *AnnotatedTable) checkAlmostAsBig(ctx context.Context, other *Annotated
 	// Check that receiver table contains at least 95% as many tests as
 	// other table.  This may be fewer if the destination table still has dups.
 	if thisDetail.TestCount < otherDetail.TestCount {
-		log.Printf("Warning - fewer tests: %s(%d) < %s(%d)\n",
+		log.Printf("Warning_fewer_tests: %s(%d) < %s(%d)\n",
 			at.Table.FullyQualifiedName(), thisDetail.TestCount,
 			other.Table.FullyQualifiedName(), otherDetail.TestCount)
 	}
