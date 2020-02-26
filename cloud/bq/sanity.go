@@ -180,7 +180,7 @@ func GetTableDetail(ctx context.Context, dsExt *dataset.Dataset, table bqiface.T
 
 	tracerouteQuery := fmt.Sprintf(`
 		#standardSQL
-		SELECT COUNT(DISTINCT ParseInfo.TaskFileName) AS TestCount, COUNT(DISTINCT ParseInfo.TaskFileName) AS TaskFileCount
+		SELECT COUNT(DISTINCT Parseinfo.Filename) AS TestCount, COUNT(DISTINCT ParseInfo.TaskFileName) AS TaskFileCount
     FROM `+"`%s.%s`"+`
 		%s  -- where clause`,
 		dataset, tableName, where)
@@ -335,10 +335,8 @@ func (at *AnnotatedTable) checkAlmostAsBig(ctx context.Context, other *Annotated
 		return ErrTooFewTasks
 	}
 
-	// Check that receiver table contains at least 95% as many tests as
-	// other table.  This may be fewer if the destination table still has dups.
 	if thisDetail.TestCount < otherDetail.TestCount {
-		log.Printf("Warning - fewer tests: %s(%d) < %s(%d)\n",
+		log.Printf("Warning_fewer_tests: %s(%d) < %s(%d)\n",
 			at.Table.FullyQualifiedName(), thisDetail.TestCount,
 			other.Table.FullyQualifiedName(), otherDetail.TestCount)
 	}
