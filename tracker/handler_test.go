@@ -13,9 +13,13 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/m-lab/etl-gardener/tracker"
-	"github.com/m-lab/go/bqx"
 	"github.com/m-lab/go/cloudtest/dsfake"
 )
+
+func init() {
+	// Always prepend the filename and line number.
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
 
 func testSetup(t *testing.T) (url.URL, *tracker.Tracker, tracker.Job) {
 	client := dsfake.NewClient()
@@ -31,7 +35,7 @@ func testSetup(t *testing.T) (url.URL, *tracker.Tracker, tracker.Job) {
 
 	date := time.Date(2019, 01, 02, 0, 0, 0, 0, time.UTC)
 	// TODO - for now, PDT is ignored by json, so it must be empty.
-	job := tracker.NewJobWithDestination("bucket", "exp", "type", date, bqx.PDT{})
+	job := tracker.NewJob("bucket", "exp", "type", date)
 	mux := http.NewServeMux()
 	h := tracker.NewHandler(tk)
 	h.Register(mux)

@@ -11,7 +11,6 @@ import (
 	"cloud.google.com/go/datastore"
 	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
 
-	"github.com/m-lab/go/bqx"
 	"github.com/m-lab/go/cloudtest/dsfake"
 	"github.com/m-lab/go/logx"
 
@@ -39,9 +38,8 @@ func createJobs(t *testing.T, tk *tracker.Tracker, exp string, typ string, n int
 	date := startDate
 	for i := 0; i < n; i++ {
 		go func(date time.Time) {
-			job := tracker.NewJobWithDestination(
+			job := tracker.NewJob(
 				"bucket", exp, typ, date,
-				bqx.PDT{"project", "dataset", "table"},
 			)
 			err := tk.AddJob(job)
 			if err != nil {
@@ -58,9 +56,8 @@ func completeJobs(t *testing.T, tk *tracker.Tracker, exp string, typ string, n i
 	// Delete all jobs.
 	date := startDate
 	for i := 0; i < n; i++ {
-		job := tracker.NewJobWithDestination(
+		job := tracker.NewJob(
 			"bucket", exp, typ, date,
-			bqx.PDT{"project", "dataset", "table"},
 		)
 		err := tk.SetStatus(job, tracker.Complete, "")
 
@@ -87,11 +84,11 @@ func cleanup(client dsiface.Client, key *datastore.Key) error {
 }
 
 func TestJobPath(t *testing.T) {
-	withType := tracker.Job{"bucket", "exp", "type", startDate, bqx.PDT{"project", "dataset", "table"}}
+	withType := tracker.Job{"bucket", "exp", "type", startDate}
 	if withType.Path() != "gs://bucket/exp/type/"+startDate.Format("2006/01/02/") {
 		t.Error("wrong path:", withType.Path())
 	}
-	withoutType := tracker.Job{"bucket", "exp", "", startDate, bqx.PDT{"project", "dataset", "table"}}
+	withoutType := tracker.Job{"bucket", "exp", "", startDate}
 	if withoutType.Path() != "gs://bucket/exp/"+startDate.Format("2006/01/02/") {
 		t.Error("wrong path", withType.Path())
 	}
@@ -158,7 +155,7 @@ func TestUpdate(t *testing.T) {
 
 	createJobs(t, tk, "JobToUpdate", "type", 1)
 
-	job := tracker.Job{"bucket", "JobToUpdate", "type", startDate, bqx.PDT{"project", "dataset", "table"}}
+	job := tracker.Job{"bucket", "JobToUpdate", "type", startDate}
 	must(t, tk.SetStatus(job, tracker.Parsing, ""))
 	must(t, tk.SetStatus(job, tracker.Stabilizing, ""))
 
@@ -170,7 +167,7 @@ func TestUpdate(t *testing.T) {
 		t.Error("Incorrect job state", job)
 	}
 
-	err = tk.SetStatus(tracker.Job{"bucket", "JobToUpdate", "other-type", startDate, bqx.PDT{"project", "dataset", "table"}}, tracker.Stabilizing, "")
+	err = tk.SetStatus(tracker.Job{"bucket", "JobToUpdate", "other-type", startDate}, tracker.Stabilizing, "")
 	if err != tracker.ErrJobNotFound {
 		t.Error(err, "should have been ErrJobNotFound")
 	}
@@ -206,7 +203,7 @@ func TestNonexistentJobAccess(t *testing.T) {
 		t.Error("Should be ErrJobNotFound", err)
 	}
 
-	js := tracker.NewJobWithDestination("bucket", "exp", "type", startDate, bqx.PDT{"project", "dataset", "table"})
+	js := tracker.NewJob("bucket", "exp", "type", startDate)
 	must(t, tk.AddJob(js))
 
 	err = tk.AddJob(js)
@@ -232,7 +229,7 @@ func TestJobMapHTML(t *testing.T) {
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)
 	}
-	js := tracker.NewJobWithDestination("bucket", "exp", "type", startDate, bqx.PDT{"project", "dataset", "table"})
+	js := tracker.NewJob("bucket", "exp", "type", startDate)
 	must(t, tk.AddJob(js))
 
 	buf := bytes.Buffer{}
@@ -252,7 +249,7 @@ func TestExpiration(t *testing.T) {
 	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 5*time.Millisecond, 10*time.Millisecond)
 	must(t, err)
 
-	job := tracker.NewJobWithDestination("bucket", "exp", "type", startDate, bqx.PDT{"project", "dataset", "table"})
+	job := tracker.NewJob("bucket", "exp", "type", startDate)
 	err = tk.SetStatus(job, tracker.Parsing, "")
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)

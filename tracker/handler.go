@@ -77,7 +77,7 @@ func (h *Handler) heartbeat(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if err := h.tracker.Heartbeat(job); err != nil {
-		logx.Debug.Printf("%v %+v %v\n", err, job, job.DestinationTable)
+		logx.Debug.Printf("%v %+v\n", err, job)
 		resp.WriteHeader(http.StatusGone)
 		return
 	}
