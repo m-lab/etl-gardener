@@ -18,6 +18,7 @@ import (
 	"io"
 	"log"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,9 +39,18 @@ type Job struct {
 	Experiment string
 	Datatype   string
 	Date       time.Time
+}
 
-	// BigQuery destination table
-	DestinationTable bqx.PDT `json:"-"`
+// JobWithTarget specifies a type/date job, and a destination
+// table or GCS prefix
+type JobWithTarget struct {
+	Job
+	// One of these two fields indicates the destination,
+	// either a BigQuery table, or a GCS bucket/prefix string.
+	// Initially, both fields are suppressed in json to avoid breaking
+	// existing ETL clients.
+	TargetTable           bqx.PDT `json:"-,omitempty"`
+	TargetBucketAndPrefix string  `json:"-,omitempty"` // gs://bucket/prefix
 }
 
 // NewJob creates a new job object.
@@ -54,19 +64,20 @@ func NewJob(bucket, exp, typ string, date time.Time) Job {
 	}
 }
 
-// NewJobWithDestination creates a new job object.
-// NB:  The date will be converted to UTC and truncated to day boundary!
-func NewJobWithDestination(bucket, exp, typ string, date time.Time, table bqx.PDT) Job {
-	return Job{Bucket: bucket,
-		Experiment:       exp,
-		Datatype:         typ,
-		Date:             date.UTC().Truncate(24 * time.Hour),
-		DestinationTable: table,
+// Target adds a Target to the job, returning a JobWithTarget
+func (j Job) Target(target string) (JobWithTarget, error) {
+	if strings.HasPrefix(target, "gs://") {
+		return JobWithTarget{Job: j, TargetBucketAndPrefix: target}, nil
 	}
+	pdt, err := bqx.ParsePDT(target)
+	if err != nil {
+		return JobWithTarget{}, err
+	}
+	return JobWithTarget{Job: j, TargetTable: pdt}, nil
 }
 
 // Path returns the GCS path prefix to the job data.
-func (j *Job) Path() string {
+func (j Job) Path() string {
 	if len(j.Datatype) > 0 {
 		return fmt.Sprintf("gs://%s/%s/%s/%s",
 			j.Bucket, j.Experiment, j.Datatype, j.Date.Format("2006/01/02/"))
@@ -76,7 +87,7 @@ func (j *Job) Path() string {
 }
 
 // Marshal marshals the job to json.
-func (j *Job) Marshal() []byte {
+func (j Job) Marshal() []byte {
 	b, _ := json.Marshal(j)
 	return b
 }

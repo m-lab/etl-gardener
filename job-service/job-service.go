@@ -27,8 +27,8 @@ type Service struct {
 	startDate time.Time // The date to restart at.
 	date      time.Time // The date currently being dispatched.
 
-	jobTypes  []tracker.Job // The job prefixes to be iterated through.
-	nextIndex int           // index of TypeSource to dispatch next.
+	jobSpecs  []tracker.JobWithTarget // The job prefixes to be iterated through.
+	nextIndex int                     // index of TypeSource to dispatch next.
 }
 
 func (svc *Service) advanceDate() {
@@ -41,13 +41,13 @@ func (svc *Service) advanceDate() {
 }
 
 // NextJob returns a tracker.Job to dispatch.
-func (svc *Service) NextJob() tracker.Job {
+func (svc *Service) NextJob() tracker.JobWithTarget {
 	svc.lock.Lock()
 	defer svc.lock.Unlock()
-	if svc.nextIndex >= len(svc.jobTypes) {
+	if svc.nextIndex >= len(svc.jobSpecs) {
 		svc.advanceDate()
 	}
-	job := svc.jobTypes[svc.nextIndex]
+	job := svc.jobSpecs[svc.nextIndex]
 	job.Date = svc.date
 	svc.nextIndex++
 	return job
@@ -63,7 +63,7 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 	}
 	job := svc.NextJob()
 	if svc.tracker != nil {
-		err := svc.tracker.AddJob(job)
+		err := svc.tracker.AddJob(job.Job)
 		if err != nil {
 			log.Println(err, job)
 			resp.WriteHeader(http.StatusInternalServerError)
@@ -89,13 +89,12 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 func NewJobService(tk *tracker.Tracker, bucket string, startDate time.Time) (*Service, error) {
 	// TODO construct the jobs from storage bucket.
 	// TODO add bigquery destination table, based on project and data type.
-	types := []tracker.Job{
-		tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "ndt5"},
-		tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "tcpinfo"},
-	}
+	j1, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "ndt5"}.Target("gs://")
+	j2, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "tcpinfo"}.Target("gs://")
+	specs := []tracker.JobWithTarget{j1, j2}
 
 	start := startDate.UTC().Truncate(24 * time.Hour)
-	return &Service{tracker: tk, startDate: start, date: start, jobTypes: types}, nil
+	return &Service{tracker: tk, startDate: start, date: start, jobSpecs: specs}, nil
 }
 
 func post(ctx context.Context, url url.URL) ([]byte, int, error) {
@@ -117,11 +116,11 @@ func post(ctx context.Context, url url.URL) ([]byte, int, error) {
 }
 
 // NextJob is used by clients to fetch the next job from the service.
-func NextJob(ctx context.Context, base url.URL) (tracker.Job, error) {
+func NextJob(ctx context.Context, base url.URL) (tracker.JobWithTarget, error) {
 	jobURL := base
 	jobURL.Path = "job"
 
-	job := tracker.Job{}
+	job := tracker.JobWithTarget{}
 
 	b, status, err := post(ctx, jobURL)
 	if err != nil {
