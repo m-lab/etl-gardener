@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"sync"
 	"time"
 
@@ -88,9 +89,11 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 // NewJobService creates the default job service.
 func NewJobService(tk *tracker.Tracker, bucket string, startDate time.Time) (*Service, error) {
 	// TODO construct the jobs from storage bucket.
-	// TODO add bigquery destination table, based on project and data type.
-	j1, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "ndt5"}.Target("gs://")
-	j2, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "tcpinfo"}.Target("gs://")
+	// The service cycles through the jobSpecs.  Each spec is a job (bucket/exp/type) and a target GCS bucket or BQ table.
+	// TODO get the destination bucket from a command line flag.
+	targetBase := os.Getenv("TARGET_BASE")
+	j1, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "ndt5"}.Target(targetBase + "/ndt/ndt5")
+	j2, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "tcpinfo"}.Target(targetBase + "/ndt/tcpinfo")
 	specs := []tracker.JobWithTarget{j1, j2}
 
 	start := startDate.UTC().Truncate(24 * time.Hour)
