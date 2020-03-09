@@ -13,7 +13,6 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/m-lab/etl-gardener/tracker"
-	"github.com/m-lab/go/bqx"
 	"github.com/m-lab/go/cloudtest/dsfake"
 )
 
@@ -47,11 +46,10 @@ func TestConcurrentUpdates(t *testing.T) {
 	for i := 0; i < changes; i++ {
 		go func(i int) {
 			k := tracker.Job{
-				Bucket:           "bucket",
-				Experiment:       "ConcurrentUpdates",
-				Datatype:         "type",
-				Date:             startDate.Add(time.Duration(24*rand.Intn(jobs)) * time.Hour),
-				DestinationTable: bqx.PDT{"project", "dataset", "table"},
+				Bucket:     "bucket",
+				Experiment: "ConcurrentUpdates",
+				Datatype:   "type",
+				Date:       startDate.Add(time.Duration(24*rand.Intn(jobs)) * time.Hour),
 			}
 			if i%5 == 0 {
 				err := tk.SetStatus(k, tracker.State(fmt.Sprintf("State:%d", i)), "")
