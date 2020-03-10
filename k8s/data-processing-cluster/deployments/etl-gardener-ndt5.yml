@@ -49,7 +49,7 @@ spec:
         - name: TASKFILE_BUCKET
           value: "archive-measurement-lab"
         - name: START_DATE
-          value: "20190513"
+          value: "20200201" # TODO(soltesz): restore after normalization is complete "20190513"
         - name: DATE_SKIP  # Should be 0 for normal operation
           value: "0"
         - name: TASK_FILE_SKIP # Should be 0 for normal operation
