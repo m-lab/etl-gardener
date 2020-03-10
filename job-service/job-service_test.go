@@ -8,17 +8,24 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"sync"
 	"testing"
 	"time"
 
 	"bou.ke/monkey"
 	"github.com/go-test/deep"
-	job "github.com/m-lab/etl-gardener/job-service"
+	"github.com/m-lab/etl-gardener/job-service"
+	jobservice "github.com/m-lab/etl-gardener/job-service"
 	"github.com/m-lab/etl-gardener/tracker"
-	"github.com/m-lab/go/bqx"
 	"github.com/m-lab/go/rtx"
 )
+
+func init() {
+	// Always prepend the filename and line number.
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	os.Setenv("TARGET_BASE", "gs://fakebucket")
+}
 
 func TestService_NextJob(t *testing.T) {
 	// This allows predictable behavior from time.Since in the advanceDate function.
@@ -28,37 +35,42 @@ func TestService_NextJob(t *testing.T) {
 	defer monkey.Unpatch(time.Now)
 
 	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)
-	svc, _ := job.NewJobService(nil, "fake-bucket", start)
+	svc, _ := jobservice.NewJobService(nil, "fake-bucket", start)
 	j := svc.NextJob()
-	w := tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}
+	w, err := tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}.Target("gs://fakebucket/ndt/ndt5")
+	rtx.Must(err, "")
 	diff := deep.Equal(w, j)
 	if diff != nil {
-		t.Fatal(diff)
+		t.Error(diff)
 	}
 	j = svc.NextJob()
-	w = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Truncate(24 * time.Hour)}
+	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Truncate(24 * time.Hour)}.Target("gs://fakebucket/ndt/tcpinfo")
+	rtx.Must(err, "")
 	diff = deep.Equal(w, j)
 	if diff != nil {
-		t.Fatal(diff)
+		t.Error(diff)
 	}
 	j = svc.NextJob()
-	w = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}
+	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}.Target("gs://fakebucket/ndt/ndt5")
+	rtx.Must(err, "")
 	diff = deep.Equal(w, j)
 	if diff != nil {
-		t.Fatal(diff)
+		t.Error(diff)
 	}
 	j = svc.NextJob()
-	w = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}
+	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}.Target("gs://fakebucket/ndt/tcpinfo")
+	rtx.Must(err, "")
 	diff = deep.Equal(w, j)
 	if diff != nil {
-		t.Fatal(diff)
+		t.Error(diff)
 	}
 	// Wrap
 	j = svc.NextJob()
-	w = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}
+	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}.Target("gs://fakebucket/ndt/ndt5")
+	rtx.Must(err, "")
 	diff = deep.Equal(w, j)
 	if diff != nil {
-		t.Fatal(diff)
+		t.Error(diff)
 	}
 }
 
@@ -139,13 +151,18 @@ type fakeGardener struct {
 	t *testing.T // for logging
 
 	lock       sync.Mutex
-	jobs       []tracker.Job
+	jobs       []tracker.JobWithTarget
 	heartbeats int
 	updates    int
 }
 
-func (g *fakeGardener) AddJob(job tracker.Job) {
-	g.jobs = append(g.jobs, job)
+func (g *fakeGardener) AddJob(job tracker.Job, target string) error {
+	jt, err := job.Target(target)
+	if err != nil {
+		return err
+	}
+	g.jobs = append(g.jobs, jt)
+	return nil
 }
 
 func (g *fakeGardener) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -182,22 +199,23 @@ func TestJobClient(t *testing.T) {
 	defer cancel()
 
 	// set up a fake gardener service.
-	fg := fakeGardener{t: t, jobs: make([]tracker.Job, 0)}
-	fg.AddJob(tracker.NewJobWithDestination(
-		"foobar", "ndt", "ndt5", time.Date(2019, 01, 01, 0, 0, 0, 0, time.UTC), bqx.PDT{}))
+	fg := fakeGardener{t: t, jobs: make([]tracker.JobWithTarget, 0)}
+	spec := tracker.NewJob(
+		"foobar", "ndt", "ndt5", time.Date(2019, 01, 01, 0, 0, 0, 0, time.UTC))
+	rtx.Must(fg.AddJob(spec, "a.b.c"), "add job")
 	gardener := httptest.NewServer(&fg)
 	defer gardener.Close()
 	gURL, err := url.Parse(gardener.URL)
 	rtx.Must(err, "bad url")
 
-	j, err := job.NextJob(ctx, *gURL)
+	j, err := jobservice.NextJob(ctx, *gURL)
 	rtx.Must(err, "next job")
 
 	if j.Path() != "gs://foobar/ndt/ndt5/2019/01/01/" {
 		t.Error(j.Path())
 	}
 
-	j, err = job.NextJob(ctx, *gURL)
+	j, err = jobservice.NextJob(ctx, *gURL)
 	if err.Error() != "Internal Server Error" {
 		t.Fatal("Should be internal server error", err)
 	}
