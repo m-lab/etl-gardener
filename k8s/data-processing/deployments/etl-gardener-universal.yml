@@ -43,7 +43,7 @@ spec:
         - name: ARCHIVE_BUCKET  # This will eventually be provided through k8s configmap.
           value: "archive-measurement-lab"
         - name: TARGET_BASE # The target BQ project or GCS bucket for parsing.
-          value: {{TARGET_BASE}}
+          value: "{{TARGET_BASE}}"
         - name: GIT_COMMIT
           value: "{{GIT_COMMIT}}"
         - name: PROJECT
