@@ -17,6 +17,7 @@ PROJECT=${PROJECT:?Please provide project id: $USAGE}
 CLUSTER=${CLUSTER:?Please provide cluster name: $USAGE}
 DATE_SKIP=${DATE_SKIP:-"0"}  # Number of dates to skip between each processed date (for sandbox).
 TASK_FILE_SKIP=${TASK_FILE_SKIP:-"0"}  # Number of files to skip between each processed file (for sandbox).
+TARGET_BASE=${TARGET_BASE:-"gs://"}  # Destination base for universal gardener job service.
 
 # Apply templates
 CFG=/tmp/${CLUSTER}-${PROJECT}.yml
