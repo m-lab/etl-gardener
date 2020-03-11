@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/http/pprof"
 	"os"
 	"runtime"
 	"strconv"
@@ -270,17 +269,12 @@ func Status(w http.ResponseWriter, r *http.Request) {
 // Used for testing.
 var statusServerAddr string
 
+// Setup ONLY status server, to allow easy access to status
+// with minimal security exposure (e.g. no pprof).
 func startStatusServer() *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", Status)
 	mux.HandleFunc("/status", Status)
-
-	// Also allow pprof through the status server.
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 	// Start up the http server.
 	server := &http.Server{
