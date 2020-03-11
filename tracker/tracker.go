@@ -47,10 +47,8 @@ type JobWithTarget struct {
 	Job
 	// One of these two fields indicates the destination,
 	// either a BigQuery table, or a GCS bucket/prefix string.
-	// Initially, both fields are suppressed in json to avoid breaking
-	// existing ETL clients.
-	TargetTable           bqx.PDT `json:"-,omitempty"`
-	TargetBucketAndPrefix string  `json:"-,omitempty"` // gs://bucket/prefix
+	TargetTable           bqx.PDT `json:",omitempty"`
+	TargetBucketAndPrefix string  `json:",omitempty"` // gs://bucket/prefix
 }
 
 // NewJob creates a new job object.
