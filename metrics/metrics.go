@@ -65,6 +65,7 @@ var (
 	)
 
 	// TasksInFlight maintains a count of the number of tasks in flight.
+	// TODO consider deprecating this and using Started - Completed.
 	//
 	// Provides metrics:
 	//   gardener_tasks_in_flight

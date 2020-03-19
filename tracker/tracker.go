@@ -62,15 +62,17 @@ func NewJob(bucket, exp, typ string, date time.Time) Job {
 	}
 }
 
+// These are used to limit the number of unique error strings in the FailCount metric.
 var errStringLock sync.Mutex
 var errStrings = make(map[string]struct{})
+var maxUniqueErrStrings = 20
 
 func (j Job) failureMetric(errString string) {
 	errStringLock.Lock()
 	defer errStringLock.Unlock()
 	if _, ok := errStrings[errString]; ok {
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
-	} else if len(errStrings) < 20 {
+	} else if len(errStrings) < maxUniqueErrStrings {
 		errStrings[errString] = struct{}{}
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
 	} else {
