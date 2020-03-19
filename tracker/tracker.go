@@ -446,7 +446,7 @@ func (tr *Tracker) AddJob(job Job) error {
 	// TODO - should call this JobsInFlight, to avoid confusion with Tasks in parser.
 	metrics.TasksInFlight.Inc()
 	tr.jobs[job] = status
-	metrics.StateDate.WithLabelValues(job.Datatype, string(status.State)).Set(float64(job.Date.Unix()))
+	metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(status.State)).Set(float64(job.Date.Unix()))
 	return nil
 }
 
@@ -460,7 +460,7 @@ func (tr *Tracker) UpdateJob(job Job, state Status) error {
 		return ErrJobNotFound
 	}
 
-	metrics.StateDate.WithLabelValues(job.Datatype, string(state.State)).Set(float64(job.Date.Unix()))
+	metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(state.State)).Set(float64(job.Date.Unix()))
 	tr.lastModified = time.Now()
 	if state.isDone() {
 		delete(tr.jobs, job)

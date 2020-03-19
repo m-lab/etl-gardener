@@ -88,7 +88,7 @@ var (
 			Name: "gardener_state_date",
 			Help: "Most recent date for each state.",
 		},
-		[]string{"datatype", "state"},
+		[]string{"experiment", "datatype", "state"},
 	)
 
 	// StateTimeHistogram tracks the time spent in each state.  Not necessary to label data type, as

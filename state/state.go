@@ -246,7 +246,7 @@ func (t *Task) Save(ctx context.Context) error {
 		return ErrNoSaver
 	}
 	t.UpdateTime = time.Now()
-	metrics.StateDate.WithLabelValues(t.Experiment, StateNames[t.State]).Set(float64(t.Date.Unix()))
+	metrics.StateDate.WithLabelValues(t.Experiment, "", StateNames[t.State]).Set(float64(t.Date.Unix()))
 	return t.saver.SaveTask(ctx, *t)
 }
 
@@ -256,7 +256,7 @@ func (t *Task) Update(ctx context.Context, st State) error {
 	metrics.StateTimeHistogram.WithLabelValues(StateNames[t.State]).Observe(duration.Seconds())
 	t.State = st
 	t.UpdateTime = time.Now()
-	metrics.StateDate.WithLabelValues(t.Experiment, StateNames[t.State]).Set(float64(t.Date.Unix()))
+	metrics.StateDate.WithLabelValues(t.Experiment, "", StateNames[t.State]).Set(float64(t.Date.Unix()))
 	if t.saver == nil {
 		return ErrNoSaver
 	}
