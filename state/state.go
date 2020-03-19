@@ -340,12 +340,14 @@ loop:
 			}
 		}
 	}
+	metrics.CompletedCount.WithLabelValues(t.Experiment, "").Inc()
 	if t.ErrMsg == "" {
 		// Only delete the state entry if it completed without error.
 		t.Delete(ctx)
-		metrics.CompletedCount.WithLabelValues("todo - add exp type").Inc()
 	} else {
-		metrics.CompletedCount.WithLabelValues(StateNames[t.State] + " Error").Inc()
+		// TODO Is this double counting?
+		metrics.FailCount.WithLabelValues(t.Experiment, "",
+			StateNames[t.State]+" Error").Inc()
 	}
 	term.Done()
 }

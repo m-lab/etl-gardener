@@ -12,7 +12,7 @@ var (
 	// Provides metrics:
 	//   gardener_started_total{experiment}
 	// Example usage:
-	// metrics.StartedCount.WithLabelValues("sidestream").Inc()
+	// metrics.StartedCount.WithLabelValues(exp, dt).Inc()
 	StartedCount = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "gardener_started_total",
@@ -26,7 +26,7 @@ var (
 	// Provides metrics:
 	//   gardener_completed_total{experiment}
 	// Example usage:
-	// metrics.CompletedCount.WithLabelValues("sidestream").Inc()
+	// metrics.CompletedCount.WithLabelValues(exp, dt).Inc()
 	CompletedCount = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "gardener_completed_total",
@@ -41,7 +41,7 @@ var (
 	// Provides metrics:
 	//   gardener_fail_total{status}
 	// Example usage:
-	// metrics.FailCount.WithLabelValues("BadTableName").Inc()
+	// metrics.FailCount.WithLabelValues(exp, dt, "BadTableName").Inc()
 	FailCount = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "gardener_fail_total",
@@ -55,7 +55,7 @@ var (
 	// Provides metrics:
 	//   gardener_warning_total{status}
 	// Example usage:
-	// metrics.WarningCount.WithLabelValues("funny xyz").Inc()
+	// metrics.WarningCount.WithLabelValues(exp, dt, "funny xyz").Inc()
 	WarningCount = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "gardener_warning_total",
@@ -69,7 +69,7 @@ var (
 	// Provides metrics:
 	//   gardener_tasks_in_flight
 	// Example usage:
-	// metrics.TasksInFlight.Add(1)
+	// metrics.TasksInFlight.WithLabelValues(exp, dt).Inc
 	TasksInFlight = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "gardener_tasks_in_flight",
@@ -83,7 +83,7 @@ var (
 	// Provides metrics:
 	//   gardener_state_date
 	// Example usage:
-	// metrics.StateDate.WithLabelValues(datatype, StateNames[t.State]).Observe(time.Now())
+	// metrics.StateDate.WithLabelValues(exp, dt, StateNames[t.State]).Observe(time.Now())
 	StateDate = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "gardener_state_date",
@@ -96,7 +96,7 @@ var (
 	// we currently have separate gardener deployments for each type.
 	// Usage example:
 	//   metrics.StateTimeHistogram.WithLabelValues(
-	//           datatype, StateName[state]).Observe(time.Since(start).Seconds())
+	//           exp, dt, StateName[state]).Observe(time.Since(start).Seconds())
 	StateTimeHistogram = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name: "gardener_state_time_histogram",
@@ -118,7 +118,7 @@ var (
 	//   gardener_files_count{year="...", le="..."}
 	// Usage example:
 	//   metrics.FilesPerDateHistogram.WithLabelValues(
-	//           "ndt5", "2011").Observe(files)
+	//           "ndt", "ndt5", "2011").Observe(files)
 	FilesPerDateHistogram = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name: "gardener_files",
@@ -143,7 +143,7 @@ var (
 	//   gardener_bytes_count{year="...", le="..."}
 	// Usage example:
 	//   metrics.BytesPerDateHistogram.WithLabelValues(
-	//           "ndt5", "2011").Observe(bytes)
+	//           "ndt", "ndt5", "2011").Observe(bytes)
 	BytesPerDateHistogram = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name: "gardener_bytes",

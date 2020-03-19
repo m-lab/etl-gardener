@@ -81,7 +81,7 @@ func (rex *ReprocessingExecutor) Next(ctx context.Context, t *state.Task, termin
 		// if it does?  Also check if it has a streaming buffer?
 		// Nothing to do.
 		t.Update(ctx, state.Queuing)
-		metrics.StartedCount.WithLabelValues("sidestream").Inc()
+		metrics.StartedCount.WithLabelValues(t.Experiment, "").Inc()
 
 	case state.Queuing:
 		// TODO - handle zero task case.

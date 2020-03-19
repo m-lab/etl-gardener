@@ -7,9 +7,9 @@ import (
 )
 
 func TestLintMetrics(t *testing.T) {
-	StartedCount.WithLabelValues("exp", "type", "status"
-	CompletedCount.WithLabelValues("exp", "type", "status"
-	FailCount.WithLabelValues("exp", "type", "status"
+	StartedCount.WithLabelValues("exp", "type")
+	CompletedCount.WithLabelValues("exp", "type")
+	FailCount.WithLabelValues("exp", "type", "status")
 	WarningCount.WithLabelValues("exp", "type", "status")
 	StateDate.WithLabelValues("exp", "type", "x")
 	StateTimeHistogram.WithLabelValues("exp", "type", "x")
