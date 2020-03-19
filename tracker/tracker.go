@@ -62,6 +62,17 @@ func NewJob(bucket, exp, typ string, date time.Time) Job {
 	}
 }
 
+func (j Job) failureMetric(errString string) {
+	if _, ok := errStrings[errString]; ok {
+		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
+	} else if len(errStrings) < 20 {
+		errStrings[errString] = struct{}{}
+		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
+	} else {
+		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, "generic").Inc()
+	}
+}
+
 // Target adds a Target to the job, returning a JobWithTarget
 func (j Job) Target(target string) (JobWithTarget, error) {
 	if strings.HasPrefix(target, "gs://") {
@@ -142,8 +153,9 @@ type Status struct {
 	UpdateDetail string    // Note from last update
 	UpdateCount  int       // Number of updates
 
-	State     State  // String defining the current state.
-	LastError string // The most recent error encountered.
+	State               State     // String defining the current state.
+	LastStateChangeTime time.Time // Used for computing time in state.
+	LastError           string    // The most recent error encountered.
 
 	// Note that these are not persisted
 	errors []string // all errors related to the job.
@@ -444,7 +456,7 @@ func (tr *Tracker) AddJob(job Job) error {
 	tr.lastJob = job
 	tr.lastModified = time.Now()
 	// TODO - should call this JobsInFlight, to avoid confusion with Tasks in parser.
-	metrics.TasksInFlight.Inc()
+	metrics.TasksInFlight.WithLabelValues(job.Experiment, "").Inc()
 	tr.jobs[job] = status
 	metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(status.State)).Set(float64(job.Date.Unix()))
 	return nil
@@ -464,7 +476,7 @@ func (tr *Tracker) UpdateJob(job Job, state Status) error {
 	tr.lastModified = time.Now()
 	if state.isDone() {
 		delete(tr.jobs, job)
-		metrics.TasksInFlight.Dec()
+		metrics.TasksInFlight.WithLabelValues(job.Experiment, "").Dec()
 	} else {
 		tr.jobs[job] = state
 	}
@@ -477,10 +489,21 @@ func (tr *Tracker) SetStatus(job Job, newState State, detail string) error {
 	if err != nil {
 		return err
 	}
+	if newState != status.State {
+		timeInState := time.Since(status.LastStateChangeTime)
+		metrics.StateTimeHistogram.WithLabelValues(job.Experiment, job.Datatype, string(status.State)).Observe(timeInState.Seconds())
+		status.LastStateChangeTime = time.Now()
+	}
 	status.State = newState
 	status.UpdateTime = time.Now()
 	if detail != "-" {
 		status.UpdateDetail = detail
+	}
+	if newState == ParseComplete {
+		// TODO enable this once we have file or byte counts.
+		// Update the metrics, even if there is an error, since the files were submitted to the queue already.
+		// metrics.FilesPerDateHistogram.WithLabelValues(job.Datatype, strconv.Itoa(job.Date.Year())).Observe(float64(fileCount))
+		// metrics.BytesPerDateHistogram.WithLabelValues(t.Experiment, strconv.Itoa(t.Date.Year())).Observe(float64(byteCount))
 	}
 	status.UpdateCount++
 	return tr.UpdateJob(job, status)
@@ -496,6 +519,8 @@ func (tr *Tracker) Heartbeat(job Job) error {
 	return tr.UpdateJob(job, status)
 }
 
+var errStrings = make(map[string]struct{})
+
 // SetJobError updates a job's error fields, and handles persistence.
 func (tr *Tracker) SetJobError(job Job, errString string) error {
 	status, err := tr.GetStatus(job)
@@ -506,6 +531,8 @@ func (tr *Tracker) SetJobError(job Job, errString string) error {
 	status.LastError = errString
 	// For now, we set state to failed.  We may want something different in future.
 	status.State = Failed
+	job.failureMetric(errString)
+
 	status.errors = append(status.errors, errString)
 	return tr.UpdateJob(job, status)
 }
@@ -519,7 +546,7 @@ func (tr *Tracker) GetState() (JobMap, Job, time.Time) {
 	for k, v := range tr.jobs {
 		if tr.expirationTime > 0 && time.Since(v.UpdateTime) > tr.expirationTime {
 			// Remove any obsolete jobs.
-			metrics.TasksInFlight.Dec()
+			metrics.TasksInFlight.WithLabelValues(k.Experiment, "").Dec()
 			log.Println("Deleting stale job", k)
 			tr.lastModified = time.Now()
 			delete(tr.jobs, k)

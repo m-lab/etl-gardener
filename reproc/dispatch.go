@@ -236,13 +236,13 @@ queueLoop:
 		t := tasks[i]
 		if t.ErrInfo != "" || t.ErrMsg != "" {
 			log.Println("Skipping:", t.Name, t.ErrMsg, t.ErrInfo)
-			metrics.FailCount.WithLabelValues("skipping task with error").Inc()
+			metrics.FailCount.WithLabelValues(t.Experiment, "", "skipping task with error").Inc()
 			continue
 		}
 		if t.Queue != "" {
 			if strings.TrimSpace(t.Queue) != t.Queue {
 				log.Println("invalid queue name", t)
-				metrics.FailCount.WithLabelValues("bad queue name").Inc()
+				metrics.FailCount.WithLabelValues(t.Experiment, "", "bad queue name").Inc()
 				// Skip updating task date, as this entry is somehow corrupted.
 				continue
 			}
@@ -253,7 +253,7 @@ queueLoop:
 				th.StartTask(ctx, t)
 			} else {
 				log.Println("Queue", t.Queue, "already in use.  Skipping", t)
-				metrics.FailCount.WithLabelValues("queue not available").Inc()
+				metrics.FailCount.WithLabelValues(t.Experiment, "", "queue not available").Inc()
 				continue
 			}
 		} else {

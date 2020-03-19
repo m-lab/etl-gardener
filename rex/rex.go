@@ -87,8 +87,8 @@ func (rex *ReprocessingExecutor) Next(ctx context.Context, t *state.Task, termin
 		// TODO - handle zero task case.
 		fileCount, byteCount, err := rex.queue(ctx, t)
 		// Update the metrics, even if there is an error, since the files were submitted to the queue already.
-		metrics.FilesPerDateHistogram.WithLabelValues(strconv.Itoa(t.Date.Year())).Observe(float64(fileCount))
-		metrics.BytesPerDateHistogram.WithLabelValues(strconv.Itoa(t.Date.Year())).Observe(float64(byteCount))
+		metrics.FilesPerDateHistogram.WithLabelValues(t.Experiment, "", strconv.Itoa(t.Date.Year())).Observe(float64(fileCount))
+		metrics.BytesPerDateHistogram.WithLabelValues(t.Experiment, "", strconv.Itoa(t.Date.Year())).Observe(float64(byteCount))
 		if err != nil {
 			// SetError also pushes to datastore, like Update(ctx, )
 			t.SetError(ctx, err, "rex.queue")
@@ -208,7 +208,7 @@ func (rex *ReprocessingExecutor) waitForParsing(ctx context.Context, t *state.Ta
 		// in case there is some bad network condition, service failure,
 		// or perhaps the queue_pusher is down.
 		log.Println(err)
-		metrics.WarningCount.WithLabelValues("IsEmptyError").Inc()
+		metrics.WarningCount.WithLabelValues(t.Experiment, "", "IsEmptyError").Inc()
 		// TODO update metric
 		time.Sleep(time.Duration(60+rand.Intn(120)) * time.Second)
 	}

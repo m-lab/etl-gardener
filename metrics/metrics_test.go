@@ -7,13 +7,13 @@ import (
 )
 
 func TestLintMetrics(t *testing.T) {
-	StartedCount.WithLabelValues("x")
-	CompletedCount.WithLabelValues("x")
-	FailCount.WithLabelValues("x")
-	WarningCount.WithLabelValues("x")
+	StartedCount.WithLabelValues("exp", "type", "status"
+	CompletedCount.WithLabelValues("exp", "type", "status"
+	FailCount.WithLabelValues("exp", "type", "status"
+	WarningCount.WithLabelValues("exp", "type", "status")
 	StateDate.WithLabelValues("exp", "type", "x")
-	StateTimeHistogram.WithLabelValues("x")
-	FilesPerDateHistogram.WithLabelValues("x")
-	BytesPerDateHistogram.WithLabelValues("x")
+	StateTimeHistogram.WithLabelValues("exp", "type", "x")
+	FilesPerDateHistogram.WithLabelValues("exp", "type", "x")
+	BytesPerDateHistogram.WithLabelValues("exp", "type", "x")
 	promtest.LintMetrics(nil) // Log warnings only.
 }

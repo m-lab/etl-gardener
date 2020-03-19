@@ -40,7 +40,7 @@ import (
 )
 
 var (
-	jobExpirationTime = flag.Duration("job_expiration_time", 4*time.Hour, "Time after which stale jobs will be purged")
+	jobExpirationTime = flag.Duration("job_expiration_time", 24*time.Hour, "Time after which stale jobs will be purged")
 	shutdownTimeout   = flag.Duration("shutdown_timeout", 1*time.Minute, "Graceful shutdown time allowance")
 	statusPort        = flag.String("status_port", ":0", "The public interface port where status (and pprof) will be published")
 
