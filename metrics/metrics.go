@@ -82,13 +82,13 @@ var (
 	// Provides metrics:
 	//   gardener_state_date
 	// Example usage:
-	// metrics.StateDate.WithLabelValues(StateNames[t.State]).Observe(time.Now())
+	// metrics.StateDate.WithLabelValues(datatype, StateNames[t.State]).Observe(time.Now())
 	StateDate = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "gardener_state_date",
 			Help: "Most recent date for each state.",
 		},
-		[]string{"type", "state"},
+		[]string{"datatype", "state"},
 	)
 
 	// StateTimeHistogram tracks the time spent in each state.  Not necessary to label data type, as

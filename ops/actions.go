@@ -61,7 +61,7 @@ func isTest() bool {
 func newStateFunc(state tracker.State, detail string) ActionFunc {
 	return func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
 		log.Println(j, state)
-		metrics.StateDate.WithLabelValues(j.Datatype, string(state)).SetToCurrentTime()
+		metrics.StateDate.WithLabelValues(j.Datatype, string(state)).Set(float64(j.Date.Unix()))
 		err := tk.SetStatus(j, state, detail)
 		if err != nil {
 			log.Println(err)
@@ -129,7 +129,6 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 			}
 			s.State = tracker.Complete
 			log.Println(j, s.State, time.Since(start).Round(100*time.Millisecond))
-			metrics.StateDate.WithLabelValues(j.Datatype, string(tracker.Complete)).SetToCurrentTime()
 			err = tk.SetStatus(j, tracker.Complete, "delete took "+time.Since(start).Round(100*time.Millisecond).String())
 			if err != nil {
 				log.Println(err)
