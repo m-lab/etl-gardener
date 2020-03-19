@@ -367,6 +367,9 @@ func InitTracker(
 		log.Println(err, key)
 		jobMap = make(JobMap, 100)
 	}
+	for j := range jobMap {
+		metrics.TasksInFlight.WithLabelValues(j.Experiment).Inc()
+	}
 	t := Tracker{client: client, dsKey: key, lastModified: time.Now(), lastJob: lastJob, jobs: jobMap, expirationTime: expirationTime}
 	if client != nil && saveInterval > 0 {
 		t.saveEvery(saveInterval)
