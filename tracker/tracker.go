@@ -368,6 +368,7 @@ func InitTracker(
 		jobMap = make(JobMap, 100)
 	}
 	for j := range jobMap {
+		metrics.StartedCount.WithLabelValues(j.Experiment, j.Datatype).Inc()
 		metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Inc()
 	}
 	t := Tracker{client: client, dsKey: key, lastModified: time.Now(), lastJob: lastJob, jobs: jobMap, expirationTime: expirationTime}
@@ -463,8 +464,9 @@ func (tr *Tracker) AddJob(job Job) error {
 
 	tr.lastJob = job
 	tr.lastModified = time.Now()
+	metrics.StartedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
 	// TODO - should call this JobsInFlight, to avoid confusion with Tasks in parser.
-	metrics.TasksInFlight.WithLabelValues(job.Experiment, "").Inc()
+	metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype).Inc()
 	tr.jobs[job] = status
 	metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(status.State)).Set(float64(job.Date.Unix()))
 	return nil
@@ -484,7 +486,8 @@ func (tr *Tracker) UpdateJob(job Job, state Status) error {
 	tr.lastModified = time.Now()
 	if state.isDone() {
 		delete(tr.jobs, job)
-		metrics.TasksInFlight.WithLabelValues(job.Experiment, "").Dec()
+		metrics.CompletedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
+		metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype).Dec()
 	} else {
 		tr.jobs[job] = state
 	}
@@ -549,15 +552,16 @@ func (tr *Tracker) GetState() (JobMap, Job, time.Time) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 	m := make(JobMap, len(tr.jobs))
-	for k, v := range tr.jobs {
-		if tr.expirationTime > 0 && time.Since(v.UpdateTime) > tr.expirationTime {
+	for j, s := range tr.jobs {
+		if tr.expirationTime > 0 && time.Since(s.UpdateTime) > tr.expirationTime {
 			// Remove any obsolete jobs.
-			metrics.TasksInFlight.WithLabelValues(k.Experiment, "").Dec()
-			log.Println("Deleting stale job", k)
+			metrics.CompletedCount.WithLabelValues(j.Experiment, j.Datatype).Inc()
+			metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Dec()
+			log.Println("Deleting stale job", j)
 			tr.lastModified = time.Now()
-			delete(tr.jobs, k)
+			delete(tr.jobs, j)
 		} else {
-			m[k] = v
+			m[j] = s
 		}
 	}
 	return m, tr.lastJob, tr.lastModified
