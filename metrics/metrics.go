@@ -88,20 +88,7 @@ var (
 			Name: "gardener_state_date",
 			Help: "Most recent date for each state.",
 		},
-		[]string{"state"},
-	)
-
-	// StateTimeSummary measures the time spent in different task states.
-	// DEPRECATED - remove soon.
-	// Provides metrics:
-	//    gardener_state_time_summary
-	// Example usage:
-	//    metrics.StateTimeSummary.WithLabelValues("Queuing").observe(float64)
-	StateTimeSummary = promauto.NewSummaryVec(prometheus.SummaryOpts{
-		Name:       "gardener_state_time_summary",
-		Help:       "The time spent in each state.",
-		Objectives: map[float64]float64{0.01: 0.001, 0.1: 0.01, 0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
-	}, []string{"state"},
+		[]string{"type", "state"},
 	)
 
 	// StateTimeHistogram tracks the time spent in each state.  Not necessary to label data type, as

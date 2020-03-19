@@ -110,6 +110,10 @@ var (
 type State string
 
 // State values
+// TODO - should we allow different states for different datatypes?
+// In principle, a state could be an object that includes available transitions,
+// in which case we would want each datatype to have potentially different transition
+// details, e.g. the dedup query.
 const (
 	Init          State = "init"
 	Parsing       State = "parsing"
