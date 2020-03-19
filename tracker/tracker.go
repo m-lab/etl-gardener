@@ -62,7 +62,12 @@ func NewJob(bucket, exp, typ string, date time.Time) Job {
 	}
 }
 
+var errStringLock sync.Mutex
+var errStrings = make(map[string]struct{})
+
 func (j Job) failureMetric(errString string) {
+	errStringLock.Lock()
+	defer errStringLock.Unlock()
 	if _, ok := errStrings[errString]; ok {
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
 	} else if len(errStrings) < 20 {
@@ -518,8 +523,6 @@ func (tr *Tracker) Heartbeat(job Job) error {
 	status.HeartbeatTime = time.Now()
 	return tr.UpdateJob(job, status)
 }
-
-var errStrings = make(map[string]struct{})
 
 // SetJobError updates a job's error fields, and handles persistence.
 func (tr *Tracker) SetJobError(job Job, errString string) error {
