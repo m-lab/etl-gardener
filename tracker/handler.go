@@ -3,7 +3,6 @@ package tracker
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"net/url"
 
@@ -85,7 +84,6 @@ func (h *Handler) heartbeat(resp http.ResponseWriter, req *http.Request) {
 }
 
 func (h *Handler) update(resp http.ResponseWriter, req *http.Request) {
-	log.Println(req.RemoteAddr)
 	if req.Method != http.MethodPost {
 		resp.WriteHeader(http.StatusMethodNotAllowed)
 		return

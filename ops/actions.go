@@ -13,6 +13,7 @@ import (
 
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/cloud/bq"
+	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/etl-gardener/state"
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/etl/etl"
@@ -60,6 +61,7 @@ func isTest() bool {
 func newStateFunc(state tracker.State, detail string) ActionFunc {
 	return func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
 		log.Println(j, state)
+		metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(state)).Set(float64(j.Date.Unix()))
 		err := tk.SetStatus(j, state, detail)
 		if err != nil {
 			log.Println(err)
@@ -103,7 +105,11 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 			}
 			s.State = tracker.Finishing
 			log.Println(j, s.State)
-			tk.SetStatus(j, tracker.Finishing, "dedup took "+time.Since(start).Round(100*time.Millisecond).String())
+			metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(tracker.Finishing)).Set(float64(j.Date.Unix()))
+			err = tk.SetStatus(j, tracker.Finishing, "dedup took "+time.Since(start).Round(100*time.Millisecond).String())
+			if err != nil {
+				log.Println(err)
+			}
 		},
 		"Deduplicating")
 	m.AddAction(tracker.Finishing,
@@ -123,7 +129,10 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 			}
 			s.State = tracker.Complete
 			log.Println(j, s.State, time.Since(start).Round(100*time.Millisecond))
-			tk.SetStatus(j, tracker.Complete, "delete took "+time.Since(start).Round(100*time.Millisecond).String())
+			err = tk.SetStatus(j, tracker.Complete, "delete took "+time.Since(start).Round(100*time.Millisecond).String())
+			if err != nil {
+				log.Println(err)
+			}
 		},
 		"Deleting template table")
 	return m, nil
