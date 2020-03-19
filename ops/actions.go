@@ -105,7 +105,7 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 			}
 			s.State = tracker.Finishing
 			log.Println(j, s.State)
-			metrics.StateDate.WithLabelValues(j.Datatype, string(tracker.Finishing)).SetToCurrentTime()
+			metrics.StateDate.WithLabelValues(j.Datatype, string(tracker.Finishing)).Set(float64(j.Date.Unix()))
 			err = tk.SetStatus(j, tracker.Finishing, "dedup took "+time.Since(start).Round(100*time.Millisecond).String())
 			if err != nil {
 				log.Println(err)
