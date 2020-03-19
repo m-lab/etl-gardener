@@ -454,6 +454,7 @@ func (tr *Tracker) GetStatus(job Job) (Status, error) {
 func (tr *Tracker) AddJob(job Job) error {
 	status := NewStatus()
 	status.UpdateTime = time.Now()
+	status.LastStateChangeTime = time.Now()
 
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
