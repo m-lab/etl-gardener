@@ -93,28 +93,43 @@ func NewJobService(tk *tracker.Tracker, bucket string, startDate time.Time) (*Se
 	// The service cycles through the jobSpecs.  Each spec is a job (bucket/exp/type) and a target GCS bucket or BQ table.
 	// TODO get the destination bucket from a command line flag.
 	targetBase := os.Getenv("TARGET_BASE")
-	j1, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "ndt5"}.Target(targetBase + "/ndt/ndt5")
-	j2, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "tcpinfo"}.Target(targetBase + "/ndt/tcpinfo")
-	specs := []tracker.JobWithTarget{j1, j2}
+	j0, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "ndt5"}.Target(targetBase + "/ndt/ndt5")
+	j1, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "tcpinfo"}.Target(targetBase + "/ndt/tcpinfo")
+	specs := []tracker.JobWithTarget{j0, j1}
 
 	start := startDate.UTC().Truncate(24 * time.Hour)
-	date := start
+	resume := start // In case tk is nil
 	index := 0
-	if tk != nil {
-		lastInit := tk.LastJob()
-		log.Println("Last job was:", lastInit)
-		date := lastInit.Date
-		if lastInit == j1.Job {
-			index = 1
-		} else {
-			date = date.AddDate(0, 0, 1)
+	if tk == nil {
+		return &Service{tracker: tk, startDate: start, date: resume, nextIndex: index, jobSpecs: specs}, nil
+	}
+	lastJob := tk.LastJob()
+	log.Println("Last job was:", lastJob)
+	resume = lastJob.Date
+	// Never result before the specified start date.
+	if resume.Before(start) {
+		resume = start
+		return &Service{tracker: tk, startDate: start, date: resume, nextIndex: index, jobSpecs: specs}, nil
+	}
+	svc := Service{tracker: tk, startDate: start, date: resume, nextIndex: index, jobSpecs: specs}
+
+	// We are in the right ballpark, now pull jobs until we get the lastJob,
+	// or the date changes, in which case the jobspec list has changed.
+	for {
+		next := svc.NextJob()
+		// If this is the last Job, then we are all set to resume.
+		if next.Job == lastJob {
+			break
 		}
-		if date.Before(start) {
-			date = start
-			index = 0
+		// If we advance the date, but still haven't seen the lastJob,
+		// then assume the jobspec has changed, and reset to the original
+		// resume date.
+		if next.Job.Date.After(resume) {
+			svc.date = resume
+			break
 		}
 	}
-	return &Service{tracker: tk, startDate: start, date: date, nextIndex: index, jobSpecs: specs}, nil
+	return &svc, nil
 }
 
 func post(ctx context.Context, url url.URL) ([]byte, int, error) {
