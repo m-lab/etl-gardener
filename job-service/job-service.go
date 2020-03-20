@@ -76,6 +76,7 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	log.Println("Dispatching", job.Job)
 	_, err := resp.Write(job.Marshal())
 	if err != nil {
 		log.Println(err)
@@ -101,6 +102,7 @@ func NewJobService(tk *tracker.Tracker, bucket string, startDate time.Time) (*Se
 	index := 0
 	if tk != nil {
 		lastInit := tk.LastJob()
+		log.Println("Last job was:", lastInit)
 		date := lastInit.Date
 		if lastInit == j1.Job {
 			index = 1
