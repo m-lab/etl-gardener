@@ -97,7 +97,22 @@ func NewJobService(tk *tracker.Tracker, bucket string, startDate time.Time) (*Se
 	specs := []tracker.JobWithTarget{j1, j2}
 
 	start := startDate.UTC().Truncate(24 * time.Hour)
-	return &Service{tracker: tk, startDate: start, date: start, jobSpecs: specs}, nil
+	date := start
+	index := 0
+	if tk != nil {
+		lastInit := tk.LastJob()
+		date := lastInit.Date
+		if lastInit == j1.Job {
+			index = 1
+		} else {
+			date = date.AddDate(0, 0, 1)
+		}
+		if date.Before(start) {
+			date = start
+			index = 0
+		}
+	}
+	return &Service{tracker: tk, startDate: start, date: date, nextIndex: index, jobSpecs: specs}, nil
 }
 
 func post(ctx context.Context, url url.URL) ([]byte, int, error) {

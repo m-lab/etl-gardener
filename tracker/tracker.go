@@ -541,3 +541,8 @@ func (tr *Tracker) WriteHTMLStatusTo(ctx context.Context, w io.Writer) error {
 
 	return jobs.WriteHTML(w)
 }
+
+// LastJob returns the last Job successfully added with AddJob
+func (tr *Tracker) LastJob() Job {
+	return tr.lastInit
+}
