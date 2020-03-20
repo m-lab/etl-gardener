@@ -223,7 +223,7 @@ func (t *Task) SourceAndDest(ds *dataset.Dataset) (bqiface.Table, bqiface.Table,
 		// If there is a parse error, log and skip request.
 		// Datatype may be incorporated into Experiment, but this is legacy path, and
 		// will be deprecated soon.
-		metrics.FailCount.WithLabelValues(t.Experiment, "", "BadDedupPrefix")
+		metrics.FailCount.WithLabelValues(t.Experiment, t.Experiment, "BadDedupPrefix")
 		return nil, nil, err
 	}
 
@@ -250,7 +250,7 @@ func (t *Task) Save(ctx context.Context) error {
 	t.UpdateTime = time.Now()
 	// Datatype may be incorporated into Experiment, but this is legacy path, and
 	// will be deprecated soon.
-	metrics.StateDate.WithLabelValues(t.Experiment, "", StateNames[t.State]).Set(float64(t.Date.Unix()))
+	metrics.StateDate.WithLabelValues(t.Experiment, t.Experiment, StateNames[t.State]).Set(float64(t.Date.Unix()))
 	return t.saver.SaveTask(ctx, *t)
 }
 
@@ -259,12 +259,12 @@ func (t *Task) Update(ctx context.Context, st State) error {
 	duration := time.Since(t.UpdateTime)
 	// Datatype may be incorporated into Experiment, but this is legacy path, and
 	// will be deprecated soon.
-	metrics.StateTimeHistogram.WithLabelValues(t.Experiment, "", StateNames[t.State]).Observe(duration.Seconds())
+	metrics.StateTimeHistogram.WithLabelValues(t.Experiment, t.Experiment, StateNames[t.State]).Observe(duration.Seconds())
 	t.State = st
 	t.UpdateTime = time.Now()
 	// Datatype may be incorporated into Experiment, but this is legacy path, and
 	// will be deprecated soon.
-	metrics.StateDate.WithLabelValues(t.Experiment, "", StateNames[t.State]).Set(float64(t.Date.Unix()))
+	metrics.StateDate.WithLabelValues(t.Experiment, t.Experiment, StateNames[t.State]).Set(float64(t.Date.Unix()))
 	if t.saver == nil {
 		return ErrNoSaver
 	}
@@ -283,7 +283,7 @@ func (t *Task) Delete(ctx context.Context) error {
 func (t *Task) SetError(ctx context.Context, err error, info string) error {
 	// Datatype may be incorporated into Experiment, but this is legacy path, and
 	// will be deprecated soon.
-	metrics.FailCount.WithLabelValues(t.Experiment, "", info)
+	metrics.FailCount.WithLabelValues(t.Experiment, t.Experiment, info)
 	if t.saver == nil {
 		return ErrNoSaver
 	}
@@ -330,8 +330,8 @@ type Terminator interface {
 
 // Process handles all steps of processing a task.
 func (t Task) Process(ctx context.Context, ex Executor, doneWithQueue func(), term Terminator) {
-	metrics.TasksInFlight.WithLabelValues(t.Experiment, "").Inc()
-	defer metrics.TasksInFlight.WithLabelValues(t.Experiment, "").Dec()
+	metrics.TasksInFlight.WithLabelValues(t.Experiment, t.Experiment).Inc()
+	defer metrics.TasksInFlight.WithLabelValues(t.Experiment, t.Experiment).Dec()
 loop:
 	for t.State != Done { //&& t.ErrMsg == "" {
 		select {
@@ -352,7 +352,7 @@ loop:
 	}
 	// Datatype may be incorporated into Experiment, but this is legacy path, and
 	// will be deprecated soon.
-	metrics.CompletedCount.WithLabelValues(t.Experiment, "").Inc()
+	metrics.CompletedCount.WithLabelValues(t.Experiment, t.Experiment).Inc()
 	if t.ErrMsg == "" {
 		// Only delete the state entry if it completed without error.
 		t.Delete(ctx)
@@ -360,7 +360,7 @@ loop:
 		// Datatype may be incorporated into Experiment, but this is legacy path, and
 		// will be deprecated soon.
 		// TODO Is this double counting?
-		metrics.FailCount.WithLabelValues(t.Experiment, "",
+		metrics.FailCount.WithLabelValues(t.Experiment, t.Experiment,
 			StateNames[t.State]+" Error").Inc()
 	}
 	term.Done()
