@@ -236,6 +236,7 @@ queueLoop:
 		t := tasks[i]
 		if t.ErrInfo != "" || t.ErrMsg != "" {
 			log.Println("Skipping:", t.Name, t.ErrMsg, t.ErrInfo)
+			// datatype is not readily available in legacy code.
 			metrics.FailCount.WithLabelValues(t.Experiment, "", "skipping task with error").Inc()
 			continue
 		}

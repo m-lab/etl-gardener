@@ -221,7 +221,9 @@ func (t *Task) SourceAndDest(ds *dataset.Dataset) (bqiface.Table, bqiface.Table,
 	prefix, err := t.ParsePrefix()
 	if err != nil {
 		// If there is a parse error, log and skip request.
-		metrics.FailCount.WithLabelValues(ds.DatasetID(), "", "BadDedupPrefix")
+		// Datatype may be incorporated into Experiment, but this is legacy path, and
+		// will be deprecated soon.
+		metrics.FailCount.WithLabelValues(t.Experiment, "", "BadDedupPrefix")
 		return nil, nil, err
 	}
 
@@ -246,6 +248,8 @@ func (t *Task) Save(ctx context.Context) error {
 		return ErrNoSaver
 	}
 	t.UpdateTime = time.Now()
+	// Datatype may be incorporated into Experiment, but this is legacy path, and
+	// will be deprecated soon.
 	metrics.StateDate.WithLabelValues(t.Experiment, "", StateNames[t.State]).Set(float64(t.Date.Unix()))
 	return t.saver.SaveTask(ctx, *t)
 }
@@ -253,9 +257,13 @@ func (t *Task) Save(ctx context.Context) error {
 // Update updates the task state, and saves to the "saver".
 func (t *Task) Update(ctx context.Context, st State) error {
 	duration := time.Since(t.UpdateTime)
+	// Datatype may be incorporated into Experiment, but this is legacy path, and
+	// will be deprecated soon.
 	metrics.StateTimeHistogram.WithLabelValues(t.Experiment, "", StateNames[t.State]).Observe(duration.Seconds())
 	t.State = st
 	t.UpdateTime = time.Now()
+	// Datatype may be incorporated into Experiment, but this is legacy path, and
+	// will be deprecated soon.
 	metrics.StateDate.WithLabelValues(t.Experiment, "", StateNames[t.State]).Set(float64(t.Date.Unix()))
 	if t.saver == nil {
 		return ErrNoSaver
@@ -273,6 +281,8 @@ func (t *Task) Delete(ctx context.Context) error {
 
 // SetError adds error information and saves to the "saver"
 func (t *Task) SetError(ctx context.Context, err error, info string) error {
+	// Datatype may be incorporated into Experiment, but this is legacy path, and
+	// will be deprecated soon.
 	metrics.FailCount.WithLabelValues(t.Experiment, "", info)
 	if t.saver == nil {
 		return ErrNoSaver
@@ -340,11 +350,15 @@ loop:
 			}
 		}
 	}
+	// Datatype may be incorporated into Experiment, but this is legacy path, and
+	// will be deprecated soon.
 	metrics.CompletedCount.WithLabelValues(t.Experiment, "").Inc()
 	if t.ErrMsg == "" {
 		// Only delete the state entry if it completed without error.
 		t.Delete(ctx)
 	} else {
+		// Datatype may be incorporated into Experiment, but this is legacy path, and
+		// will be deprecated soon.
 		// TODO Is this double counting?
 		metrics.FailCount.WithLabelValues(t.Experiment, "",
 			StateNames[t.State]+" Error").Inc()
