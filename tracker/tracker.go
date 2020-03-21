@@ -489,7 +489,6 @@ func (tr *Tracker) UpdateJob(job Job, state Status) error {
 		return ErrJobNotFound
 	}
 
-	metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(state.State)).Set(float64(job.Date.Unix()))
 	tr.lastModified = time.Now()
 	if state.isDone() {
 		delete(tr.jobs, job)
@@ -510,6 +509,7 @@ func (tr *Tracker) SetStatus(job Job, newState State, detail string) error {
 	if newState != status.State {
 		timeInState := time.Since(status.LastStateChangeTime)
 		metrics.StateTimeHistogram.WithLabelValues(job.Experiment, job.Datatype, string(status.State)).Observe(timeInState.Seconds())
+		metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(status.State)).Set(float64(job.Date.Unix()))
 		status.LastStateChangeTime = time.Now()
 	}
 	status.State = newState
@@ -548,6 +548,10 @@ func (tr *Tracker) SetJobError(job Job, errString string) error {
 	// For now, we set state to failed.  We may want something different in future.
 	status.State = Failed
 	job.failureMetric(errString)
+
+	timeInState := time.Since(status.LastStateChangeTime)
+	metrics.StateTimeHistogram.WithLabelValues(job.Experiment, job.Datatype, string(status.State)).Observe(timeInState.Seconds())
+	metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(status.State)).Set(float64(job.Date.Unix()))
 
 	status.errors = append(status.errors, errString)
 	return tr.UpdateJob(job, status)
