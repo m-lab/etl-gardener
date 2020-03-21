@@ -97,6 +97,23 @@ func TestJobHandler(t *testing.T) {
 	}
 }
 
+func TestResume(t *testing.T) {
+	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)
+	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0) // Only using jobmap.
+	if err != nil {
+		t.Fatal(err)
+	}
+	lastJobDate := start.AddDate(0, 0, 3)
+	last := tracker.NewJob("fake-bucket", "ndt", "ndt5", lastJobDate)
+	tk.AddJob(last)
+
+	svc, _ := job.NewJobService(tk, "fake-bucket", start)
+	j := svc.NextJob()
+	if j.Date != last.Date {
+		t.Error(j, last)
+	}
+}
+
 func TestEarlyWrapping(t *testing.T) {
 	// This allows predictable behavior from time.Since in the advanceDate function.
 	monkey.Patch(time.Now, func() time.Time {
@@ -112,7 +129,7 @@ func TestEarlyWrapping(t *testing.T) {
 	svc, _ := job.NewJobService(tk, "fake-bucket", start)
 
 	// If a job is still present in the tracker when it wraps, /job returns an error.
-	results := []struct {
+	expected := []struct {
 		code int
 		body string
 	}{
@@ -125,7 +142,7 @@ func TestEarlyWrapping(t *testing.T) {
 		{code: 500, body: `Job already exists.  Try again.`},
 	}
 
-	for k, result := range results {
+	for k, result := range expected {
 		req := httptest.NewRequest("POST", "/job", nil)
 		resp := httptest.NewRecorder()
 		svc.JobHandler(resp, req)
@@ -138,7 +155,7 @@ func TestEarlyWrapping(t *testing.T) {
 
 		if k == 2 {
 			job := tracker.Job{}
-			json.Unmarshal([]byte(results[0].body), &job)
+			json.Unmarshal([]byte(expected[0].body), &job)
 			err := tk.UpdateJob(job, tracker.Status{State: tracker.Complete})
 			if err != nil {
 				t.Error(err)

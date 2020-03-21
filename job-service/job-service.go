@@ -105,30 +105,15 @@ func NewJobService(tk *tracker.Tracker, bucket string, startDate time.Time) (*Se
 	}
 	lastJob := tk.LastJob()
 	log.Println("Last job was:", lastJob)
+	// TODO check for spec bucket change
 	resume = lastJob.Date
-	// Never result before the specified start date.
+	// Never resume before the specified start date.
 	if resume.Before(start) {
 		resume = start
-		return &Service{tracker: tk, startDate: start, date: resume, nextIndex: index, jobSpecs: specs}, nil
 	}
+	// Ok to start here.  If there are repeated jobs, the job-service will skip
+	// them.  If they are already resolved, then ok to repeat them.
 	svc := Service{tracker: tk, startDate: start, date: resume, nextIndex: index, jobSpecs: specs}
-
-	// We are in the right ballpark, now pull jobs until we get the lastJob,
-	// or the date changes, in which case the jobspec list has changed.
-	for {
-		next := svc.NextJob()
-		// If this is the last Job, then we are all set to resume.
-		if next.Job == lastJob {
-			break
-		}
-		// If we advance the date, but still haven't seen the lastJob,
-		// then assume the jobspec has changed, and reset to the original
-		// resume date.
-		if next.Job.Date.After(resume) {
-			svc.date = resume
-			break
-		}
-	}
 	return &svc, nil
 }
 
