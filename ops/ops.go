@@ -93,6 +93,7 @@ type Monitor struct {
 	batchDS  dataset.Dataset // static after creation
 	finalDS  dataset.Dataset // static after creation
 
+	// TODO allow different action map for each datatype?
 	actions map[tracker.State]Action // static after creation
 
 	tk *tracker.Tracker
