@@ -76,6 +76,7 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	log.Println("Dispatching", job.Job)
 	_, err := resp.Write(job.Marshal())
 	if err != nil {
 		log.Println(err)
@@ -92,12 +93,28 @@ func NewJobService(tk *tracker.Tracker, bucket string, startDate time.Time) (*Se
 	// The service cycles through the jobSpecs.  Each spec is a job (bucket/exp/type) and a target GCS bucket or BQ table.
 	// TODO get the destination bucket from a command line flag.
 	targetBase := os.Getenv("TARGET_BASE")
-	j1, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "ndt5"}.Target(targetBase + "/ndt/ndt5")
-	j2, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "tcpinfo"}.Target(targetBase + "/ndt/tcpinfo")
-	specs := []tracker.JobWithTarget{j1, j2}
+	j0, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "ndt5"}.Target(targetBase + "/ndt/ndt5")
+	j1, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "tcpinfo"}.Target(targetBase + "/ndt/tcpinfo")
+	specs := []tracker.JobWithTarget{j0, j1}
 
 	start := startDate.UTC().Truncate(24 * time.Hour)
-	return &Service{tracker: tk, startDate: start, date: start, jobSpecs: specs}, nil
+	index := 0
+	if tk == nil {
+		resume := start
+		return &Service{tracker: tk, startDate: start, date: resume, nextIndex: index, jobSpecs: specs}, nil
+	}
+	lastJob := tk.LastJob()
+	log.Println("Last job was:", lastJob)
+	// TODO check for spec bucket change
+	resume := lastJob.Date
+	if resume.Before(start) {
+		// Never resume before the specified start date.
+		resume = start
+	}
+	// Ok to start here.  If there are repeated jobs, the job-service will skip
+	// them.  If they are already finished, then ok to repeat them, though a little inefficient.
+	svc := Service{tracker: tk, startDate: start, date: resume, nextIndex: index, jobSpecs: specs}
+	return &svc, nil
 }
 
 func post(ctx context.Context, url url.URL) ([]byte, int, error) {

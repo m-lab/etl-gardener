@@ -331,8 +331,8 @@ type Tracker struct {
 	lastModified time.Time
 
 	// These are the stored values.
-	lastInit Job    // The last job that was initialized.
-	jobs     JobMap // Map from Job to Status.
+	lastJob Job    // The last job that was added/initialized.
+	jobs    JobMap // Map from Job to Status.
 
 	// Time after which stale job should be ignored or replaced.
 	expirationTime time.Duration
@@ -345,12 +345,12 @@ func InitTracker(
 	client dsiface.Client, key *datastore.Key,
 	saveInterval time.Duration, expirationTime time.Duration) (*Tracker, error) {
 
-	jobMap, lastInit, err := loadJobMap(ctx, client, key)
+	jobMap, lastJob, err := loadJobMap(ctx, client, key)
 	if err != nil {
 		log.Println(err, key)
 		jobMap = make(JobMap, 100)
 	}
-	t := Tracker{client: client, dsKey: key, lastModified: time.Now(), lastInit: lastInit, jobs: jobMap, expirationTime: expirationTime}
+	t := Tracker{client: client, dsKey: key, lastModified: time.Now(), lastJob: lastJob, jobs: jobMap, expirationTime: expirationTime}
 	if client != nil && saveInterval > 0 {
 		t.saveEvery(saveInterval)
 	}
@@ -441,7 +441,7 @@ func (tr *Tracker) AddJob(job Job) error {
 		return ErrJobAlreadyExists
 	}
 
-	tr.lastInit = job
+	tr.lastJob = job
 	tr.lastModified = time.Now()
 	// TODO - should call this JobsInFlight, to avoid confusion with Tasks in parser.
 	metrics.TasksInFlight.Inc()
@@ -527,7 +527,7 @@ func (tr *Tracker) GetState() (JobMap, Job, time.Time) {
 			m[k] = v
 		}
 	}
-	return m, tr.lastInit, tr.lastModified
+	return m, tr.lastJob, tr.lastModified
 }
 
 // WriteHTMLStatusTo writes out the status of all jobs to the html writer.
@@ -540,4 +540,9 @@ func (tr *Tracker) WriteHTMLStatusTo(ctx context.Context, w io.Writer) error {
 	fmt.Fprint(w, "<div>Tracker State</div>\n")
 
 	return jobs.WriteHTML(w)
+}
+
+// LastJob returns the last Job successfully added with AddJob
+func (tr *Tracker) LastJob() Job {
+	return tr.lastJob
 }
