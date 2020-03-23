@@ -12,13 +12,13 @@ var (
 	// Provides metrics:
 	//   gardener_started_total{experiment}
 	// Example usage:
-	// metrics.StartedCount.WithLabelValues("sidestream").Inc()
+	// metrics.StartedCount.WithLabelValues(exp, dt).Inc()
 	StartedCount = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "gardener_started_total",
 			Help: "Number of date tasks started.",
 		},
-		[]string{"experiment"},
+		[]string{"experiment", "datatype"},
 	)
 
 	// CompletedCount counts the number of date tasks completed.
@@ -26,13 +26,13 @@ var (
 	// Provides metrics:
 	//   gardener_completed_total{experiment}
 	// Example usage:
-	// metrics.CompletedCount.WithLabelValues("sidestream").Inc()
+	// metrics.CompletedCount.WithLabelValues(exp, dt).Inc()
 	CompletedCount = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "gardener_completed_total",
 			Help: "Number of date tasks completed.",
 		},
-		[]string{"experiment"},
+		[]string{"experiment", "datatype"},
 	)
 
 	// FailCount counts the number of requests that result in a fatal failure.
@@ -41,13 +41,13 @@ var (
 	// Provides metrics:
 	//   gardener_fail_total{status}
 	// Example usage:
-	// metrics.FailCount.WithLabelValues("BadTableName").Inc()
+	// metrics.FailCount.WithLabelValues(exp, dt, "BadTableName").Inc()
 	FailCount = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "gardener_fail_total",
 			Help: "Number of processing failures.",
 		},
-		[]string{"status"},
+		[]string{"experiment", "datatype", "status"}, // TODO Change to failure
 	)
 
 	// WarningCount counts all warnings encountered during processing a request.
@@ -55,26 +55,28 @@ var (
 	// Provides metrics:
 	//   gardener_warning_total{status}
 	// Example usage:
-	// metrics.WarningCount.WithLabelValues("funny xyz").Inc()
+	// metrics.WarningCount.WithLabelValues(exp, dt, "funny xyz").Inc()
 	WarningCount = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "gardener_warning_total",
 			Help: "Number of processing warnings.",
 		},
-		[]string{"status"},
+		[]string{"experiment", "datatype", "status"}, // TODO change to warning
 	)
 
 	// TasksInFlight maintains a count of the number of tasks in flight.
+	// TODO consider deprecating this and using Started - Completed.
 	//
 	// Provides metrics:
 	//   gardener_tasks_in_flight
 	// Example usage:
-	// metrics.TasksInFlight.Add(1)
-	TasksInFlight = promauto.NewGauge(
+	// metrics.TasksInFlight.WithLabelValues(exp, dt).Inc
+	TasksInFlight = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "gardener_tasks_in_flight",
 			Help: "Number of tasks in flight",
 		},
+		[]string{"experiment", "datatype"},
 	)
 
 	// StateDate identifies the date of the most recent update to each state.
@@ -82,7 +84,7 @@ var (
 	// Provides metrics:
 	//   gardener_state_date
 	// Example usage:
-	// metrics.StateDate.WithLabelValues(datatype, StateNames[t.State]).Observe(time.Now())
+	// metrics.StateDate.WithLabelValues(exp, dt, StateNames[t.State]).Observe(time.Now())
 	StateDate = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "gardener_state_date",
@@ -95,7 +97,7 @@ var (
 	// we currently have separate gardener deployments for each type.
 	// Usage example:
 	//   metrics.StateTimeHistogram.WithLabelValues(
-	//           StateName[state]).Observe(time.Since(start).Seconds())
+	//           exp, dt, StateName[state]).Observe(time.Since(start).Seconds())
 	StateTimeHistogram = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name: "gardener_state_time_histogram",
@@ -106,7 +108,7 @@ var (
 				100, 300, 1000, 1800, 3600, 2 * 3600, 4 * 3600, 8 * 3600, 12 * 3600,
 			},
 		},
-		[]string{"state"})
+		[]string{"experiment", "datatype", "state"})
 
 	// FilesPerDateHistogram provides a histogram of files per date submitted to pipeline.
 	//
@@ -117,7 +119,7 @@ var (
 	//   gardener_files_count{year="...", le="..."}
 	// Usage example:
 	//   metrics.FilesPerDateHistogram.WithLabelValues(
-	//           "2011").Observe(files)
+	//           "ndt", "ndt5", "2011").Observe(files)
 	FilesPerDateHistogram = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name: "gardener_files",
@@ -130,7 +132,7 @@ var (
 				100000, 120000, 140000, 170000, 200000, 240000, 280000, 320000, 380000, 440000, 500000, 600000, 700000, 800000, 900000,
 			},
 		},
-		[]string{"year"},
+		[]string{"experiment", "datatype", "year"},
 	)
 
 	// BytesPerDateHistogram provides a histogram of bytes per date submitted to pipeline
@@ -142,7 +144,7 @@ var (
 	//   gardener_bytes_count{year="...", le="..."}
 	// Usage example:
 	//   metrics.BytesPerDateHistogram.WithLabelValues(
-	//           "2011").Observe(bytes)
+	//           "ndt", "ndt5", "2011").Observe(bytes)
 	BytesPerDateHistogram = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name: "gardener_bytes",
@@ -156,6 +158,6 @@ var (
 				10000000000, 14000000000, 20000000000, 28000000000, 40000000000, 56000000000, 80000000000,
 			},
 		},
-		[]string{"year"},
+		[]string{"experiment", "datatype", "year"},
 	)
 )

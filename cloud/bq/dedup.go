@@ -104,12 +104,12 @@ ErrorTimeout:
 	// If we fall through here, then there is some problem...
 	if strings.Contains(err.Error(), "Not found: Table") {
 		log.Println("Timeout waiting for table creation:", tt.FullyQualifiedName())
-		metrics.FailCount.WithLabelValues("TableNotFoundTimeout")
+		metrics.FailCount.WithLabelValues(tt.DatasetID(), tt.TableID(), "TableNotFoundTimeout")
 		return ErrTableNotFound
 	}
 	// We are seeing occasional Error 500: An internal error ...
 	log.Println(err, tt.FullyQualifiedName())
-	metrics.FailCount.WithLabelValues("TableMetaErr")
+	metrics.FailCount.WithLabelValues(tt.DatasetID(), tt.TableID(), "TableMetaErr")
 	return err
 }
 
