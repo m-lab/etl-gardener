@@ -98,21 +98,21 @@ func NewJobService(tk *tracker.Tracker, bucket string, startDate time.Time) (*Se
 	specs := []tracker.JobWithTarget{j0, j1}
 
 	start := startDate.UTC().Truncate(24 * time.Hour)
-	resume := start // In case tk is nil
 	index := 0
 	if tk == nil {
+		resume := start
 		return &Service{tracker: tk, startDate: start, date: resume, nextIndex: index, jobSpecs: specs}, nil
 	}
 	lastJob := tk.LastJob()
 	log.Println("Last job was:", lastJob)
 	// TODO check for spec bucket change
-	resume = lastJob.Date
-	// Never resume before the specified start date.
+	resume := lastJob.Date
 	if resume.Before(start) {
+		// Never resume before the specified start date.
 		resume = start
 	}
 	// Ok to start here.  If there are repeated jobs, the job-service will skip
-	// them.  If they are already resolved, then ok to repeat them.
+	// them.  If they are already finished, then ok to repeat them, though a little inefficient.
 	svc := Service{tracker: tk, startDate: start, date: resume, nextIndex: index, jobSpecs: specs}
 	return &svc, nil
 }
