@@ -49,7 +49,8 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 		func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
 			start := time.Now()
 			if j.Datatype == "tcpinfo" {
-				qp := dedup.TCPInfoQuery(j, os.Getenv("BQPROJECT"))
+				// TODO fix this HACK
+				qp := dedup.TCPInfoQuery(j, os.Getenv("TARGET_BASE"))
 				bqJob, err := qp.Dedup(ctx)
 				if err != nil {
 					if err == state.ErrBQRateLimitExceeded {
