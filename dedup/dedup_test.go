@@ -11,7 +11,7 @@ import (
 
 func TestTemplate(t *testing.T) {
 	job := tracker.NewJob("bucket", "exp", "type", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
-	q := tcpinfoQuery(job, "mlab-sandbox")
+	q := TCPInfoQuery(job, "mlab-sandbox").String()
 	if !strings.Contains(q, "uuid") {
 		t.Error("query should contain keep.uuid:\n", q)
 	}
