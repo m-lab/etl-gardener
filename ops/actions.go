@@ -71,10 +71,10 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 				}
 				log.Println(status.Statistics)
 			} else if j.Datatype == "ndt5" {
-				err = tk.SetJobError(j, "dedup not implemented for ndt5")
+				tk.SetJobError(j, "dedup not implemented for ndt5")
 				return
 			} else {
-				err = tk.SetJobError(j, "unknown datatype")
+				tk.SetJobError(j, "unknown datatype")
 				return
 			}
 			metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(tracker.Complete)).Set(float64(j.Date.Unix()))
