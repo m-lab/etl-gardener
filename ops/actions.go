@@ -44,48 +44,56 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 		nil,
 		newStateFunc(tracker.Deduplicating, "-"),
 		"Changing to Deduplicating")
+	// Hack to handle old jobs from previous gardener implementations
+	m.AddAction(tracker.Stabilizing,
+		nil,
+		newStateFunc(tracker.Deduplicating, "-"),
+		"Changing to Deduplicating")
 	m.AddAction(tracker.Deduplicating,
 		nil,
-		func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, unused tracker.Status) {
-			start := time.Now()
-			if j.Datatype == "tcpinfo" {
-				// TODO fix this HACK
-				qp := dedup.TCPInfoQuery(j, os.Getenv("TARGET_BASE"))
-				bqJob, err := qp.Dedup(ctx)
-				if err != nil {
-					if err == state.ErrBQRateLimitExceeded {
-						// If BQ is rate limited, this basically results in jobs queuing up
-						// and executing later.
-						// Since there is no job update, the tracker may eventually kill
-						// this job if it doesn't succeed within the stale job time limit.
-						// TODO should this use exponential backoff?
-						log.Println(err)
-						time.Sleep(2 * time.Minute)
-						return // Try again later
-					}
-				}
-				status, err := bqJob.Wait(ctx)
-				if err != nil {
-					log.Println(err)
-					err = tk.SetJobError(j, "dedup failed"+err.Error())
-					return
-				}
-				log.Println(status.Statistics)
-			} else if j.Datatype == "ndt5" {
-				tk.SetJobError(j, "dedup not implemented for ndt5")
-				return
-			} else {
-				tk.SetJobError(j, "unknown datatype")
-				return
-			}
-			metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(tracker.Complete)).Set(float64(j.Date.Unix()))
-			err = tk.SetStatus(j, tracker.Complete, "dedup took "+time.Since(start).Round(100*time.Millisecond).String())
-			if err != nil {
-				log.Println(err)
-			}
-		},
-		"Finishing (table copy and cleanup)")
+		dedupFunc,
+		"Deduplicating")
 	return m, nil
+}
+
+func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
+	start := time.Now()
+	if j.Datatype == "tcpinfo" {
+		// TODO fix this HACK
+		qp := dedup.TCPInfoQuery(j, os.Getenv("TARGET_BASE"))
+		bqJob, err := qp.Dedup(ctx)
+		if err != nil {
+			if err == state.ErrBQRateLimitExceeded {
+				// If BQ is rate limited, this basically results in jobs queuing up
+				// and executing later.
+				// Since there is no job update, the tracker may eventually kill
+				// this job if it doesn't succeed within the stale job time limit.
+				// TODO should this use exponential backoff?
+				return // Should try again
+			}
+			log.Println(err)
+			tk.SetJobError(j, err.Error())
+			return
+		}
+		status, err := bqJob.Wait(ctx)
+		if err != nil {
+			log.Println(err)
+			err = tk.SetJobError(j, "dedup failed"+err.Error())
+			return
+		}
+		log.Println(status.Statistics)
+	} else if j.Datatype == "ndt5" {
+		tk.SetJobError(j, "dedup not implemented for ndt5")
+		return
+	} else {
+		tk.SetJobError(j, "unknown datatype")
+		return
+	}
+	metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(tracker.Complete)).Set(float64(j.Date.Unix()))
+	err := tk.SetStatus(j, tracker.Complete, "dedup took "+time.Since(start).Round(100*time.Millisecond).String())
+	if err != nil {
+		log.Println(err)
+	}
 }
 
 // WaitForJob waits for job to complete.  Uses fibonacci backoff until the backoff
