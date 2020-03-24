@@ -15,6 +15,7 @@ import (
 )
 
 // TODO remove _tmp when we are ready to transition.
+// TODO update to use _tmp once tables are copied.
 const table = "`{{.Project}}.{{.Job.Experiment}}_raw.{{.Job.Datatype}}`"
 
 var dedupTemplate = template.Must(template.New("").Parse(`
