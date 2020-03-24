@@ -62,13 +62,13 @@ func (params QueryParams) String() string {
 	return out.String()
 }
 
-func tcpinfoQuery(job tracker.Job, project string) string {
+func TCPInfoQuery(job tracker.Job, project string) QueryParams {
 	return QueryParams{
 		Project: project,
 		Job:     job,
 		Key:     "uuid",
 		Order:   "ARRAY_LENGTH(Snapshots) DESC, ParseInfo.TaskFileName, ParseInfo.ParseTime DESC",
-	}.String()
+	}
 }
 
 // Dedup executes a query that deletes duplicates from the destination table.
