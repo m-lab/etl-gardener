@@ -104,6 +104,7 @@ func NewJobService(tk *tracker.Tracker, startDate time.Time,
 			Experiment: s.Experiment,
 			Datatype:   s.Datatype,
 			Date:       s.Start.UTC().Truncate(24 * time.Hour)}
+		// TODO - handle gs:// targets
 		jt, err := job.Target(targetBase + "." + s.Target)
 		if err != nil {
 			log.Println(err, targetBase+s.Target)
