@@ -3,57 +3,21 @@ package ops
 import (
 	"context"
 	"flag"
-	"io"
 	"log"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/googleapis/google-cloud-go-testing/bigquery/bqiface"
-	"github.com/m-lab/go/dataset"
 
 	"github.com/m-lab/etl-gardener/cloud"
-	"github.com/m-lab/etl-gardener/cloud/bq"
+	"github.com/m-lab/etl-gardener/dedup"
 	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/etl-gardener/state"
 	"github.com/m-lab/etl-gardener/tracker"
-	"github.com/m-lab/etl/etl"
 )
 
 // PartitionedTable creates BQ Table for legacy source templated table
-func PartitionedTable(j tracker.Job, ds *dataset.Dataset) bqiface.Table {
-	tableName := etl.DirToTablename(j.Datatype)
-	log.Println(ds.Dataset, tableName)
-
-	src := ds.Table(tableName + "$" + j.Date.Format("20060102"))
-	return src
-}
-
-// TemplateTable creates BQ Table for legacy source templated table
-func TemplateTable(j tracker.Job, ds *dataset.Dataset) bqiface.Table {
-	tableName := etl.DirToTablename(j.Datatype)
-	log.Println(ds.Dataset, tableName)
-
-	src := ds.Table(tableName + "_" + j.Date.Format("20060102"))
-	return src
-}
-
-// This is a function I didn't want to port to the new architecture.  8-(
-func (m *Monitor) waitForStableTable(ctx context.Context, j tracker.Job) error {
-	log.Println("Stabilizing:", j)
-	// Wait for the streaming buffer to be nil.
-
-	src := TemplateTable(j, &m.batchDS)
-	err := bq.WaitForStableTable(ctx, src)
-	if err != nil {
-		// When testing, we expect to get ErrTableNotFound here.
-		if err != state.ErrTableNotFound {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func isTest() bool {
 	return flag.Lookup("test.v") != nil
 }
@@ -78,91 +42,49 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 	}
 	m.AddAction(tracker.ParseComplete,
 		nil,
-		newStateFunc(tracker.Stabilizing, "-"),
-		"Changing to Stabilizing")
-	m.AddAction(tracker.Stabilizing,
-		// TODO - determine whether we need to stabilize or can just go ahead with the dedup
-		// query, which should capture the streaming buffer.
-		func(ctx context.Context, j tracker.Job) bool {
-			return m.waitForStableTable(ctx, j) == nil
-		},
 		newStateFunc(tracker.Deduplicating, "-"),
-		"Stabilizing")
+		"Changing to Deduplicating")
 	m.AddAction(tracker.Deduplicating,
-		// HACK
 		nil,
 		func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, unused tracker.Status) {
 			start := time.Now()
-			// TODO - pass tracker to dedup, so dedup can record the JobID.
-			err := m.dedup(ctx, j)
-			if err != nil {
-				if err == state.ErrBQRateLimitExceeded {
-					// If BQ is rate limited, this basically results in jobs queuing up
-					// and executing later.
-					// Since there is no job update, the tracker may eventually kill
-					// this job if it doesn't succeed within the stale job time limit.
-					// TODO should this use exponential backoff?
-					time.Sleep(2 * time.Minute)
-					return // Try again later
+			if j.Datatype == "tcpinfo" {
+				qp := dedup.TCPInfoQuery(j, os.Getenv("BQPROJECT"))
+				bqJob, err := qp.Dedup(ctx)
+				if err != nil {
+					if err == state.ErrBQRateLimitExceeded {
+						// If BQ is rate limited, this basically results in jobs queuing up
+						// and executing later.
+						// Since there is no job update, the tracker may eventually kill
+						// this job if it doesn't succeed within the stale job time limit.
+						// TODO should this use exponential backoff?
+						log.Println(err)
+						time.Sleep(2 * time.Minute)
+						return // Try again later
+					}
 				}
-				log.Println(err)
-				tk.SetJobError(j, err.Error())
+				status, err := bqJob.Wait(ctx)
+				if err != nil {
+					log.Println(err)
+					err = tk.SetJobError(j, "dedup failed"+err.Error())
+					return
+				}
+				log.Println(status.Statistics)
+			} else if j.Datatype == "ndt5" {
+				err = tk.SetJobError(j, "dedup not implemented for ndt5")
+				return
+			} else {
+				err = tk.SetJobError(j, "unknown datatype")
 				return
 			}
-			log.Println(j, tracker.Finishing)
-			metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(tracker.Finishing)).Set(float64(j.Date.Unix()))
-			err = tk.SetStatus(j, tracker.Finishing, "dedup took "+time.Since(start).Round(100*time.Millisecond).String())
-			if err != nil {
-				log.Println(err)
-			}
-		},
-		"Deduplicating")
-	m.AddAction(tracker.Finishing,
-		nil,
-		func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, unused tracker.Status) {
-			start := time.Now()
-			// TODO - need to copy partition to final location.
-			// For now, we just change the state to Complete.
-			log.Println(j, tracker.Complete, time.Since(start).Round(100*time.Millisecond))
-			err = tk.SetStatus(j, tracker.Complete, "delete took "+time.Since(start).Round(100*time.Millisecond).String())
+			metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(tracker.Complete)).Set(float64(j.Date.Unix()))
+			err = tk.SetStatus(j, tracker.Complete, "dedup took "+time.Since(start).Round(100*time.Millisecond).String())
 			if err != nil {
 				log.Println(err)
 			}
 		},
 		"Finishing (table copy and cleanup)")
 	return m, nil
-}
-
-func (m *Monitor) deleteSrc(ctx context.Context, j tracker.Job) error {
-	src := TemplateTable(j, &m.batchDS)
-
-	delCtx, cf := context.WithTimeout(ctx, time.Minute)
-	defer cf()
-	return src.Delete(delCtx)
-}
-
-func (m *Monitor) dedup(ctx context.Context, j tracker.Job) error {
-	// Launch the dedup request, and save the JobID
-	src := TemplateTable(j, &m.batchDS)
-	dest := PartitionedTable(j, &m.batchDS)
-
-	log.Println("Dedupping", src.FullyQualifiedName())
-	// TODO move Dedup??
-	// TODO - implement backoff?
-	bqJob, err := bq.Dedup(ctx, &m.batchDS, src.TableID(), dest)
-	if err != nil {
-		if err == io.EOF {
-			if isTest() {
-				bqJob, err = m.batchDS.BqClient.JobFromID(ctx, "fakeJobID")
-				return nil
-			}
-		} else {
-			log.Println(err, src.FullyQualifiedName())
-			//t.SetError(ctx, err, "DedupFailed")
-			return err
-		}
-	}
-	return waitForJob(ctx, j, bqJob, time.Minute)
 }
 
 // WaitForJob waits for job to complete.  Uses fibonacci backoff until the backoff
