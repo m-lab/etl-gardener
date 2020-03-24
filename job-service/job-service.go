@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -96,10 +97,20 @@ func NewJobService(tk *tracker.Tracker, bucket string, startDate time.Time) (*Se
 	// TODO construct the jobs from storage bucket.
 	// The service cycles through the jobSpecs.  Each spec is a job (bucket/exp/type) and a target GCS bucket or BQ table.
 	// TODO get the destination bucket from a command line flag.
+	specs := make([]tracker.JobWithTarget, 0)
 	targetBase := os.Getenv("TARGET_BASE")
-	j0, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "ndt5"}.Target(targetBase + "/ndt/ndt5")
-	j1, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "tcpinfo"}.Target(targetBase + "/ndt/tcpinfo")
-	specs := []tracker.JobWithTarget{j0, j1}
+	if strings.HasPrefix(targetBase, "gs://") {
+		j0, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "ndt5"}.Target(targetBase + "/ndt/ndt5")
+		specs = append(specs, j0)
+		j1, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "tcpinfo"}.Target(targetBase + "/ndt/tcpinfo")
+		specs = append(specs, j1)
+	} else {
+		j0, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "ndt5"}.Target(targetBase + ".ndt_raw.ndt5")
+		specs = append(specs, j0)
+		j1, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "tcpinfo"}.Target(targetBase + ".ndt_raw.tcpinfo")
+		specs = append(specs, j1)
+
+	}
 
 	start := startDate.UTC().Truncate(24 * time.Hour)
 	index := 0

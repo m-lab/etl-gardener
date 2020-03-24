@@ -129,7 +129,7 @@ deploy:
 
 - provider: script
   script:
-    TARGET_BASE="gs://etl-mlab-sandbox"
+    TARGET_BASE="mlab-sandbox"
     $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-sandbox data-processing ./apply-cluster.sh
   skip_cleanup: true
   on:
@@ -143,7 +143,7 @@ deploy:
   script:
     $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-staging data-processing-cluster ./apply-cluster.sh
     &&
-    TARGET_BASE="gs://etl-mlab-staging"
+    TARGET_BASE="mlab-staging"
     $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-staging data-processing ./apply-cluster.sh
   on:
     repo: m-lab/etl-gardener
