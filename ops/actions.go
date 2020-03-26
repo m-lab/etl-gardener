@@ -4,11 +4,13 @@ import (
 	"context"
 	"flag"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/googleapis/google-cloud-go-testing/bigquery/bqiface"
+	"google.golang.org/api/googleapi"
 
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/dedup"
@@ -63,9 +65,25 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 		qp := dedup.TCPInfoQuery(j, os.Getenv("TARGET_BASE"))
 		bqJob, err := qp.Dedup(ctx)
 		if err != nil {
-			if err == state.ErrBQRateLimitExceeded {
-				return // Should try again
+			switch typedErr := err.(type) {
+			case *googleapi.Error:
+				if typedErr.Code == http.StatusBadRequest &&
+					strings.Contains(typedErr.Error(), "streaming buffer") {
+					// Wait a while and try again.
+					s.UpdateDetail = "Dedup waiting for empty streaming buffer."
+					tk.UpdateJob(j, s)
+					time.Sleep(5 * time.Minute)
+					return // Try again later.
+				}
+			default:
+				if err == state.ErrBQRateLimitExceeded {
+					s.UpdateDetail = "Dedup waiting because of BQ Rate Limit Exceeded."
+					tk.UpdateJob(j, s)
+					time.Sleep(5 * time.Minute)
+					return // Try again later.
+				}
 			}
+
 			log.Println(err)
 			tk.SetJobError(j, err.Error())
 			return
