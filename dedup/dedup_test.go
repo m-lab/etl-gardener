@@ -25,7 +25,6 @@ func TestTemplate(t *testing.T) {
 	if !strings.Contains(q, "target.ParseInfo.ParseTime = keep.ParseTime AND") {
 		t.Error("query should contain target.ParseInfo.ParseTime = ... :\n", q)
 	}
-	t.Error(q)
 }
 
 // This runs a real dedup on a real partition in mlab-sandbox for manual testing.

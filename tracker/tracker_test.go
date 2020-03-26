@@ -102,7 +102,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	dsKey.Namespace = "gardener"
 	defer must(t, cleanup(client, dsKey))
 
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0)
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, 0)
 	must(t, err)
 	if tk == nil {
 		t.Fatal("nil Tracker")
@@ -119,7 +119,7 @@ func TestTrackerAddDelete(t *testing.T) {
 		must(t, err)
 	}
 	// Check that the sync (and InitTracker) work.
-	restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0)
+	restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, 0)
 	must(t, err)
 
 	if restore.NumJobs() != 500 {
@@ -150,7 +150,7 @@ func TestUpdate(t *testing.T) {
 	dsKey.Namespace = "gardener"
 	defer must(t, cleanup(client, dsKey))
 
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0)
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, 0)
 	must(t, err)
 
 	createJobs(t, tk, "JobToUpdate", "type", 1)
@@ -190,7 +190,7 @@ func TestNonexistentJobAccess(t *testing.T) {
 	dsKey.Namespace = "gardener"
 	defer must(t, cleanup(client, dsKey))
 
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0)
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, 0)
 	must(t, err)
 
 	job := tracker.Job{}
@@ -221,7 +221,7 @@ func TestNonexistentJobAccess(t *testing.T) {
 }
 
 func TestJobMapHTML(t *testing.T) {
-	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0)
+	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0, 0)
 	must(t, err)
 
 	job := tracker.Job{}
@@ -246,7 +246,7 @@ func TestExpiration(t *testing.T) {
 	defer must(t, cleanup(client, dsKey))
 
 	// Expire jobs after 1 second of monkey time.
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 5*time.Millisecond, 10*time.Millisecond)
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 5*time.Millisecond, 10*time.Millisecond, 1*time.Millisecond)
 	must(t, err)
 
 	job := tracker.NewJob("bucket", "exp", "type", startDate)

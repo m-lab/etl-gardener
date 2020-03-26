@@ -16,7 +16,7 @@ func TestStandardMonitor(t *testing.T) {
 	logx.LogxDebug.Set("true")
 
 	ctx, cancel := context.WithCancel(context.Background())
-	tk, err := tracker.InitTracker(ctx, nil, nil, 0, 0)
+	tk, err := tracker.InitTracker(ctx, nil, nil, 0, 0, 0)
 	rtx.Must(err, "tk init")
 	tk.AddJob(tracker.NewJob("bucket", "exp", "type", time.Now()))
 	tk.AddJob(tracker.NewJob("bucket", "exp2", "type", time.Now()))
