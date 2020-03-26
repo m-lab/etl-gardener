@@ -62,9 +62,9 @@ func TestMonitor_Watch(t *testing.T) {
 		nil,
 		newStateFunc(tracker.Complete),
 		"Deduplicating")
-	go m.Watch(ctx, 10*time.Millisecond)
+	go m.Watch(ctx, 50*time.Millisecond)
 
-	failTime := time.Now().Add(10 * time.Second)
+	failTime := time.Now().Add(5 * time.Second)
 
 	for time.Now().Before(failTime) && tk.NumJobs() > 0 {
 	}
