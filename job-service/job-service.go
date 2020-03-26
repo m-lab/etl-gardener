@@ -105,11 +105,10 @@ func NewJobService(tk *tracker.Tracker, bucket string, startDate time.Time) (*Se
 		j1, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "tcpinfo"}.Target(targetBase + "/ndt/tcpinfo")
 		specs = append(specs, j1)
 	} else {
-		j0, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "ndt5"}.Target(targetBase + ".ndt_raw.ndt5")
+		j0, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "ndt5"}.Target(targetBase + ".tmp_ndt.ndt5")
 		specs = append(specs, j0)
-		j1, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "tcpinfo"}.Target(targetBase + ".ndt_raw.tcpinfo")
+		j1, _ := tracker.Job{Bucket: bucket, Experiment: "ndt", Datatype: "tcpinfo"}.Target(targetBase + ".tmp_ndt.tcpinfo")
 		specs = append(specs, j1)
-
 	}
 
 	start := startDate.UTC().Truncate(24 * time.Hour)
