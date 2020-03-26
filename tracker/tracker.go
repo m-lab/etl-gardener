@@ -42,6 +42,8 @@ type Tracker struct {
 
 	// Time after which stale job should be ignored or replaced.
 	expirationTime time.Duration
+	// Delay before removing Complete jobs.
+	cleanupDelay time.Duration
 }
 
 // InitTracker recovers the Tracker state from a Client object.
@@ -49,7 +51,7 @@ type Tracker struct {
 func InitTracker(
 	ctx context.Context,
 	client dsiface.Client, key *datastore.Key,
-	saveInterval time.Duration, expirationTime time.Duration) (*Tracker, error) {
+	saveInterval time.Duration, expirationTime time.Duration, cleanupDelay time.Duration) (*Tracker, error) {
 
 	jobMap, lastJob, err := loadJobMap(ctx, client, key)
 	if err != nil {
@@ -60,7 +62,10 @@ func InitTracker(
 		metrics.StartedCount.WithLabelValues(j.Experiment, j.Datatype).Inc()
 		metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Inc()
 	}
-	t := Tracker{client: client, dsKey: key, lastModified: time.Now(), lastJob: lastJob, jobs: jobMap, expirationTime: expirationTime}
+	t := Tracker{
+		client: client, dsKey: key, lastModified: time.Now(),
+		lastJob: lastJob, jobs: jobMap,
+		expirationTime: expirationTime, cleanupDelay: cleanupDelay}
 	if client != nil && saveInterval > 0 {
 		t.saveEvery(saveInterval)
 	}
@@ -172,9 +177,11 @@ func (tr *Tracker) UpdateJob(job Job, state Status) error {
 
 	tr.lastModified = time.Now()
 	if state.isDone() {
-		delete(tr.jobs, job)
 		metrics.CompletedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
 		metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype).Dec()
+		if tr.cleanupDelay == 0 {
+			delete(tr.jobs, job)
+		}
 	} else {
 		tr.jobs[job] = state
 	}
@@ -238,7 +245,8 @@ func (tr *Tracker) GetState() (JobMap, Job, time.Time) {
 	m := make(JobMap, len(tr.jobs))
 	for j, s := range tr.jobs {
 		updateTime := s.UpdateTime()
-		if tr.expirationTime > 0 && time.Since(updateTime) > tr.expirationTime {
+		if (tr.expirationTime > 0 && time.Since(updateTime) > tr.expirationTime) ||
+			s.isDone() && time.Since(updateTime) > tr.cleanupDelay {
 			// Remove any obsolete jobs.
 			metrics.CompletedCount.WithLabelValues(j.Experiment, j.Datatype).Inc()
 			metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Dec()

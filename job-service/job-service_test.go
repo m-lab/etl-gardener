@@ -108,7 +108,7 @@ func TestJobHandler(t *testing.T) {
 
 func TestResume(t *testing.T) {
 	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)
-	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0) // Only using jobmap.
+	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0, 0) // Only using jobmap.
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestEarlyWrapping(t *testing.T) {
 	})
 	defer monkey.Unpatch(time.Now)
 	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)
-	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0) // Only using jobmap.
+	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0, 0) // Only using jobmap.
 	if err != nil {
 		t.Fatal(err)
 	}
