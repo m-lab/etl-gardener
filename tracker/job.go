@@ -191,6 +191,11 @@ func (s *Status) StartTime() time.Time {
 	return s.History[0].Start
 }
 
+// UpdateDetail changes the current state's detail
+func (s *Status) UpdateDetail(detail string) {
+	s.LastState().Update(detail)
+}
+
 // Update changes the current state and detail, and returns
 // the previous final StateInfo.
 func (s *Status) Update(state State, detail string) StateInfo {

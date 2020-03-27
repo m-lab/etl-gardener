@@ -155,7 +155,9 @@ func TestEarlyWrapping(t *testing.T) {
 		if k == 2 {
 			job := tracker.Job{}
 			json.Unmarshal([]byte(expected[0].body), &job)
-			err := tk.UpdateJob(job, tracker.Status{State: tracker.Complete})
+			status, _ := tk.GetStatus(job)
+			status.Update(tracker.Complete, "")
+			err := tk.UpdateJob(job, status)
 			if err != nil {
 				t.Error(err)
 			}
