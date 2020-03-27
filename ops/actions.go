@@ -58,12 +58,19 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 	return m, nil
 }
 
+// TODO figure out how to test this code?
 func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
 	start := time.Now()
 	if j.Datatype == "tcpinfo" {
 		// TODO fix this HACK
 		qp := dedup.TCPInfoQuery(j, os.Getenv("TARGET_BASE"))
 		bqJob, err := qp.Dedup(ctx)
+		if err != nil {
+			log.Println(err)
+			// Try again soon.
+			return
+		}
+		status, err := bqJob.Wait(ctx)
 		if err != nil {
 			switch typedErr := err.(type) {
 			case *googleapi.Error:
@@ -92,16 +99,11 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 			}
 
 			log.Println(err)
+			// This will terminate this job.
 			tk.SetJobError(j, err.Error())
 			return
 		}
-		status, err := bqJob.Wait(ctx)
-		if err != nil {
-			log.Println(err)
-			err = tk.SetJobError(j, "dedup failed"+err.Error())
-			return
-		}
-		log.Printf("%+v\n", status.Statistics.Details)
+		log.Printf("Dedup %s: %+v\n", j, status.Statistics.Details)
 	} else if j.Datatype == "ndt5" {
 		tk.SetJobError(j, "dedup not implemented for ndt5")
 		return
