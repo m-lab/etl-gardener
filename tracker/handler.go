@@ -130,12 +130,10 @@ func (h *Handler) errorFunc(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusFailedDependency)
 		return
 	}
-	if err := h.tracker.SetJobError(job, jobErr); err != nil {
+	if err := h.tracker.SetStatus(job, ParseError, jobErr); err != nil {
 		resp.WriteHeader(http.StatusGone)
 		return
 	}
-
-	h.tracker.SetStatus(job, ParseError, "")
 	resp.WriteHeader(http.StatusOK)
 }
 

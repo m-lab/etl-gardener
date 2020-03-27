@@ -138,6 +138,22 @@ const (
 	Complete State = "complete"
 )
 
+// StateInfo describes each state in processing history.
+type StateInfo struct {
+	State          State
+	Start          time.Time
+	LastUpdateTime time.Time
+	LastUpdate     string // status or error, e.g. last filename in Parsing state.
+}
+
+// Update changes the update time and detail string (if != "-").
+func (si *StateInfo) Update(detail string) {
+	si.LastUpdateTime = time.Now()
+	if detail != "-" {
+		si.LastUpdate = detail
+	}
+}
+
 // A Status describes the state of a bucket/exp/type/YYYY/MM/DD job.
 // Completed jobs are removed from the persistent store.
 // Errored jobs are maintained in the persistent store for debugging.
@@ -146,48 +162,69 @@ const (
 type Status struct {
 	HeartbeatTime time.Time // Time of last ETL heartbeat.
 
-	StartTime    time.Time // Time the job was initialized.
-	UpdateTime   time.Time // Time of last update.
-	UpdateDetail string    // Note from last update
-	UpdateCount  int       // Number of updates
+	UpdateCount int // Number of updates
 
-	State               State     // String defining the current state.
-	LastStateChangeTime time.Time // Used for computing time in state.
-	LastError           string    // The most recent error encountered.
+	History []StateInfo
+}
 
-	// Note that these are not persisted
-	errors []string // all errors related to the job.
+func (s *Status) LastState() *StateInfo {
+	return &s.History[len(s.History)-1]
+}
+
+func (s *Status) State() State {
+	return s.LastState().State
+}
+
+func (s *Status) LastUpdate() string {
+	return s.LastState().LastUpdate
+}
+
+func (s *Status) UpdateTime() time.Time {
+	return s.LastState().LastUpdateTime
+}
+
+func (s *Status) LastStateChangeTime() time.Time {
+	return s.LastState().Start
+}
+
+func (s *Status) StartTime() time.Time {
+	return s.History[0].Start
+}
+
+// Update changes the current state and detail, and returns
+// the previous final StateInfo.
+func (s *Status) Update(state State, detail string) StateInfo {
+	target := s.LastState()
+	result := *target // Make a copy
+	if target.State != state {
+		s.History = append(s.History, StateInfo{State: state, Start: time.Now()})
+		target = s.LastState()
+	}
+	target.Update(detail)
+	return result
 }
 
 func (s Status) String() string {
-	if len(s.LastError) > 0 {
-		return fmt.Sprintf("%s %s (%s) %s",
-			s.UpdateTime.Format("01/02~15:04:05"),
-			s.State,
-			s.UpdateDetail,
-			s.LastError)
-	}
+	last := s.LastState()
 	return fmt.Sprintf("%s %s (%s)",
-		s.UpdateTime.Format("01/02~15:04:05"),
-		s.State,
-		s.UpdateDetail)
+		s.UpdateTime().Format("01/02~15:04:05"),
+		last.State,
+		last.LastUpdate)
 }
 
-func (s Status) isDone() bool {
-	return s.State == Complete
+func (s *Status) isDone() bool {
+	return s.LastState().State == Complete
 }
 
 // Elapsed returns the elapsed time of the Job, rounded to nearest second.
-func (s Status) Elapsed() time.Duration {
-	return s.UpdateTime.Sub(s.StartTime).Round(time.Second)
+func (s *Status) Elapsed() time.Duration {
+	return s.UpdateTime().Sub(s.History[0].Start).Round(time.Second)
 }
 
 // NewStatus creates a new Status with provided parameters.
 func NewStatus() Status {
 	return Status{
-		State:     Init,
-		errors:    make([]string, 0, 1),
-		StartTime: time.Now(),
+		History: []StateInfo{StateInfo{State: Init, Start: time.Now()}},
 	}
 }
 
@@ -258,9 +295,9 @@ var jobsTemplate = template.Must(template.New("").Parse(
 					style="color: red;"
 					{{ else }}{{ end }}>
 			  {{.Status.State}} </td>
-			<td> {{.Status.UpdateDetail}} </td>
+			<td> {{.Status.LastUpdate}} </td>
 			<td> {{.Status.UpdateCount}} </td>
-			<td> {{.Status.LastError}} </td>
+			<td> {{.Status.LastUpdate}} </td>
 		</tr>
 	    {{end}}
 	</table>`, Init, ParseComplete)))
@@ -284,7 +321,7 @@ func (jobs JobMap) WriteHTML(w io.Writer) error {
 	// expect some update every 5 to 10 minutes.
 	sort.Slice(pairs,
 		func(i, j int) bool {
-			return pairs[i].Status.StartTime.Before(pairs[j].Status.StartTime)
+			return pairs[i].Status.StartTime().Before(pairs[j].Status.StartTime())
 		})
 	jr := JobRep{Title: "Jobs", Jobs: pairs}
 

@@ -163,7 +163,7 @@ func TestUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.State != tracker.Stabilizing {
+	if status.State() != tracker.Stabilizing {
 		t.Error("Incorrect job state", job)
 	}
 

@@ -81,7 +81,7 @@ func (tr *Tracker) NumFailed() int {
 	counts := make(map[State]int, 20)
 
 	for _, s := range jobs {
-		counts[s.State]++
+		counts[s.State()]++
 	}
 	return counts[Failed]
 }
@@ -142,8 +142,6 @@ func (tr *Tracker) GetStatus(job Job) (Status, error) {
 // May return ErrJobAlreadyExists if job already exists.
 func (tr *Tracker) AddJob(job Job) error {
 	status := NewStatus()
-	status.UpdateTime = time.Now()
-	status.LastStateChangeTime = time.Now()
 
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
@@ -158,7 +156,7 @@ func (tr *Tracker) AddJob(job Job) error {
 	// TODO - should call this JobsInFlight, to avoid confusion with Tasks in parser.
 	metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype).Inc()
 	tr.jobs[job] = status
-	metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(status.State)).Set(float64(job.Date.Unix()))
+	metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(status.State())).Set(float64(job.Date.Unix()))
 	return nil
 }
 
@@ -189,16 +187,11 @@ func (tr *Tracker) SetStatus(job Job, newState State, detail string) error {
 	if err != nil {
 		return err
 	}
-	if newState != status.State {
-		timeInState := time.Since(status.LastStateChangeTime)
-		metrics.StateTimeHistogram.WithLabelValues(job.Experiment, job.Datatype, string(status.State)).Observe(timeInState.Seconds())
-		metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(status.State)).Set(float64(job.Date.Unix()))
-		status.LastStateChangeTime = time.Now()
-	}
-	status.State = newState
-	status.UpdateTime = time.Now()
-	if detail != "-" {
-		status.UpdateDetail = detail
+	old := status.Update(newState, detail)
+	if newState != old.State {
+		timeInState := time.Since(old.Start)
+		metrics.StateTimeHistogram.WithLabelValues(job.Experiment, job.Datatype, string(status.State())).Observe(timeInState.Seconds())
+		metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(status.State())).Set(float64(job.Date.Unix()))
 	}
 	if newState == ParseComplete {
 		// TODO enable this once we have file or byte counts.
@@ -226,17 +219,14 @@ func (tr *Tracker) SetJobError(job Job, errString string) error {
 	if err != nil {
 		return err
 	}
-	status.UpdateTime = time.Now()
-	status.LastError = errString
 	// For now, we set state to failed.  We may want something different in future.
-	status.State = Failed
+	status.Update(Failed, errString)
 	job.failureMetric(errString)
 
-	timeInState := time.Since(status.LastStateChangeTime)
-	metrics.StateTimeHistogram.WithLabelValues(job.Experiment, job.Datatype, string(status.State)).Observe(timeInState.Seconds())
-	metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(status.State)).Set(float64(job.Date.Unix()))
+	timeInState := time.Since(status.LastStateChangeTime())
+	metrics.StateTimeHistogram.WithLabelValues(job.Experiment, job.Datatype, string(status.State())).Observe(timeInState.Seconds())
+	metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(status.State())).Set(float64(job.Date.Unix()))
 
-	status.errors = append(status.errors, errString)
 	return tr.UpdateJob(job, status)
 }
 
@@ -247,7 +237,8 @@ func (tr *Tracker) GetState() (JobMap, Job, time.Time) {
 	defer tr.lock.Unlock()
 	m := make(JobMap, len(tr.jobs))
 	for j, s := range tr.jobs {
-		if tr.expirationTime > 0 && time.Since(s.UpdateTime) > tr.expirationTime {
+		updateTime := s.UpdateTime()
+		if tr.expirationTime > 0 && time.Since(updateTime) > tr.expirationTime {
 			// Remove any obsolete jobs.
 			metrics.CompletedCount.WithLabelValues(j.Experiment, j.Datatype).Inc()
 			metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Dec()
