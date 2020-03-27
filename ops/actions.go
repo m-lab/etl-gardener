@@ -102,6 +102,7 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 			tk.SetJobError(j, err.Error())
 			return
 		}
+		log.Println(status)
 		log.Printf("Dedup %s: %+v\n", j, status.Statistics.Details)
 	} else if j.Datatype == "ndt5" {
 		tk.SetJobError(j, "dedup not implemented for ndt5")
