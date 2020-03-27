@@ -72,6 +72,12 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 		}
 		status, err := bqJob.Wait(ctx)
 		if err != nil {
+			log.Println(err)
+			// Try again soon.
+			return
+		}
+		if status.Err() != nil {
+			err := status.Err()
 			switch typedErr := err.(type) {
 			case *googleapi.Error:
 				if typedErr.Code == http.StatusBadRequest &&
