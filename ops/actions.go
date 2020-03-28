@@ -112,8 +112,8 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 		return
 	}
 
-	s.State = tracker.Complete
 	metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(tracker.Complete)).Set(float64(j.Date.Unix()))
+	log.Println("Completed dedup for", j)
 	err := tk.SetStatus(j, tracker.Complete, "dedup took "+time.Since(start).Round(100*time.Millisecond).String())
 	if err != nil {
 		log.Println(err)
