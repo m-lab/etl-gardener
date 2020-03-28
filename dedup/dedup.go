@@ -15,9 +15,8 @@ import (
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
-// TODO remove _tmp when we are ready to transition.
-// TODO update to use _tmp once tables are copied.
-const table = "`{{.Project}}.{{.Job.Experiment}}_raw.{{.Job.Datatype}}`"
+// TODO get the tmp_ from the job Target.
+const table = "`{{.Project}}.tmp_{{.Job.Experiment}}.{{.Job.Datatype}}`"
 
 var dedupTemplate = template.Must(template.New("").Parse(`
 #standardSQL
