@@ -133,9 +133,7 @@ const (
 	Joining       State = "joining"
 	Finishing     State = "finishing"
 	Failed        State = "failed"
-	// Note that GetStatus will never return Complete, as the
-	// Job is removed when SetJobState is called with Complete.
-	Complete State = "complete"
+	Complete      State = "complete"
 )
 
 // StateInfo describes each state in processing history.

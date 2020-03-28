@@ -85,7 +85,7 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 					// Wait a while and try again.
 					// Since there is no job update, the tracker may eventually kill
 					// this job if it doesn't succeed within the stale job time limit.
-					s.UpdateDetail = "Dedup waiting for empty streaming buffer."
+					s.UpdateDetail("Dedup waiting for empty streaming buffer.")
 					tk.UpdateJob(j, s)
 					time.Sleep(5 * time.Minute)
 					return // Try again later.
@@ -97,7 +97,7 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 					// Since there is no job update, the tracker may eventually kill
 					// this job if it doesn't succeed within the stale job time limit.
 					// TODO should this use exponential backoff?
-					s.UpdateDetail = "Dedup waiting because of BQ Rate Limit Exceeded."
+					s.UpdateDetail("Dedup waiting because of BQ Rate Limit Exceeded.")
 					tk.UpdateJob(j, s)
 					time.Sleep(5 * time.Minute)
 					return // Try again later.
@@ -119,6 +119,7 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 		return
 	}
 	metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(tracker.Complete)).Set(float64(j.Date.Unix()))
+	log.Println("Completed dedup for", j)
 	err := tk.SetStatus(j, tracker.Complete, "dedup took "+time.Since(start).Round(100*time.Millisecond).String())
 	if err != nil {
 		log.Println(err)
