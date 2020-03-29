@@ -1,0 +1,10 @@
+---
+commit: foobar
+project: mlab-testing
+sources:
+- bucket: bucket
+  datatype: tcpinfo
+  archive_path: gs://foobar/ndt/tcpinfo
+  start: 2019-08-01
+tracker:
+  timeout: 5h
