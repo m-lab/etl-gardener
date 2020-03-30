@@ -38,6 +38,8 @@ spec:
         name: etl-gardener
         args: ["--prometheusx.listen-address=:9090"]
         env:
+        - name: config_path
+          value: /etc/config.yml
         - name: SERVICE_MODE # Whether to use task-queues or run as manager.
           value: "manager"
         - name: ARCHIVE_BUCKET  # This will eventually be provided through k8s configmap.
@@ -89,7 +91,7 @@ spec:
         volumeMounts:
         - name: config-volume
           mountPath: /etc/config.yaml  # Is this where we want it?
-          subPath: config.yaml
+          subPath: config.yaml  # This is the name of the data section key?
         - name: singleton
           mountPath: /singleton
 
