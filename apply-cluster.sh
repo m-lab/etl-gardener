@@ -19,6 +19,11 @@ DATE_SKIP=${DATE_SKIP:-"0"}  # Number of dates to skip between each processed da
 TASK_FILE_SKIP=${TASK_FILE_SKIP:-"0"}  # Number of files to skip between each processed file (for sandbox).
 TARGET_BASE=${TARGET_BASE:-"gs://"}  # Destination base for universal gardener job service.
 
+# Create the configmap
+kubectl create configmap gardener-config --dry-run \
+    --from-file config/config.yml \
+    -o k8s/data-processing/deployments/config.yml
+
 # Apply templates
 CFG=/tmp/${CLUSTER}-${PROJECT}.yml
 kexpand expand --ignore-missing-keys k8s/${CLUSTER}/*/*.yml \
@@ -30,9 +35,6 @@ kexpand expand --ignore-missing-keys k8s/${CLUSTER}/*/*.yml \
     > ${CFG}
 cat ${CFG}
 
-# Create the configmap
-kubectl describe configmaps gardener-config || true
-kubectl create configmap gardener-config --dry-run --from-file config/config.yml
 kubectl describe configmaps gardener-config
 
 # This triggers deployment of the pod.
