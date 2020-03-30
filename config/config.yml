@@ -1,7 +1,7 @@
 ---
 project: mlab-testing
-commit: foobar
-release: private # Consider adding the branch-name
+commit: other
+release: branch-u-sandbox-config # Consider adding the branch-name
 
 tracker:
   timeout: 5h
