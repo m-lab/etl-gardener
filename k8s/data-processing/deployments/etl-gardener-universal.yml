@@ -90,8 +90,8 @@ spec:
 
         volumeMounts:
         - name: config-volume
-          mountPath: /etc/config.yaml  # Is this where we want it?
-          subPath: config.yaml  # This is the name of the data section key?
+          mountPath: /etc/config.yml  # Is this where we want it?
+          subPath: config.yml  # This is the name of the data section key?
         - name: singleton
           mountPath: /singleton
 
