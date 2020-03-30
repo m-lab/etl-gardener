@@ -15,21 +15,29 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// StatusConfig holds the port number for the public status server.
 type StatusConfig struct {
 	Port string `yaml:"port"`
 }
 
+// TrackerConfig holds the config for the job tracker.
 type TrackerConfig struct {
 	Timeout time.Duration `yaml:"timeout"`
 }
 
+// MonitorConfig holds the config for the state machine monitor.
+type MonitorConfig struct {
+	PollingInterval time.Duration `yaml:"polling_interval"`
+}
+
+// SourceConfig holds the config that defines all data sources to be processed.
 type SourceConfig struct {
 	Bucket      string    `yaml:"bucket"`
 	ArchivePath string    `yaml:"archive_path"`
 	Datatype    string    `yaml:"datatype"`
-	Start       time.Time `yaml:"start"`
 	Prefix      string    `yaml:"prefix"`
 	Filter      string    `yaml:"filter"`
+	Start       time.Time `yaml:"start"`
 	Target      string    `yaml:"target"`
 }
 
@@ -39,14 +47,20 @@ type Gardener struct {
 	Commit  string `yaml:"commit"`
 	Release string `yaml:"release"`
 
-	Status StatusConfig `yaml:"status"`
-
-	Tracker TrackerConfig `yaml:"tracker"`
-
+	Status  StatusConfig   `yaml:"status"`
+	Tracker TrackerConfig  `yaml:"tracker"`
+	Monitor MonitorConfig  `yaml:"monitor"`
 	Sources []SourceConfig `yaml:"sources"`
 }
 
 var gardener Gardener
+
+// Sources returns the list of sources that should be processed.
+func Sources() []SourceConfig {
+	src := make([]SourceConfig, len(gardener.Sources))
+	copy(src, gardener.Sources)
+	return src
+}
 
 // ParseConfig loads the full Config, or Exits on failure.
 func ParseConfig() {
