@@ -87,14 +87,21 @@ spec:
             cpu: "1"
 
         volumeMounts:
-        - mountPath: /volume-claim
-          name: gardener-storage
+        - name: config-volume
+          mountPath: /etc/config.yaml  # Is this where we want it?
+          subPath: config.yaml
+        - name: singleton
+          mountPath: /singleton
+
+      volumes:
+      - name: singleton
+        persistentVolumeClaim:
+          claimName: gardener-universal  # This forces a singleton instance.
+      - name: config-volume
+        configMap:
+          name: gardener-config
 
       nodeSelector:
         gardener-node: "true"
 
-      volumes:
-      - name: gardener-storage
-        persistentVolumeClaim:
-          claimName: gardener-universal  # This forces a singleton instance.
 
