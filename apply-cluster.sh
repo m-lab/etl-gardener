@@ -32,7 +32,7 @@ cat ${CFG}
 
 # Create the configmap
 kubectl describe configmaps gardener-config || true
-kubectl create configmap gardener-config --from-file config/config.yml || true
+kubectl create configmap gardener-config --dry-run --from-file config/config.yml
 kubectl describe configmaps gardener-config
 
 # This triggers deployment of the pod.
