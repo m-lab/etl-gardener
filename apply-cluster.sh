@@ -31,7 +31,9 @@ kexpand expand --ignore-missing-keys k8s/${CLUSTER}/*/*.yml \
 cat ${CFG}
 
 # Create the configmap
-kubectl create configmap gardener-config --from-file config/config.yml
+kubectl describe configmaps gardener-config || true
+kubectl create configmap gardener-config --from-file config/config.yml || true
+kubectl describe configmaps gardener-config
 
 # This triggers deployment of the pod.
 kubectl apply -f ${CFG}
