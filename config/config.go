@@ -73,7 +73,7 @@ func ParseConfig() {
 
 func processError(err error) {
 	fmt.Println(err)
-	os.Exit(2)
+	// For now don't die...	os.Exit(2)
 }
 
 var configPath = flag.String("config_path", "config.yml", "Path to the config file.")

@@ -36,7 +36,7 @@ spec:
       containers:
       - image: gcr.io/{{GCLOUD_PROJECT}}/github-m-lab-etl-gardener:{{GIT_COMMIT}}
         name: etl-gardener
-        args: ["--prometheusx.listen-address=:9090"]
+        args: ["--prometheusx.listen-address=:9090", "--config_path=/etc/config.yml"]
         env:
         - name: config_path
           value: /etc/config.yml
