@@ -1,6 +1,6 @@
 ---
-project: mlab-testing
-commit: other
+project: {{GCLOUD_PROJECT}}
+commit: {{GIT_COMMIT}}
 release: branch-u-sandbox-config # Consider adding the branch-name
 
 tracker:

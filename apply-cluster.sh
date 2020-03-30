@@ -22,7 +22,7 @@ TARGET_BASE=${TARGET_BASE:-"gs://"}  # Destination base for universal gardener j
 # Create the configmap
 kubectl create configmap gardener-config --dry-run \
     --from-file config/config.yml \
-    -o k8s/data-processing/deployments/config.yml
+    -o yaml > k8s/data-processing/deployments/config.yml
 
 # Apply templates
 CFG=/tmp/${CLUSTER}-${PROJECT}.yml
