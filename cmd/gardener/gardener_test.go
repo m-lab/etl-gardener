@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	_ "expvar"
+	"flag"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -18,6 +19,11 @@ import (
 
 	"github.com/m-lab/go/osx"
 )
+
+func init() {
+	log.Println("Setting config path")
+	flag.Set("config_path", "../../config/testdata/config.yml")
+}
 
 // Retries for up to 10 seconds.
 func waitFor(url string) (resp *http.Response, err error) {
@@ -81,7 +87,7 @@ func TestManagerMode(t *testing.T) {
 		defer cleanup()
 	}
 
-	go func() {
+	go func(t *testing.T) {
 		defer mainCancel()
 		resp, err := waitFor("http://localhost:8080/ready")
 		if err != nil {
@@ -106,7 +112,7 @@ func TestManagerMode(t *testing.T) {
 			t.Error("Should contain Jobs:\n", string(data))
 		}
 		resp.Body.Close()
-	}()
+	}(t)
 
 	main()
 }

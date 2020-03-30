@@ -28,6 +28,7 @@ import (
 	"github.com/m-lab/go/rtx"
 
 	"github.com/m-lab/etl-gardener/cloud"
+	"github.com/m-lab/etl-gardener/config"
 	job "github.com/m-lab/etl-gardener/job-service"
 	"github.com/m-lab/etl-gardener/ops"
 	"github.com/m-lab/etl-gardener/reproc"
@@ -328,6 +329,8 @@ func main() {
 
 	flag.Parse()
 	rtx.Must(flagx.ArgsFromEnv(flag.CommandLine), "Could not get args from env")
+
+	config.ParseConfig()
 
 	LoadEnv()
 	if env.Error != nil {
