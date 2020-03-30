@@ -366,7 +366,7 @@ func main() {
 	case "manager":
 		// This is new new "manager" mode, in which Gardener provides /job and /update apis
 		// for parsers to get work and report progress.
-		// TODO Once the old configs are turned down, this should move to head of main().
+		// TODO Once the legacy deployments are turned down, this should move to head of main().
 		config.ParseConfig()
 
 		globalTracker = mustStandardTracker()

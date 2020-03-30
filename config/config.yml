@@ -1,7 +1,7 @@
 ---
 project: {{GCLOUD_PROJECT}}
 commit: {{GIT_COMMIT}}
-release: branch-u-sandbox-config # Consider adding the branch-name
+release: {{GIT_TAG}} # Should be branch name or release tag.
 
 tracker:
   timeout: 5h
@@ -9,14 +9,12 @@ monitor:
   polling_interval: 5m
 sources:
 - bucket: archive-measurement-lab
-  datatype: tcpinfo
   archive_path: ndt/tcpinfo
   filter: .*T??:??:00.*Z
   start: 2019-08-01
-  target: ndt.tcpinfo
+  target: tmp_ndt.tcpinfo
 - bucket: archive-measurement-lab
-  datatype: tcpinfo
   archive_path: ndt/ndt5
   filter: .*T??:??:00.*Z
   start: 2019-08-01
-  target: ndt.ndt5
+  target: tmp_ndt.ndt5

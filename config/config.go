@@ -34,8 +34,6 @@ type MonitorConfig struct {
 type SourceConfig struct {
 	Bucket      string    `yaml:"bucket"`
 	ArchivePath string    `yaml:"archive_path"`
-	Datatype    string    `yaml:"datatype"`
-	Prefix      string    `yaml:"prefix"`
 	Filter      string    `yaml:"filter"`
 	Start       time.Time `yaml:"start"`
 	Target      string    `yaml:"target"`
