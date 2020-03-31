@@ -178,13 +178,13 @@ func (tr *Tracker) UpdateJob(job Job, state Status) error {
 	tr.lastModified = time.Now()
 	if state.isDone() {
 		metrics.CompletedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
-		metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype).Dec()
 		if tr.cleanupDelay == 0 {
+			metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype).Dec()
 			delete(tr.jobs, job)
+			return nil
 		}
-	} else {
-		tr.jobs[job] = state
 	}
+	tr.jobs[job] = state
 	return nil
 }
 
@@ -196,12 +196,14 @@ func (tr *Tracker) SetStatus(job Job, newState State, detail string) error {
 	}
 	old := status.Update(newState, detail)
 	if newState != old.State {
+		log.Println(job, status.State(), "->", newState)
 		timeInState := time.Since(old.Start)
 		metrics.StateTimeHistogram.WithLabelValues(job.Experiment, job.Datatype, string(status.State())).Observe(timeInState.Seconds())
 		metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(status.State())).Set(float64(job.Date.Unix()))
 	}
 	if newState == ParseComplete {
 		// TODO enable this once we have file or byte counts.
+		// Alternatively, incorporate this into the next Action!
 		// Update the metrics, even if there is an error, since the files were submitted to the queue already.
 		// metrics.FilesPerDateHistogram.WithLabelValues(job.Datatype, strconv.Itoa(job.Date.Year())).Observe(float64(fileCount))
 		// metrics.BytesPerDateHistogram.WithLabelValues(t.Experiment, strconv.Itoa(t.Date.Year())).Observe(float64(byteCount))
@@ -248,7 +250,6 @@ func (tr *Tracker) GetState() (JobMap, Job, time.Time) {
 		if (tr.expirationTime > 0 && time.Since(updateTime) > tr.expirationTime) ||
 			(s.isDone() && time.Since(updateTime) > tr.cleanupDelay) {
 			// Remove any obsolete jobs.
-			metrics.CompletedCount.WithLabelValues(j.Experiment, j.Datatype).Inc()
 			metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Dec()
 			log.Println("Deleting stale job", j)
 			tr.lastModified = time.Now()
