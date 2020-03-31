@@ -570,7 +570,7 @@ func (tr *Tracker) GetState() (JobMap, Job, time.Time) {
 	m := make(JobMap, len(tr.jobs))
 	for j, s := range tr.jobs {
 		if (tr.expirationTime > 0 && time.Since(s.UpdateTime) > tr.expirationTime) ||
-			s.isDone() && time.Since(s.UpdateTime) > tr.cleanupDelay {
+			(s.isDone() && time.Since(s.UpdateTime) > tr.cleanupDelay) {
 			// Remove any obsolete jobs.
 			metrics.CompletedCount.WithLabelValues(j.Experiment, j.Datatype).Inc()
 			metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Dec()

@@ -102,7 +102,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	dsKey.Namespace = "gardener"
 	defer must(t, cleanup(client, dsKey))
 
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, 0)
+	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, time.Second)
 	must(t, err)
 	if tk == nil {
 		t.Fatal("nil Tracker")
@@ -119,7 +119,8 @@ func TestTrackerAddDelete(t *testing.T) {
 		must(t, err)
 	}
 	// Check that the sync (and InitTracker) work.
-	restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, 0)
+	// Jobs will be removed by GetStatus 50 milliseconds after Complete.
+	restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, 50*time.Millisecond)
 	must(t, err)
 
 	if restore.NumJobs() != 500 {
@@ -132,6 +133,27 @@ func TestTrackerAddDelete(t *testing.T) {
 
 	completeJobs(t, tk, "500Jobs", "type", numJobs)
 
+	// This tests proper behavior of cleanup with cleanupDelay.
+	jobs, _, _ := tk.GetState()
+	if len(jobs) < numJobs {
+		t.Error("Too few jobs:", len(jobs), "<", numJobs)
+	}
+	active := 0
+	for _, s := range jobs {
+		if s.State != tracker.Complete {
+			active++
+		}
+	}
+	if active > 0 {
+		t.Error("Should be zero active jobs")
+	}
+
+	// It will take up to 50 milliseconds to delete the jobs.
+	deadline := time.Now().Add(time.Second)
+	for tk.NumJobs() != 0 && time.Since(deadline) < 0 {
+		time.Sleep(time.Millisecond)
+		tk.GetState()
+	}
 	if _, err := tk.Sync(time.Time{}); err != nil {
 		must(t, err)
 	}
