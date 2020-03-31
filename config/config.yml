@@ -1,8 +1,4 @@
 ---
-project: {{GCLOUD_PROJECT}}
-commit: {{GIT_COMMIT}}
-release: {{GIT_TAG}} # Should be branch name or release tag.
-
 tracker:
   timeout: 5h
 monitor:

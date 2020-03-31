@@ -15,11 +15,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// StatusConfig holds the port number for the public status server.
-type StatusConfig struct {
-	Port string `yaml:"port"`
-}
-
 // TrackerConfig holds the config for the job tracker.
 type TrackerConfig struct {
 	Timeout time.Duration `yaml:"timeout"`
@@ -41,11 +36,6 @@ type SourceConfig struct {
 
 // Gardener is the full config for a Gardener instance.
 type Gardener struct {
-	Project string `yaml:"project"` // informational
-	Commit  string `yaml:"commit"`
-	Release string `yaml:"release"`
-
-	Status  StatusConfig   `yaml:"status"`
 	Tracker TrackerConfig  `yaml:"tracker"`
 	Monitor MonitorConfig  `yaml:"monitor"`
 	Sources []SourceConfig `yaml:"sources"`

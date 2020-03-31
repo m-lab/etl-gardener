@@ -1,8 +1,4 @@
 ---
-project: mlab-testing
-commit: foobar
-release: private # Consider adding the branch-name
-
 tracker:
   timeout: 5h
 monitor:
