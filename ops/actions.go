@@ -3,12 +3,14 @@ package ops
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"cloud.google.com/go/bigquery"
 	"github.com/googleapis/google-cloud-go-testing/bigquery/bqiface"
 	"google.golang.org/api/googleapi"
 
@@ -61,6 +63,7 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 // TODO figure out how to test this code?
 func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
 	start := time.Now()
+	var msg string
 	if j.Datatype == "tcpinfo" {
 		// TODO fix this HACK
 		qp := dedup.TCPInfoQuery(j, os.Getenv("TARGET_BASE"))
@@ -103,7 +106,15 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 			return
 		}
 		log.Println(status)
-		log.Printf("Dedup %s: %+v\n", j, status.Statistics.Details)
+		switch details := status.Statistics.Details.(type) {
+		case *bigquery.QueryStatistics:
+			msg = fmt.Sprintf("Dedup took %s, %5.2d Slot Minutes, %d Rows affected, %d Bytes Processed, %d Bytes Billed",
+				time.Since(start).Round(100*time.Millisecond).String(), details.SlotMillis/60000.0, details.NumDMLAffectedRows, details.TotalBytesProcessed, details.TotalBytesBilled)
+			log.Printf("Dedup %s: %+v\n", j, details)
+		default:
+			log.Printf("Could not convert to QueryStatistics: %+v\n", status.Statistics.Details)
+			msg = "Could not convert Detail to QueryStatistics"
+		}
 	} else if j.Datatype == "ndt5" {
 		tk.SetJobError(j, "dedup not implemented for ndt5")
 		return
@@ -114,7 +125,7 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 
 	metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(tracker.Complete)).Set(float64(j.Date.Unix()))
 	log.Println("Completed dedup for", j)
-	err := tk.SetStatus(j, tracker.Complete, "dedup took "+time.Since(start).Round(100*time.Millisecond).String())
+	err := tk.SetStatus(j, tracker.Complete, msg)
 	if err != nil {
 		log.Println(err)
 	}
