@@ -74,6 +74,7 @@ func (params QueryParams) String() string {
 	return out.String()
 }
 
+//TCPInfoQuery returns the QueryParams for dedupping a TCPInfo job.
 func TCPInfoQuery(job tracker.Job, project string) QueryParams {
 	return QueryParams{
 		Project:   project,
@@ -81,6 +82,18 @@ func TCPInfoQuery(job tracker.Job, project string) QueryParams {
 		Job:       job,
 		Partition: map[string]string{"uuid": "uuid", "Timestamp": "FinalSnapshot.Timestamp"},
 		Order:     "ARRAY_LENGTH(Snapshots) DESC, ParseInfo.TaskFileName, ParseInfo.ParseTime DESC",
+		Select:    map[string]string{"ParseTime": "ParseInfo.ParseTime"},
+	}
+}
+
+//NDT5Query returns the QueryParams for dedupping an NDT5 job.
+func NDT5Query(job tracker.Job, project string) QueryParams {
+	return QueryParams{
+		Project:   project,
+		TestTime:  "TestTime",
+		Job:       job,
+		Partition: map[string]string{"test_id": "test_id"},
+		Order:     "ParseInfo.ParseTime DESC",
 		Select:    map[string]string{"ParseTime": "ParseInfo.ParseTime"},
 	}
 }

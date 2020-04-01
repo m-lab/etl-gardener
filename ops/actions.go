@@ -63,75 +63,85 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 // TODO figure out how to test this code?
 func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
 	start := time.Now()
+	var bqJob bqiface.Job
 	var msg string
 	if j.Datatype == "tcpinfo" {
-		// TODO fix this HACK
 		qp := dedup.TCPInfoQuery(j, os.Getenv("TARGET_BASE"))
-		bqJob, err := qp.Dedup(ctx)
+		var err error
+		bqJob, err = qp.Dedup(ctx)
 		if err != nil {
 			log.Println(err)
 			// Try again soon.
 			return
-		}
-		status, err := bqJob.Wait(ctx)
-		if err != nil {
-			log.Println(err)
-			// Try again soon.
-			return
-		}
-		if status.Err() != nil {
-			err := status.Err()
-			switch typedErr := err.(type) {
-			case *googleapi.Error:
-				if typedErr.Code == http.StatusBadRequest &&
-					strings.Contains(typedErr.Error(), "streaming buffer") {
-					// Wait a while and try again.
-					// Since there is no job update, the tracker may eventually kill
-					// this job if it doesn't succeed within the stale job time limit.
-					s.UpdateDetail("Dedup waiting for empty streaming buffer.")
-					tk.UpdateJob(j, s)
-					time.Sleep(5 * time.Minute)
-					return // Try again later.
-				}
-			default:
-				if err == state.ErrBQRateLimitExceeded {
-					// If BQ is rate limited, this basically results in jobs queuing up
-					// and executing later.
-					// Since there is no job update, the tracker may eventually kill
-					// this job if it doesn't succeed within the stale job time limit.
-					// TODO should this use exponential backoff?
-					s.UpdateDetail("Dedup waiting because of BQ Rate Limit Exceeded.")
-					tk.UpdateJob(j, s)
-					time.Sleep(5 * time.Minute)
-					return // Try again later.
-				}
-			}
-
-			log.Println(err)
-			// This will terminate this job.
-			tk.SetJobError(j, err.Error())
-			return
-		}
-		log.Println(status)
-		switch details := status.Statistics.Details.(type) {
-		case *bigquery.QueryStatistics:
-			msg = fmt.Sprintf("Dedup took %s, %5.2d Slot Minutes, %d Rows affected, %d Bytes Processed, %d Bytes Billed",
-				time.Since(start).Round(100*time.Millisecond).String(), details.SlotMillis/60000.0, details.NumDMLAffectedRows, details.TotalBytesProcessed, details.TotalBytesBilled)
-			log.Printf("Dedup %s: %+v\n", j, details)
-		default:
-			log.Printf("Could not convert to QueryStatistics: %+v\n", status.Statistics.Details)
-			msg = "Could not convert Detail to QueryStatistics"
 		}
 	} else if j.Datatype == "ndt5" {
+		qp := dedup.NDT5Query(j, os.Getenv("TARGET_BASE"))
+		var err error
+		bqJob, err = qp.Dedup(ctx)
+		if err != nil {
+			log.Println(err)
+			return // Try again soon.
+		}
 		tk.SetJobError(j, "dedup not implemented for ndt5")
-		return
 	} else {
 		tk.SetJobError(j, "unknown datatype")
+	}
+
+	if bqJob == nil {
 		return
+	}
+	status, err := bqJob.Wait(ctx)
+	if err != nil {
+		log.Println(err)
+		return // Try again soon.
+	}
+	if status.Err() != nil {
+		err := status.Err()
+		switch typedErr := err.(type) {
+		case *googleapi.Error:
+			if typedErr.Code == http.StatusBadRequest &&
+				strings.Contains(typedErr.Error(), "streaming buffer") {
+				// Wait a while and try again.
+				// Since there is no job update, the tracker may eventually kill
+				// this job if it doesn't succeed within the stale job time limit.
+				s.UpdateDetail("Dedup waiting for empty streaming buffer.")
+				tk.UpdateJob(j, s)
+				time.Sleep(5 * time.Minute)
+				return // Try again later.
+			}
+		default:
+			if err == state.ErrBQRateLimitExceeded {
+				// If BQ is rate limited, this basically results in jobs queuing up
+				// and executing later.
+				// Since there is no job update, the tracker may eventually kill
+				// this job if it doesn't succeed within the stale job time limit.
+				// TODO should this use exponential backoff?
+				s.UpdateDetail("Dedup waiting because of BQ Rate Limit Exceeded.")
+				tk.UpdateJob(j, s)
+				time.Sleep(5 * time.Minute)
+				return // Try again later.
+			}
+		}
+
+		log.Println(err)
+		// This will terminate this job.
+		tk.SetJobError(j, err.Error())
+		return
+	}
+	// Dedup job was successful.  Handle the statistics, metrics, tracker update.
+	log.Println(status)
+	switch details := status.Statistics.Details.(type) {
+	case *bigquery.QueryStatistics:
+		msg = fmt.Sprintf("Dedup took %s, %5.2d Slot Minutes, %d Rows affected, %d Bytes Processed, %d Bytes Billed",
+			time.Since(start).Round(100*time.Millisecond).String(), details.SlotMillis/60000.0, details.NumDMLAffectedRows, details.TotalBytesProcessed, details.TotalBytesBilled)
+		log.Printf("Dedup %s: %+v\n", j, details)
+	default:
+		log.Printf("Could not convert to QueryStatistics: %+v\n", status.Statistics.Details)
+		msg = "Could not convert Detail to QueryStatistics"
 	}
 	metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(tracker.Complete)).Set(float64(j.Date.Unix()))
 	log.Println("Completed dedup for", j)
-	err := tk.SetStatus(j, tracker.Complete, msg)
+	err = tk.SetStatus(j, tracker.Complete, msg)
 	if err != nil {
 		log.Println(err)
 	}
