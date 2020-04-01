@@ -4,6 +4,7 @@ package dedup
 import (
 	"bytes"
 	"context"
+	"errors"
 	"html/template"
 	"log"
 
@@ -74,27 +75,33 @@ func (params QueryParams) String() string {
 	return out.String()
 }
 
-//TCPInfoQuery returns the QueryParams for dedupping a TCPInfo job.
-func TCPInfoQuery(job tracker.Job, project string) QueryParams {
-	return QueryParams{
-		Project:   project,
-		TestTime:  "TestTime",
-		Job:       job,
-		Partition: map[string]string{"uuid": "uuid", "Timestamp": "FinalSnapshot.Timestamp"},
-		Order:     "ARRAY_LENGTH(Snapshots) DESC, ParseInfo.TaskFileName, ParseInfo.ParseTime DESC",
-		Select:    map[string]string{"ParseTime": "ParseInfo.ParseTime"},
-	}
-}
+// ErrDatatypeNotSupported is returned by Query for unsupported datatypes.
+var ErrDatatypeNotSupported = errors.New("Datatype not supported")
 
-//NDT5Query returns the QueryParams for dedupping an NDT5 job.
-func NDT5Query(job tracker.Job, project string) QueryParams {
-	return QueryParams{
-		Project:   project,
-		TestTime:  "TestTime",
-		Job:       job,
-		Partition: map[string]string{"test_id": "test_id"},
-		Order:     "ParseInfo.ParseTime DESC",
-		Select:    map[string]string{"ParseTime": "ParseInfo.ParseTime"},
+// Query creates a dedup query for a Job.
+func Query(job tracker.Job, project string) (QueryParams, error) {
+	switch job.Datatype {
+	case "ndt5":
+		return QueryParams{
+			Project:   project,
+			TestTime:  "TestTime",
+			Job:       job,
+			Partition: map[string]string{"test_id": "test_id"},
+			Order:     "ParseInfo.ParseTime DESC",
+			Select:    map[string]string{"ParseTime": "ParseInfo.ParseTime"},
+		}, nil
+
+	case "tcpinfo":
+		return QueryParams{
+			Project:   project,
+			TestTime:  "TestTime",
+			Job:       job,
+			Partition: map[string]string{"uuid": "uuid", "Timestamp": "FinalSnapshot.Timestamp"},
+			Order:     "ARRAY_LENGTH(Snapshots) DESC, ParseInfo.TaskFileName, ParseInfo.ParseTime DESC",
+			Select:    map[string]string{"ParseTime": "ParseInfo.ParseTime"},
+		}, nil
+	default:
+		return QueryParams{}, ErrDatatypeNotSupported
 	}
 }
 
@@ -102,7 +109,7 @@ func NDT5Query(job tracker.Job, project string) QueryParams {
 // It derives the table name from the dsExt project and the job fields.
 // TODO add cost accounting to status page?
 // TODO inject fake bqclient for testing?
-func (params QueryParams) Dedup(ctx context.Context) (bqiface.Job, error) {
+func (params QueryParams) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	c, err := bigquery.NewClient(ctx, params.Project)
 	if err != nil {
 		return nil, err
@@ -111,6 +118,10 @@ func (params QueryParams) Dedup(ctx context.Context) (bqiface.Job, error) {
 	q := bqClient.Query(params.String())
 	if q == nil {
 		return nil, dataset.ErrNilQuery
+	}
+	if dryRun {
+		qc := bqiface.QueryConfig{QueryConfig: bigquery.QueryConfig{DryRun: dryRun, Q: params.String()}}
+		q.SetQueryConfig(qc)
 	}
 	return q.Run(ctx)
 }
