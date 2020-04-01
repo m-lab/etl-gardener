@@ -40,30 +40,30 @@ func TestService_NextJob(t *testing.T) {
 		config.SourceConfig{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
 	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)
-	svc, _ := job.NewJobService(nil, start, "fake-bucket", sources)
+	svc, _ := job.NewJobService(nil, start, "fakebucket", sources)
 	j := svc.NextJob()
-	w, err := tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}.Target("gs://fakebucket/ndt/ndt5")
+	w, err := tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.ndt5")
 	rtx.Must(err, "")
 	diff := deep.Equal(w, j)
 	if diff != nil {
 		t.Error(diff)
 	}
 	j = svc.NextJob()
-	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Truncate(24 * time.Hour)}.Target("gs://fakebucket/ndt/tcpinfo")
+	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.tcpinfo")
 	rtx.Must(err, "")
 	diff = deep.Equal(w, j)
 	if diff != nil {
 		t.Error(diff)
 	}
 	j = svc.NextJob()
-	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}.Target("gs://fakebucket/ndt/ndt5")
+	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.ndt5")
 	rtx.Must(err, "")
 	diff = deep.Equal(w, j)
 	if diff != nil {
 		t.Error(diff)
 	}
 	j = svc.NextJob()
-	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}.Target("gs://fakebucket/ndt/tcpinfo")
+	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.tcpinfo")
 	rtx.Must(err, "")
 	diff = deep.Equal(w, j)
 	if diff != nil {
@@ -71,7 +71,7 @@ func TestService_NextJob(t *testing.T) {
 	}
 	// Wrap
 	j = svc.NextJob()
-	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}.Target("gs://fakebucket/ndt/ndt5")
+	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.ndt5")
 	rtx.Must(err, "")
 	diff = deep.Equal(w, j)
 	if diff != nil {
@@ -85,7 +85,7 @@ func TestJobHandler(t *testing.T) {
 		config.SourceConfig{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
 	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)
-	svc, _ := jobservice.NewJobService(nil, start, "fake-bucket", sources)
+	svc, _ := job.NewJobService(nil, start, "fakebucket", sources)
 	req := httptest.NewRequest("", "/job", nil)
 	resp := httptest.NewRecorder()
 	svc.JobHandler(resp, req)

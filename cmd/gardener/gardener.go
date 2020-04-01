@@ -372,10 +372,10 @@ func main() {
 		globalTracker = mustStandardTracker()
 
 		// TODO - refactor this block.
-		config := cloud.Config{
+		cloudCfg := cloud.Config{
 			Project: env.Project,
 			Client:  nil}
-		bqConfig := NewBQConfig(config)
+		bqConfig := NewBQConfig(cloudCfg)
 		bqConfig.BQFinalDataset = "base_tables"
 		bqConfig.BQBatchDataset = "batch"
 		monitor, err := ops.NewStandardMonitor(mainCtx, bqConfig, globalTracker)
@@ -386,7 +386,9 @@ func main() {
 		handler.Register(mux)
 
 		// For now, we just start in Aug 2019, and handle only new data.
-		svc, err := job.NewJobService(globalTracker, env.Bucket, time.Date(2019, 8, 1, 0, 0, 0, 0, time.UTC))
+
+		svc, err := job.NewJobService(globalTracker,
+			time.Time{}, os.Getenv("PROJECT"), config.Sources())
 		rtx.Must(err, "Could not initialize job service")
 		mux.HandleFunc("/job", svc.JobHandler)
 		healthy = true

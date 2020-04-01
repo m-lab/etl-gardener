@@ -5,10 +5,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-<<<<<<< HEAD
-	"os"
-=======
->>>>>>> 096d42e... use config
 	"sync"
 	"time"
 
