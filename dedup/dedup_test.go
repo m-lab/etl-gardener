@@ -31,20 +31,38 @@ func TestTemplate(t *testing.T) {
 }
 
 func TestValidateQueries(t *testing.T) {
-	job := tracker.NewJob("bucket", "ndt", "tcpinfo", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
-	q, err := dedup.Query(job, "mlab-sandbox")
-	if err != nil {
-		t.Fatal(err)
+	if testing.Short() {
+		t.Log("Skipping test for --short")
 	}
-	j, err := q.Dedup(context.Background(), true)
-	if err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name string
+		job  tracker.Job
+	}{
+		{
+			name: "tcpinfo",
+			job:  tracker.NewJob("bucket", "ndt", "tcpinfo", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC)),
+		},
+		{
+			name: "ndt5",
+			job:  tracker.NewJob("bucket", "ndt", "ndt5", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC)),
+		},
 	}
-	status := j.LastStatus()
-	if status.Err() != nil {
-		t.Fatal(err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q, err := dedup.Query(tt.job, "mlab-sandbox")
+			if err != nil {
+				t.Fatal(tt.name, err)
+			}
+			j, err := q.Dedup(context.Background(), true)
+			if err != nil {
+				t.Fatal(tt.name, err)
+			}
+			status := j.LastStatus()
+			if status.Err() != nil {
+				t.Fatal(tt.name, err)
+			}
+		})
 	}
-	t.Fatal(status)
 }
 
 // This runs a real dedup on a real partition in mlab-sandbox for manual testing.
@@ -68,4 +86,7 @@ func xTestDedup(t *testing.T) {
 		t.Fatal(err, qp.String())
 	}
 	t.Error(status)
+}
+
+func TestQueryParams_String(t *testing.T) {
 }

@@ -84,7 +84,7 @@ func Query(job tracker.Job, project string) (QueryParams, error) {
 	case "ndt5":
 		return QueryParams{
 			Project:   project,
-			TestTime:  "TestTime",
+			TestTime:  "log_time",
 			Job:       job,
 			Partition: map[string]string{"test_id": "test_id"},
 			Order:     "ParseInfo.ParseTime DESC",

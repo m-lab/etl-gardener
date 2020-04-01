@@ -65,29 +65,17 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 	start := time.Now()
 	var bqJob bqiface.Job
 	var msg string
-	if j.Datatype == "tcpinfo" {
-		qp := dedup.TCPInfoQuery(j, os.Getenv("TARGET_BASE"))
-		var err error
-		bqJob, err = qp.Dedup(ctx)
-		if err != nil {
-			log.Println(err)
-			// Try again soon.
-			return
-		}
-	} else if j.Datatype == "ndt5" {
-		qp := dedup.NDT5Query(j, os.Getenv("TARGET_BASE"))
-		var err error
-		bqJob, err = qp.Dedup(ctx)
-		if err != nil {
-			log.Println(err)
-			return // Try again soon.
-		}
-		tk.SetJobError(j, "dedup not implemented for ndt5")
-	} else {
-		tk.SetJobError(j, "unknown datatype")
+	qp, err := dedup.Query(j, os.Getenv("TARGET_BASE"))
+	if err != nil {
+		log.Println(err)
+		// This terminates this job.
+		tk.SetJobError(j, err.Error())
+		return
 	}
-
-	if bqJob == nil {
+	bqJob, err = qp.Dedup(ctx, false)
+	if err != nil {
+		log.Println(err)
+		// Try again soon.
 		return
 	}
 	status, err := bqJob.Wait(ctx)
