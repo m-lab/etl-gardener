@@ -49,7 +49,7 @@ func TestValidateQueries(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			q, err := dedup.Query(tt.job, "mlab-sandbox")
+			q, err := dedup.Query(tt.job, "mlab-testing")
 			if err != nil {
 				t.Fatal(tt.name, err)
 			}
