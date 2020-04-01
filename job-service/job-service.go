@@ -2,19 +2,23 @@
 package job
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"sync"
 	"time"
 
+	"github.com/m-lab/etl-gardener/client"
 	"github.com/m-lab/etl-gardener/tracker"
 )
+
+// NextJob is required until etl code migrates to client.NextJob
+// DEPRECATED
+var NextJob = client.NextJob
+
+// ErrMoreJSON is returned when response from gardener has unknown fields.
+var ErrMoreJSON = errors.New("JSON body not completely consumed")
 
 // Service contains all information needed to provide a job service.
 // It iterates through successive dates, processing that date from
@@ -115,41 +119,4 @@ func NewJobService(tk *tracker.Tracker, bucket string, startDate time.Time) (*Se
 	// them.  If they are already finished, then ok to repeat them, though a little inefficient.
 	svc := Service{tracker: tk, startDate: start, date: resume, nextIndex: index, jobSpecs: specs}
 	return &svc, nil
-}
-
-func post(ctx context.Context, url url.URL) ([]byte, int, error) {
-	ctx, cancel := context.WithTimeout(ctx, time.Minute)
-	defer cancel()
-	req, reqErr := http.NewRequestWithContext(ctx, "POST", url.String(), nil)
-	if reqErr != nil {
-		return nil, 0, reqErr
-	}
-	resp, postErr := http.DefaultClient.Do(req)
-	if postErr != nil {
-		return nil, 0, postErr // Documentation says we can ignore body.
-	}
-
-	// Guaranteed to have a non-nil response and body.
-	defer resp.Body.Close()
-	b, err := ioutil.ReadAll(resp.Body) // Documentation recommends reading body.
-	return b, resp.StatusCode, err
-}
-
-// NextJob is used by clients to fetch the next job from the service.
-func NextJob(ctx context.Context, base url.URL) (tracker.JobWithTarget, error) {
-	jobURL := base
-	jobURL.Path = "job"
-
-	job := tracker.JobWithTarget{}
-
-	b, status, err := post(ctx, jobURL)
-	if err != nil {
-		return job, err
-	}
-	if status != http.StatusOK {
-		return job, errors.New(http.StatusText(status))
-	}
-
-	err = json.Unmarshal(b, &job)
-	return job, err
 }
