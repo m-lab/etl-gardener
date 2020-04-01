@@ -5,12 +5,14 @@ monitor:
   polling_interval: 5m
 sources:
 - bucket: archive-measurement-lab
-  archive_path: ndt/tcpinfo
-  filter: .*T??:??:00.*Z
+  experiment: ndt
+  datatype: tcpinfo
   start: 2019-08-01
+  filter: .*T??:??:00.*Z
   target: tmp_ndt.tcpinfo
 - bucket: archive-measurement-lab
-  archive_path: ndt/ndt5
-  filter: .*T??:??:00.*Z
+  experiment: ndt
+  datatype: ndt5
   start: 2019-08-01
+  filter: .*T??:??:00.*Z
   target: tmp_ndt.ndt5
