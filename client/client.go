@@ -19,21 +19,21 @@ import (
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
-// ErrMoreJSON is returned
+// ErrMoreJSON is returned when response from gardener has unknown fields.
 var ErrMoreJSON = errors.New("JSON body not completely consumed")
 
 var decodeLogEvery = logx.NewLogEvery(nil, 30*time.Second)
 
-// ClientErrorTotal measures the different type of RPC client errors.
-var ClientErrorTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+// ErrorTotal measures client RPC errors.
+var ErrorTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 	Name: "gardener_client_error_total",
-	Help: "The total number client annotation RPC errors.",
+	Help: "The total number of client RPC errors.",
 }, []string{"type"})
 
-func post(ctx context.Context, url url.URL) ([]byte, int, error) {
+func post(ctx context.Context, ref url.URL) ([]byte, int, error) {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
-	req, reqErr := http.NewRequestWithContext(ctx, "POST", url.String(), nil)
+	req, reqErr := http.NewRequestWithContext(ctx, "POST", ref.String(), nil)
 	if reqErr != nil {
 		return nil, 0, reqErr
 	}
@@ -78,7 +78,7 @@ func NextJob(ctx context.Context, base url.URL) (tracker.JobWithTarget, error) {
 		if err != nil {
 			// This is a more serious error.
 			log.Println(err)
-			ClientErrorTotal.WithLabelValues("json decode error").Inc()
+			ErrorTotal.WithLabelValues("json decode error").Inc()
 			return job, err
 		}
 		if decoder.More() {
