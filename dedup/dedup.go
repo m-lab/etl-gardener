@@ -1,6 +1,8 @@
 // Package dedup provides functions for deduplicating bigquery table partitions.
 package dedup
 
+// TODO consider using query parameters to simplify the template.
+
 import (
 	"bytes"
 	"context"
@@ -27,33 +29,33 @@ var dedupTemplate = template.Must(template.New("").Parse(`
 # The query is very cheap if there are no duplicates.
 DELETE
 FROM ` + table + ` AS target
-  WHERE Date({{.TestTime}}) = "{{.Job.Date.Format "2006-01-02"}}"
-  # This identifies all rows that don't match rows to preserve.
-  AND NOT EXISTS (
-    # This creates list of rows to preserve, based on key and priority.
-    WITH keep AS (
-    SELECT * EXCEPT(row_number) FROM (
-      SELECT
-        {{range $k, $v := .Partition}}{{$v}}, {{end}}
-        {{range $k, $v := .Select}}{{$v}}, {{end}}
-        ROW_NUMBER() OVER (
-          PARTITION BY {{range $k, $v := .Partition}}{{$v}}, {{end}}TRUE
-          ORDER BY {{.Order}}
-        ) row_number
-        FROM (
-          SELECT * FROM ` + table + `
-          WHERE Date({{.TestTime}}) = "{{.Job.Date.Format "2006-01-02"}}"
-        )
+WHERE Date({{.TestTime}}) = "{{.Job.Date.Format "2006-01-02"}}"
+# This identifies all rows that don't match rows to preserve.
+AND NOT EXISTS (
+  # This creates list of rows to preserve, based on key and priority.
+  WITH keep AS (
+  SELECT * EXCEPT(row_number) FROM (
+    SELECT
+      {{range $k, $v := .Partition}}{{$v}}, {{end}}
+      {{range $k, $v := .Select}}{{$v}}, {{end}}
+      ROW_NUMBER() OVER (
+        PARTITION BY {{range $k, $v := .Partition}}{{$v}}, {{end}}TRUE
+        ORDER BY {{.Order}}
+      ) row_number
+      FROM (
+        SELECT * FROM ` + table + `
+        WHERE Date({{.TestTime}}) = "{{.Job.Date.Format "2006-01-02"}}"
       )
-      WHERE row_number = 1
     )
-    SELECT * FROM keep
-    # This matches against the keep table based on keys.  Sufficient select keys must be
-    # used to distinguish the preferred row from the others.
-    WHERE
-      {{range $k, $v := .Partition}}target.{{$v}} = keep.{{$k}} AND {{end}}
-      {{range $k, $v := .Select}}target.{{$v}} = keep.{{$k}} AND {{end}}TRUE
-  )`))
+    WHERE row_number = 1
+  )
+  SELECT * FROM keep
+  # This matches against the keep table based on keys.  Sufficient select keys must be
+  # used to distinguish the preferred row from the others.
+  WHERE
+    {{range $k, $v := .Partition}}target.{{$v}} = keep.{{$k}} AND {{end}}
+    {{range $k, $v := .Select}}target.{{$v}} = keep.{{$k}} AND {{end}}TRUE
+)`))
 
 // QueryParams is used to construct a dedup query.
 type QueryParams struct {

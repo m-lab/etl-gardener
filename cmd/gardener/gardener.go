@@ -42,7 +42,7 @@ import (
 
 var (
 	jobExpirationTime = flag.Duration("job_expiration_time", 24*time.Hour, "Time after which stale jobs will be purged")
-	jobCleanupDelay   = flag.Duration("job_cleanup_delay", 1*time.Hour, "Time after which completed jobs will be removed from tracker")
+	jobCleanupDelay   = flag.Duration("job_cleanup_delay", 3*time.Hour, "Time after which completed jobs will be removed from tracker")
 	shutdownTimeout   = flag.Duration("shutdown_timeout", 1*time.Minute, "Graceful shutdown time allowance")
 	statusPort        = flag.String("status_port", ":0", "The public interface port where status (and pprof) will be published")
 
