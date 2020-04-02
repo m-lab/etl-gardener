@@ -294,6 +294,7 @@ func (jobs *JobMap) LegacyUnmarshalJSON(data []byte) error {
 		log.Println("Legacy unmarshal failed")
 		return err
 	}
+	log.Printf("Restoring %d jobs.\n", len(pairs))
 
 	for i := range pairs {
 		job := pairs[i].Job
