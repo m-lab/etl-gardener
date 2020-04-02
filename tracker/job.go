@@ -312,6 +312,12 @@ func (jobs *JobMap) LegacyUnmarshalJSON(data []byte) error {
 		log.Printf("Adding %+v : %+v\n", job, s)
 		(*jobs)[job] = s
 	}
+	// Sanity check
+	for j, s := range *jobs {
+		if len(s.History) < 1 {
+			log.Fatalf("Empty State history %+v : %+v\n", j, s)
+		}
+	}
 	return nil
 }
 
@@ -326,10 +332,14 @@ func (jobs *JobMap) UnmarshalJSON(data []byte) error {
 	err := json.Unmarshal(data, &pairs)
 	if err != nil {
 		// Try using the legacy unmarshal
-		return jobs.LegacyUnmarshalJSON(data)
+		err = jobs.LegacyUnmarshalJSON(data)
+		if err != nil {
+			log.Println("New Unmarshal failed")
+		}
+		return err
 	}
 
-	log.Println("New Unmarshal succeeded")
+	log.Printf("New unmarshal %d pairs.\n", len(pairs))
 	for i := range pairs {
 		(*jobs)[pairs[i].Job] = pairs[i].State
 	}
