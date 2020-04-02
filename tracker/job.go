@@ -434,6 +434,7 @@ func loadJobMap(ctx context.Context, client dsiface.Client, key *datastore.Key) 
 	if err != nil {
 		return nil, Job{}, err
 	}
+	log.Println("Last save:", state.SaveTime.Format("01/02T15:04"))
 
 	jobMap := make(JobMap, 100)
 	log.Println("Unmarshalling", len(state.Jobs))
