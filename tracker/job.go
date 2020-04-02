@@ -216,6 +216,11 @@ func (s *Status) Update(state State, detail string) StateInfo {
 
 func (s Status) String() string {
 	last := s.LastStateInfo()
+	if last == nil {
+		return fmt.Sprintf("%s %s (---)",
+			s.UpdateTime().Format("01/02~15:04:05"),
+			last.State)
+	}
 	return fmt.Sprintf("%s %s (%s)",
 		s.UpdateTime().Format("01/02~15:04:05"),
 		last.State,
