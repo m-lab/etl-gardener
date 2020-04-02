@@ -284,6 +284,7 @@ type OldStatus struct {
 // LegacyUnmarshalJSON unmarshals from the previous jobmap format.
 // jobs and data should be non-nil.
 func (jobs *JobMap) LegacyUnmarshalJSON(data []byte) error {
+	log.Println("Trying legacy jobmap unmarshal")
 	type Pair struct {
 		Job   Job
 		State OldStatus
@@ -291,6 +292,7 @@ func (jobs *JobMap) LegacyUnmarshalJSON(data []byte) error {
 	pairs := make([]Pair, 0, 100)
 	err := json.Unmarshal(data, &pairs)
 	if err != nil {
+		log.Println("Legacy unmarshal failed")
 		return err
 	}
 
@@ -321,6 +323,7 @@ func (jobs *JobMap) UnmarshalJSON(data []byte) error {
 		return jobs.LegacyUnmarshalJSON(data)
 	}
 
+	log.Println("New Unmarshal succeeded")
 	for i := range pairs {
 		(*jobs)[pairs[i].Job] = pairs[i].State
 	}
