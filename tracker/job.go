@@ -167,6 +167,7 @@ type Status struct {
 
 // LastStateInfo returns the StateInfo for the most recent state.
 func (s *Status) LastStateInfo() *StateInfo {
+	// TODO check for no history, and create one on the fly?
 	return &s.History[len(s.History)-1]
 }
 
@@ -423,6 +424,11 @@ func loadJobMap(ctx context.Context, client dsiface.Client, key *datastore.Key) 
 	err = json.Unmarshal(state.Jobs, &jobMap)
 	if err != nil {
 		log.Fatal("loadJobMap failed", err)
+	}
+	for j, s := range jobMap {
+		if len(s.History) < 1 {
+			log.Fatalf("Empty State history %+v : %+v\n", j, s)
+		}
 	}
 	return jobMap, state.LastInit, nil
 
