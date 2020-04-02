@@ -302,6 +302,7 @@ func (jobs *JobMap) LegacyUnmarshalJSON(data []byte) error {
 		last := s.LastStateInfo()
 		last.Start = old.LastStateChangeTime
 		last.LastUpdateTime = old.UpdateTime
+		log.Printf("Adding %+v : %+v\n", job, s)
 		(*jobs)[job] = s
 	}
 	return nil
