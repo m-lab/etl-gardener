@@ -80,8 +80,20 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 	}
 	status, err := bqJob.Wait(ctx)
 	if err != nil {
-		log.Println(err)
-		return // Try again soon.
+		switch typedErr := err.(type) {
+		case *googleapi.Error:
+			if typedErr.Code == http.StatusBadRequest &&
+				strings.Contains(typedErr.Error(), "streaming buffer") {
+				// Wait a while and try again.
+				s.UpdateDetail("Dedup waiting for empty streaming buffer.")
+				tk.UpdateJob(j, s)
+			}
+		default:
+			log.Println(err)
+			// We don't know the problem...
+		}
+		time.Sleep(5 * time.Minute)
+		return // Try again later.
 	}
 	if status.Err() != nil {
 		err := status.Err()
