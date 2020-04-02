@@ -121,8 +121,9 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 	switch details := status.Statistics.Details.(type) {
 	case *bigquery.QueryStatistics:
 		metrics.QueryCostHistogram.WithLabelValues(j.Datatype, "dedup").Observe(float64(details.SlotMillis) / 1000.0)
-		msg = fmt.Sprintf("Dedup took %s, %5.2d Slot Minutes, %d Rows affected, %d Bytes Processed, %d Bytes Billed",
-			time.Since(start).Round(100*time.Millisecond).String(), details.SlotMillis/60000.0, details.NumDMLAffectedRows, details.TotalBytesProcessed, details.TotalBytesBilled)
+		msg = fmt.Sprintf("Dedup took %s, %5.2f Slot Minutes, %d Rows affected, %d Bytes Processed, %d Bytes Billed",
+			time.Since(start).Round(100*time.Millisecond).String(), float64(details.SlotMillis)/60000, details.NumDMLAffectedRows, details.TotalBytesProcessed, details.TotalBytesBilled)
+		log.Println(msg)
 		log.Printf("Dedup %s: %+v\n", j, details)
 	default:
 		log.Printf("Could not convert to QueryStatistics: %+v\n", status.Statistics.Details)
