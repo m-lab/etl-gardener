@@ -63,6 +63,9 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 // TODO figure out how to test this code?
 func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
 	start := time.Now()
+	// This is the delay since entering the dedup state.
+	delay := time.Since(s.LastStateChangeTime()).Round(time.Minute)
+
 	var bqJob bqiface.Job
 	var msg string
 	qp, err := dedup.Query(j, os.Getenv("TARGET_BASE"))
@@ -92,7 +95,7 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 			log.Println(err)
 			// We don't know the problem...
 		}
-		time.Sleep(5 * time.Minute)
+		time.Sleep(2 * time.Minute)
 		return // Try again later.
 	}
 	if status.Err() != nil {
@@ -106,7 +109,7 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 				// this job if it doesn't succeed within the stale job time limit.
 				s.UpdateDetail("Dedup waiting for empty streaming buffer.")
 				tk.UpdateJob(j, s)
-				time.Sleep(5 * time.Minute)
+				time.Sleep(2 * time.Minute)
 				return // Try again later.
 			}
 		default:
@@ -133,8 +136,9 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 	switch details := status.Statistics.Details.(type) {
 	case *bigquery.QueryStatistics:
 		metrics.QueryCostHistogram.WithLabelValues(j.Datatype, "dedup").Observe(float64(details.SlotMillis) / 1000.0)
-		msg = fmt.Sprintf("Dedup took %s, %5.2f Slot Minutes, %d Rows affected, %d MB Processed, %d MB Billed",
+		msg = fmt.Sprintf("Dedup took %s (after %s waiting), %5.2f Slot Minutes, %d Rows affected, %d MB Processed, %d MB Billed",
 			time.Since(start).Round(100*time.Millisecond).String(),
+			delay,
 			float64(details.SlotMillis)/60000, details.NumDMLAffectedRows,
 			details.TotalBytesProcessed/1000000, details.TotalBytesBilled/1000000)
 		log.Println(msg)

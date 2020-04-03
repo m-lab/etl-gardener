@@ -197,9 +197,10 @@ func (tr *Tracker) SetStatus(job Job, newState State, detail string) error {
 	old := status.Update(newState, detail)
 	if newState != old.State {
 		log.Println(job, status.State(), "->", newState)
+
 		timeInState := time.Since(old.Start)
-		metrics.StateTimeHistogram.WithLabelValues(job.Experiment, job.Datatype, string(status.State())).Observe(timeInState.Seconds())
-		metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(status.State())).Set(float64(job.Date.Unix()))
+		metrics.StateTimeHistogram.WithLabelValues(job.Experiment, job.Datatype, string(old.State)).Observe(timeInState.Seconds())
+		metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(old.State)).Set(float64(job.Date.Unix()))
 	}
 	if newState == ParseComplete {
 		// TODO enable this once we have file or byte counts.
