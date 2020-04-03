@@ -201,6 +201,14 @@ func (s *Status) UpdateDetail(detail string) {
 	s.LastStateInfo().Update(detail)
 }
 
+func (s *Status) Error() string {
+	ls := s.LastStateInfo()
+	if ls.State == Failed {
+		return ls.LastUpdate
+	}
+	return ""
+}
+
 // Update changes the current state and detail, and returns
 // the previous final StateInfo.
 func (s *Status) Update(state State, detail string) StateInfo {
@@ -375,7 +383,7 @@ var jobsTemplate = template.Must(template.New("").Parse(
 			  {{.Status.State}} </td>
 			<td> {{.Status.LastUpdate}} </td>
 			<td> {{.Status.UpdateCount}} </td>
-			<td> {{.Status.LastUpdate}} </td>
+			<td> {{.Status.Error}} </td>
 		</tr>
 	    {{end}}
 	</table>`, Init, ParseComplete)))
