@@ -92,8 +92,8 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 				tk.UpdateJob(j, s)
 			}
 		default:
-			log.Println(err)
 			// We don't know the problem...
+			log.Println(err)
 		}
 		time.Sleep(2 * time.Minute)
 		return // Try again later.
@@ -102,6 +102,7 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 		err := status.Err()
 		switch typedErr := err.(type) {
 		case *googleapi.Error:
+			log.Println(err)
 			if typedErr.Code == http.StatusBadRequest &&
 				strings.Contains(typedErr.Error(), "streaming buffer") {
 				// Wait a while and try again.
@@ -113,6 +114,7 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 				return // Try again later.
 			}
 		default:
+			log.Println(err)
 			if err == state.ErrBQRateLimitExceeded {
 				// If BQ is rate limited, this basically results in jobs queuing up
 				// and executing later.
@@ -126,13 +128,12 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 			}
 		}
 
-		log.Println(err)
 		// This will terminate this job.
 		tk.SetJobError(j, err.Error())
 		return
 	}
+
 	// Dedup job was successful.  Handle the statistics, metrics, tracker update.
-	log.Println(status)
 	switch details := status.Statistics.Details.(type) {
 	case *bigquery.QueryStatistics:
 		metrics.QueryCostHistogram.WithLabelValues(j.Datatype, "dedup").Observe(float64(details.SlotMillis) / 1000.0)
@@ -148,7 +149,6 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 		msg = "Could not convert Detail to QueryStatistics"
 	}
 	metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(tracker.Complete)).Set(float64(j.Date.Unix()))
-	log.Println("Completed dedup for", j)
 	err = tk.SetStatus(j, tracker.Complete, msg)
 	if err != nil {
 		log.Println(err)
