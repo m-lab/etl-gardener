@@ -97,8 +97,13 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 			err := m.dedup(ctx, j)
 			if err != nil {
 				if err == state.ErrBQRateLimitExceeded {
+					// If BQ is rate limited, this basically results in jobs queuing up
+					// and executing later.
+					// Since there is no job update, the tracker may eventually kill
+					// this job if it doesn't succeed within the stale job time limit.
+					// TODO should this use exponential backoff?
 					time.Sleep(2 * time.Minute)
-					return // Should try again
+					return // Try again later
 				}
 				log.Println(err)
 				tk.SetJobError(j, err.Error())
@@ -117,24 +122,14 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 		func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, unused tracker.Status) {
 			start := time.Now()
 			// TODO - need to copy partition to final location.
-			// TODO - pass tracker to dedup, so dedup can record the JobID.
-			err := m.deleteSrc(ctx, j)
-			if err != nil {
-				if err == state.ErrBQRateLimitExceeded {
-					time.Sleep(1 * time.Minute)
-					return // Should try again
-				}
-				log.Println(err)
-				tk.SetJobError(j, err.Error())
-				return
-			}
+			// For now, we just change the state to Complete.
 			log.Println(j, tracker.Complete, time.Since(start).Round(100*time.Millisecond))
 			err = tk.SetStatus(j, tracker.Complete, "delete took "+time.Since(start).Round(100*time.Millisecond).String())
 			if err != nil {
 				log.Println(err)
 			}
 		},
-		"Deleting template table")
+		"Finishing (table copy and cleanup)")
 	return m, nil
 }
 
