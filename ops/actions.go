@@ -59,7 +59,7 @@ func isTest() bool {
 }
 
 func newStateFunc(state tracker.State, detail string) ActionFunc {
-	return func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
+	return func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, unused tracker.Status) {
 		log.Println(j, state)
 		metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(state)).Set(float64(j.Date.Unix()))
 		err := tk.SetStatus(j, state, detail)
@@ -91,20 +91,25 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 	m.AddAction(tracker.Deduplicating,
 		// HACK
 		nil,
-		func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
+		func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, unused tracker.Status) {
 			start := time.Now()
 			// TODO - pass tracker to dedup, so dedup can record the JobID.
 			err := m.dedup(ctx, j)
 			if err != nil {
 				if err == state.ErrBQRateLimitExceeded {
-					return // Should try again
+					// If BQ is rate limited, this basically results in jobs queuing up
+					// and executing later.
+					// Since there is no job update, the tracker may eventually kill
+					// this job if it doesn't succeed within the stale job time limit.
+					// TODO should this use exponential backoff?
+					time.Sleep(2 * time.Minute)
+					return // Try again later
 				}
 				log.Println(err)
 				tk.SetJobError(j, err.Error())
 				return
 			}
-			s.State = tracker.Finishing
-			log.Println(j, s.State)
+			log.Println(j, tracker.Finishing)
 			metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(tracker.Finishing)).Set(float64(j.Date.Unix()))
 			err = tk.SetStatus(j, tracker.Finishing, "dedup took "+time.Since(start).Round(100*time.Millisecond).String())
 			if err != nil {
@@ -114,27 +119,17 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 		"Deduplicating")
 	m.AddAction(tracker.Finishing,
 		nil,
-		func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
+		func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, unused tracker.Status) {
 			start := time.Now()
 			// TODO - need to copy partition to final location.
-			// TODO - pass tracker to dedup, so dedup can record the JobID.
-			err := m.deleteSrc(ctx, j)
-			if err != nil {
-				if err == state.ErrBQRateLimitExceeded {
-					return // Should try again
-				}
-				log.Println(err)
-				tk.SetJobError(j, err.Error())
-				return
-			}
-			s.State = tracker.Complete
-			log.Println(j, s.State, time.Since(start).Round(100*time.Millisecond))
+			// For now, we just change the state to Complete.
+			log.Println(j, tracker.Complete, time.Since(start).Round(100*time.Millisecond))
 			err = tk.SetStatus(j, tracker.Complete, "delete took "+time.Since(start).Round(100*time.Millisecond).String())
 			if err != nil {
 				log.Println(err)
 			}
 		},
-		"Deleting template table")
+		"Finishing (table copy and cleanup)")
 	return m, nil
 }
 

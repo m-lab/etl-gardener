@@ -49,7 +49,7 @@ func testSetup(t *testing.T) (url.URL, *tracker.Tracker, tracker.Job) {
 	return *url, tk, job
 }
 
-func expectGet(t *testing.T, url *url.URL, code int) {
+func getAndExpect(t *testing.T, url *url.URL, code int) {
 	resp, err := http.Get(url.String())
 	must(t, err)
 	if resp.StatusCode != code {
@@ -58,7 +58,7 @@ func expectGet(t *testing.T, url *url.URL, code int) {
 	resp.Body.Close()
 }
 
-func expectPost(t *testing.T, url *url.URL, code int) {
+func postAndExpect(t *testing.T, url *url.URL, code int) {
 	resp, err := http.Post(url.String(), "application/x-www-form-urlencoded", nil)
 	must(t, err)
 	if resp.StatusCode != code {
@@ -73,23 +73,23 @@ func TestUpdateHandler(t *testing.T) {
 
 	url := tracker.UpdateURL(server, job, tracker.Parsing, "foobar")
 
-	expectGet(t, url, http.StatusMethodNotAllowed)
+	getAndExpect(t, url, http.StatusMethodNotAllowed)
 
 	// Fail if job doesn't exist.
-	expectPost(t, url, http.StatusGone)
+	postAndExpect(t, url, http.StatusGone)
 
 	tk.AddJob(job)
 
 	// should update state to Parsing
-	expectPost(t, url, http.StatusOK)
+	postAndExpect(t, url, http.StatusOK)
 	stat, err := tk.GetStatus(job)
 	must(t, err)
-	if stat.State != tracker.Parsing {
+	if stat.State() != tracker.Parsing {
 		t.Fatal("update failed", stat)
 	}
 
 	url = tracker.UpdateURL(server, job, tracker.Complete, "")
-	expectPost(t, url, http.StatusOK)
+	postAndExpect(t, url, http.StatusOK)
 
 	_, err = tk.GetStatus(job)
 	if err != tracker.ErrJobNotFound {
@@ -103,15 +103,15 @@ func TestHeartbeatHandler(t *testing.T) {
 
 	url := tracker.HeartbeatURL(server, job)
 
-	expectGet(t, url, http.StatusMethodNotAllowed)
+	getAndExpect(t, url, http.StatusMethodNotAllowed)
 
 	// Fail if job doesn't exist.
-	expectPost(t, url, http.StatusGone)
+	postAndExpect(t, url, http.StatusGone)
 
 	tk.AddJob(job)
 
 	// should update state to Parsing
-	expectPost(t, url, http.StatusOK)
+	postAndExpect(t, url, http.StatusOK)
 	stat, err := tk.GetStatus(job)
 	must(t, err)
 	if time.Since(stat.HeartbeatTime) > 1*time.Second {
@@ -120,7 +120,7 @@ func TestHeartbeatHandler(t *testing.T) {
 	t.Log(stat)
 
 	url = tracker.UpdateURL(server, job, tracker.Complete, "")
-	expectPost(t, url, http.StatusOK)
+	postAndExpect(t, url, http.StatusOK)
 
 	_, err = tk.GetStatus(job)
 	if err != tracker.ErrJobNotFound {
@@ -133,26 +133,26 @@ func TestErrorHandler(t *testing.T) {
 
 	url := tracker.ErrorURL(server, job, "error")
 
-	expectGet(t, url, http.StatusMethodNotAllowed)
+	getAndExpect(t, url, http.StatusMethodNotAllowed)
 
 	// Job should not yet exist.
-	expectPost(t, url, http.StatusGone)
+	postAndExpect(t, url, http.StatusGone)
 
 	tk.AddJob(job)
 
-	// should successfully update state to Parsing
-	expectPost(t, url, http.StatusOK)
+	// should successfully update state to Failed
+	postAndExpect(t, url, http.StatusOK)
 	stat, err := tk.GetStatus(job)
 	must(t, err)
-	if stat.LastError != "error" {
-		t.Error("Expected error:", stat.LastError)
+	if stat.LastUpdate() != "error" {
+		t.Error("Expected error:", stat.LastUpdate())
 	}
-	if stat.State != tracker.ParseError {
+	if stat.State() != tracker.ParseError {
 		t.Error("Wrong state:", stat)
 	}
 
 	url = tracker.UpdateURL(server, job, tracker.Complete, "")
-	expectPost(t, url, http.StatusOK)
+	postAndExpect(t, url, http.StatusOK)
 
 	_, err = tk.GetStatus(job)
 	if err != tracker.ErrJobNotFound {
