@@ -3,6 +3,7 @@ package tracker
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"net/url"
 
@@ -105,6 +106,7 @@ func (h *Handler) update(resp http.ResponseWriter, req *http.Request) {
 	detail := req.Form.Get("detail")
 
 	if err := h.tracker.SetStatus(job, State(state), detail); err != nil {
+		log.Printf("Not found %+v\n", job)
 		resp.WriteHeader(http.StatusGone)
 		return
 	}

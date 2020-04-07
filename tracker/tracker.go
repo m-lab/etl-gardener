@@ -42,6 +42,8 @@ type Tracker struct {
 
 	// Time after which stale job should be ignored or replaced.
 	expirationTime time.Duration
+	// Delay before removing Complete jobs.
+	cleanupDelay time.Duration
 }
 
 // InitTracker recovers the Tracker state from a Client object.
@@ -49,7 +51,7 @@ type Tracker struct {
 func InitTracker(
 	ctx context.Context,
 	client dsiface.Client, key *datastore.Key,
-	saveInterval time.Duration, expirationTime time.Duration) (*Tracker, error) {
+	saveInterval time.Duration, expirationTime time.Duration, cleanupDelay time.Duration) (*Tracker, error) {
 
 	jobMap, lastJob, err := loadJobMap(ctx, client, key)
 	if err != nil {
@@ -60,7 +62,10 @@ func InitTracker(
 		metrics.StartedCount.WithLabelValues(j.Experiment, j.Datatype).Inc()
 		metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Inc()
 	}
-	t := Tracker{client: client, dsKey: key, lastModified: time.Now(), lastJob: lastJob, jobs: jobMap, expirationTime: expirationTime}
+	t := Tracker{
+		client: client, dsKey: key, lastModified: time.Now(),
+		lastJob: lastJob, jobs: jobMap,
+		expirationTime: expirationTime, cleanupDelay: cleanupDelay}
 	if client != nil && saveInterval > 0 {
 		t.saveEvery(saveInterval)
 	}
@@ -172,12 +177,14 @@ func (tr *Tracker) UpdateJob(job Job, state Status) error {
 
 	tr.lastModified = time.Now()
 	if state.isDone() {
-		delete(tr.jobs, job)
 		metrics.CompletedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
-		metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype).Dec()
-	} else {
-		tr.jobs[job] = state
+		if tr.cleanupDelay == 0 {
+			metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype).Dec()
+			delete(tr.jobs, job)
+			return nil
+		}
 	}
+	tr.jobs[job] = state
 	return nil
 }
 
@@ -189,12 +196,15 @@ func (tr *Tracker) SetStatus(job Job, newState State, detail string) error {
 	}
 	old := status.Update(newState, detail)
 	if newState != old.State {
+		log.Println(job, status.State(), "->", newState)
+
 		timeInState := time.Since(old.Start)
-		metrics.StateTimeHistogram.WithLabelValues(job.Experiment, job.Datatype, string(status.State())).Observe(timeInState.Seconds())
-		metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(status.State())).Set(float64(job.Date.Unix()))
+		metrics.StateTimeHistogram.WithLabelValues(job.Experiment, job.Datatype, string(old.State)).Observe(timeInState.Seconds())
+		metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(old.State)).Set(float64(job.Date.Unix()))
 	}
 	if newState == ParseComplete {
 		// TODO enable this once we have file or byte counts.
+		// Alternatively, incorporate this into the next Action!
 		// Update the metrics, even if there is an error, since the files were submitted to the queue already.
 		// metrics.FilesPerDateHistogram.WithLabelValues(job.Datatype, strconv.Itoa(job.Date.Year())).Observe(float64(fileCount))
 		// metrics.BytesPerDateHistogram.WithLabelValues(t.Experiment, strconv.Itoa(t.Date.Year())).Observe(float64(byteCount))
@@ -238,9 +248,9 @@ func (tr *Tracker) GetState() (JobMap, Job, time.Time) {
 	m := make(JobMap, len(tr.jobs))
 	for j, s := range tr.jobs {
 		updateTime := s.UpdateTime()
-		if tr.expirationTime > 0 && time.Since(updateTime) > tr.expirationTime {
+		if (tr.expirationTime > 0 && time.Since(updateTime) > tr.expirationTime) ||
+			(s.isDone() && time.Since(updateTime) > tr.cleanupDelay) {
 			// Remove any obsolete jobs.
-			metrics.CompletedCount.WithLabelValues(j.Experiment, j.Datatype).Inc()
 			metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Dec()
 			log.Println("Deleting stale job", j)
 			tr.lastModified = time.Now()
