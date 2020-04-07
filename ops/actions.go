@@ -69,7 +69,7 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 	var bqJob bqiface.Job
 	var msg string
 	// TODO pass in the JobWithTarget, and get the base from the target.
-	qp, err := dedup.Query(j, os.Getenv("TARGET_BASE"))
+	qp, err := dedup.Query(j, os.Getenv("PROJECT"))
 	if err != nil {
 		log.Println(err)
 		// This terminates this job.
