@@ -178,6 +178,7 @@ func (tr *Tracker) UpdateJob(job Job, state Status) error {
 	tr.lastModified = time.Now()
 	if state.isDone() {
 		metrics.CompletedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
+		// This could be done by GetStatus, but would change behaviors slightly.
 		if tr.cleanupDelay == 0 {
 			metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype).Dec()
 			delete(tr.jobs, job)
@@ -196,7 +197,7 @@ func (tr *Tracker) SetStatus(job Job, newState State, detail string) error {
 	}
 	old := status.Update(newState, detail)
 	if newState != old.State {
-		log.Println(job, status.State(), "->", newState)
+		log.Println(job, old, "->", newState)
 
 		timeInState := time.Since(old.Start)
 		metrics.StateTimeHistogram.WithLabelValues(job.Experiment, job.Datatype, string(old.State)).Observe(timeInState.Seconds())
