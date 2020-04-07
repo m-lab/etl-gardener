@@ -20,6 +20,12 @@ import (
 	"github.com/m-lab/go/osx"
 )
 
+var _ = func() error {
+	log.Println("Setting config path")
+	flag.Set("config_path", "testdata/config.yml")
+	return nil
+}()
+
 // Retries for up to 10 seconds.
 func waitFor(url string) (resp *http.Response, err error) {
 	for i := 0; i < 1000; i++ {
@@ -69,7 +75,6 @@ func TestLegacyModeSetup(t *testing.T) {
 }
 
 func TestManagerMode(t *testing.T) {
-	flag.Set("config_path", "../../config/testdata/config.yml")
 
 	mainCtx, mainCancel = context.WithCancel(context.Background())
 

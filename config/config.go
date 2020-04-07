@@ -27,11 +27,12 @@ type MonitorConfig struct {
 
 // SourceConfig holds the config that defines all data sources to be processed.
 type SourceConfig struct {
-	Bucket      string    `yaml:"bucket"`
-	ArchivePath string    `yaml:"archive_path"`
-	Filter      string    `yaml:"filter"`
-	Start       time.Time `yaml:"start"`
-	Target      string    `yaml:"target"`
+	Bucket     string    `yaml:"bucket"`
+	Experiment string    `yaml:"experiment"`
+	Datatype   string    `yaml:"datatype"`
+	Filter     string    `yaml:"filter"`
+	Start      time.Time `yaml:"start"`
+	Target     string    `yaml:"target"`
 }
 
 // Gardener is the full config for a Gardener instance.
