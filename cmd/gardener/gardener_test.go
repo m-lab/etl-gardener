@@ -79,10 +79,9 @@ func TestManagerMode(t *testing.T) {
 	mainCtx, mainCancel = context.WithCancel(context.Background())
 
 	vars := map[string]string{
-		"SERVICE_MODE":   "manager",
-		"PROJECT":        "mlab-testing",
-		"ARCHIVE_BUCKET": "archive-mlab-testing",
-		"STATUS_PORT":    ":0",
+		"SERVICE_MODE": "manager",
+		"PROJECT":      "mlab-testing",
+		"STATUS_PORT":  ":0",
 	}
 	for k, v := range vars {
 		cleanup := osx.MustSetenv(k, v)
@@ -121,9 +120,8 @@ func TestManagerMode(t *testing.T) {
 
 func TestEnv(t *testing.T) {
 	vars := map[string]string{
-		"SERVICE_MODE":   "manager",
-		"PROJECT":        "foobar",
-		"ARCHIVE_BUCKET": "archive-mlab-testing",
+		"SERVICE_MODE": "manager",
+		"PROJECT":      "foobar",
 	}
 	for k := range vars {
 		v := os.Getenv(k)

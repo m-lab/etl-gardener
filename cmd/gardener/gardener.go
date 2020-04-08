@@ -171,13 +171,7 @@ func LoadEnv() {
 
 	switch env.ServiceMode {
 	case "manager":
-		bucket := os.Getenv("ARCHIVE_BUCKET")
-		if bucket == "" {
-			log.Println("Error: ARCHIVE_BUCKET environment variable not set.")
-			env.Error = ErrNoBucket
-		} else {
-			env.Bucket = bucket
-		}
+		// Nothing requred.
 	case "legacy":
 		// load variables required for task queue based operation.
 		loadEnvVarsForTaskQueue()
