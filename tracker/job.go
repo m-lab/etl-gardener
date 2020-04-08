@@ -133,9 +133,7 @@ const (
 	Joining       State = "joining"
 	Finishing     State = "finishing"
 	Failed        State = "failed"
-	// Note that GetStatus will never return Complete, as the
-	// Job is removed when SetJobState is called with Complete.
-	Complete State = "complete"
+	Complete      State = "complete"
 )
 
 // StateInfo describes each state in processing history.
@@ -169,6 +167,7 @@ type Status struct {
 
 // LastStateInfo returns the StateInfo for the most recent state.
 func (s *Status) LastStateInfo() *StateInfo {
+	// TODO check for no history, and create one on the fly?
 	return &s.History[len(s.History)-1]
 }
 
@@ -202,6 +201,14 @@ func (s *Status) UpdateDetail(detail string) {
 	s.LastStateInfo().Update(detail)
 }
 
+func (s *Status) Error() string {
+	ls := s.LastStateInfo()
+	if ls.State == Failed {
+		return ls.LastUpdate
+	}
+	return ""
+}
+
 // Update changes the current state and detail, and returns
 // the previous final StateInfo.
 func (s *Status) Update(state State, detail string) StateInfo {
@@ -217,6 +224,9 @@ func (s *Status) Update(state State, detail string) StateInfo {
 
 func (s Status) String() string {
 	last := s.LastStateInfo()
+	if last == nil {
+		return "no state history"
+	}
 	return fmt.Sprintf("%s %s (%s)",
 		s.UpdateTime().Format("01/02~15:04:05"),
 		last.State,
@@ -260,53 +270,6 @@ func (jobs JobMap) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&pairs)
 }
 
-// A OldStatus describes the state of a bucket/exp/type/YYYY/MM/DD job.
-// Completed jobs are removed from the persistent store.
-// Errored jobs are maintained in the persistent store for debugging.
-// Status should be updated only by the Tracker, which will
-// ensure correct serialization and Saver updates.
-type OldStatus struct {
-	HeartbeatTime time.Time // Time of last ETL heartbeat.
-
-	StartTime    time.Time // Time the job was initialized.
-	UpdateTime   time.Time // Time of last update.
-	UpdateDetail string    // Note from last update
-	UpdateCount  int       // Number of updates
-
-	State               State     // String defining the current state.
-	LastStateChangeTime time.Time // Used for computing time in state.
-	LastError           string    // The most recent error encountered.
-
-	// Note that these are not persisted
-	errors []string // all errors related to the job.
-}
-
-// LegacyUnmarshalJSON unmarshals from the previous jobmap format.
-// jobs and data should be non-nil.
-func (jobs *JobMap) LegacyUnmarshalJSON(data []byte) error {
-	type Pair struct {
-		Job   Job
-		State OldStatus
-	}
-	pairs := make([]Pair, 0, 100)
-	err := json.Unmarshal(data, &pairs)
-	if err != nil {
-		return err
-	}
-
-	for i := range pairs {
-		job := pairs[i].Job
-		old := pairs[i].State
-		s := NewStatus()
-		s.Update(old.State, old.UpdateDetail)
-		last := s.LastStateInfo()
-		last.Start = old.LastStateChangeTime
-		last.LastUpdateTime = old.UpdateTime
-		(*jobs)[job] = s
-	}
-	return nil
-}
-
 // UnmarshalJSON implements json.UnmarshalJSON
 // jobs and data should be non-nil.
 func (jobs *JobMap) UnmarshalJSON(data []byte) error {
@@ -317,10 +280,10 @@ func (jobs *JobMap) UnmarshalJSON(data []byte) error {
 	pairs := make([]Pair, 0, 100)
 	err := json.Unmarshal(data, &pairs)
 	if err != nil {
-		// Try using the legacy unmarshal
-		return jobs.LegacyUnmarshalJSON(data)
+		return err
 	}
 
+	log.Printf("Unmarshalling %d job/status pairs.\n", len(pairs))
 	for i := range pairs {
 		(*jobs)[pairs[i].Job] = pairs[i].State
 	}
@@ -356,7 +319,7 @@ var jobsTemplate = template.Must(template.New("").Parse(
 			  {{.Status.State}} </td>
 			<td> {{.Status.LastUpdate}} </td>
 			<td> {{.Status.UpdateCount}} </td>
-			<td> {{.Status.LastUpdate}} </td>
+			<td> {{.Status.Error}} </td>
 		</tr>
 	    {{end}}
 	</table>`, Init, ParseComplete)))
@@ -415,12 +378,19 @@ func loadJobMap(ctx context.Context, client dsiface.Client, key *datastore.Key) 
 	if err != nil {
 		return nil, Job{}, err
 	}
+	log.Println("Last save:", state.SaveTime.Format("01/02T15:04"))
+	log.Println(string(state.Jobs))
 
 	jobMap := make(JobMap, 100)
 	log.Println("Unmarshalling", len(state.Jobs))
 	err = json.Unmarshal(state.Jobs, &jobMap)
 	if err != nil {
 		log.Fatal("loadJobMap failed", err)
+	}
+	for j, s := range jobMap {
+		if len(s.History) < 1 {
+			log.Fatalf("Empty State history %+v : %+v\n", j, s)
+		}
 	}
 	return jobMap, state.LastInit, nil
 

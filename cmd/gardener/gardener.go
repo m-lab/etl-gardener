@@ -42,6 +42,7 @@ import (
 
 var (
 	jobExpirationTime = flag.Duration("job_expiration_time", 24*time.Hour, "Time after which stale jobs will be purged")
+	jobCleanupDelay   = flag.Duration("job_cleanup_delay", 3*time.Hour, "Time after which completed jobs will be removed from tracker")
 	shutdownTimeout   = flag.Duration("shutdown_timeout", 1*time.Minute, "Graceful shutdown time allowance")
 	statusPort        = flag.String("status_port", ":0", "The public interface port where status (and pprof) will be published")
 
@@ -311,7 +312,7 @@ func mustStandardTracker() *tracker.Tracker {
 	tk, err := tracker.InitTracker(
 		context.Background(),
 		dsiface.AdaptClient(client), dsKey,
-		time.Minute, *jobExpirationTime)
+		time.Minute, *jobExpirationTime, *jobCleanupDelay)
 	rtx.Must(err, "tracker init")
 	if tk == nil {
 		log.Fatal("nil tracker")
@@ -372,10 +373,10 @@ func main() {
 		globalTracker = mustStandardTracker()
 
 		// TODO - refactor this block.
-		config := cloud.Config{
+		cloudCfg := cloud.Config{
 			Project: env.Project,
 			Client:  nil}
-		bqConfig := NewBQConfig(config)
+		bqConfig := NewBQConfig(cloudCfg)
 		bqConfig.BQFinalDataset = "base_tables"
 		bqConfig.BQBatchDataset = "batch"
 		monitor, err := ops.NewStandardMonitor(mainCtx, bqConfig, globalTracker)
