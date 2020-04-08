@@ -12,19 +12,12 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/m-lab/go/osx"
 )
-
-var _ = func() error {
-	log.Println("Setting config path")
-	flag.Set("config_path", "testdata/config.yml")
-	return nil
-}()
 
 // Retries for up to 10 seconds.
 func waitFor(url string) (resp *http.Response, err error) {
@@ -75,7 +68,7 @@ func TestLegacyModeSetup(t *testing.T) {
 }
 
 func TestManagerMode(t *testing.T) {
-
+	flag.Set("config_path", "testdata/config.yml")
 	mainCtx, mainCancel = context.WithCancel(context.Background())
 
 	vars := map[string]string{
@@ -116,15 +109,4 @@ func TestManagerMode(t *testing.T) {
 	}(t)
 
 	main()
-}
-
-func TestEnv(t *testing.T) {
-	vars := map[string]string{
-		"SERVICE_MODE": "manager",
-		"PROJECT":      "foobar",
-	}
-	for k := range vars {
-		v := os.Getenv(k)
-		log.Println(k, v)
-	}
 }
