@@ -1,4 +1,5 @@
 ---
+start_date: 2019-08-01
 tracker:
   timeout: 5h
 monitor:
@@ -7,12 +8,10 @@ sources:
 - bucket: archive-measurement-lab
   experiment: ndt
   datatype: tcpinfo
-  start: 2019-08-01
   filter: .*T??:??:00.*Z
   target: tmp_ndt.tcpinfo
 - bucket: archive-measurement-lab
   experiment: ndt
   datatype: ndt5
-  start: 2019-08-01
   filter: .*T??:??:00.*Z
   target: tmp_ndt.ndt5

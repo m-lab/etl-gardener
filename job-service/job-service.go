@@ -91,27 +91,30 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 	}
 }
 
+// ErrInvalidStartDate is returned if startDate is time.Time{}
+var ErrInvalidStartDate = errors.New("Invalid start date")
+
 // NewJobService creates the default job service.
 func NewJobService(tk *tracker.Tracker, startDate time.Time,
 	targetBase string, sources []config.SourceConfig) (*Service, error) {
+	if startDate.Equal(time.Time{}) {
+		return nil, ErrInvalidStartDate
+	}
 	// The service cycles through the jobSpecs.  Each spec is a job (bucket/exp/type) and a target GCS bucket or BQ table.
 	specs := make([]tracker.JobWithTarget, 0)
-	start := time.Now()
 	for _, s := range sources {
 		log.Println(s)
 		job := tracker.Job{
 			Bucket:     s.Bucket,
 			Experiment: s.Experiment,
 			Datatype:   s.Datatype,
-			Date:       s.Start.UTC().Truncate(24 * time.Hour)}
+			Date:       time.Time{}, // This is not used.
+		}
 		// TODO - handle gs:// targets
 		jt, err := job.Target(targetBase + "." + s.Target)
 		if err != nil {
 			log.Println(err, targetBase+s.Target)
 			continue
-		}
-		if start.After(s.Start) {
-			start = s.Start
 		}
 		specs = append(specs, jt)
 	}
@@ -119,26 +122,23 @@ func NewJobService(tk *tracker.Tracker, startDate time.Time,
 		log.Fatal("No jobs specified")
 	}
 
-	// Don't start any earlier than startDate.  This simplifies testing.
-	start = start.UTC().Truncate(24 * time.Hour) // Is this correct?
-	if start.Before(startDate) {
-		start = startDate.UTC().Truncate(24 * time.Hour) // Is this correct?
-	}
+	resume := startDate
 
 	if tk == nil {
-		resume := start
-		return &Service{tracker: tk, startDate: start, date: resume, nextIndex: 0, jobSpecs: specs}, nil
+		return &Service{tracker: tk, startDate: startDate, date: resume, nextIndex: 0, jobSpecs: specs}, nil
 	}
+
+	// Last job from tracker recovery.  This may be empty Job{} if recovery failed.
 	lastJob := tk.LastJob()
 	log.Println("Last job was:", lastJob)
+
 	// TODO check for spec bucket change
-	resume := lastJob.Date
-	if resume.Before(start) {
-		// Never resume before the specified start date.
-		resume = start
+	if resume.Before(lastJob.Date) {
+		// override the resume date if lastJob was later.
+		resume = lastJob.Date
 	}
 	// Ok to start here.  If there are repeated jobs, the job-service will skip
 	// them.  If they are already finished, then ok to repeat them, though a little inefficient.
-	svc := Service{tracker: tk, startDate: start, date: resume, nextIndex: 0, jobSpecs: specs}
+	svc := Service{tracker: tk, startDate: startDate, date: resume, nextIndex: 0, jobSpecs: specs}
 	return &svc, nil
 }

@@ -382,8 +382,8 @@ func main() {
 
 		// For now, we just start in Aug 2019, and handle only new data.
 
-		svc, err := job.NewJobService(globalTracker,
-			time.Time{}, os.Getenv("PROJECT"), config.Sources())
+		svc, err := job.NewJobService(globalTracker, config.StartDate(),
+			os.Getenv("PROJECT"), config.Sources())
 		rtx.Must(err, "Could not initialize job service")
 		mux.HandleFunc("/job", svc.JobHandler)
 		healthy = true

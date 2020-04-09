@@ -34,10 +34,10 @@ func TestService_NextJob(t *testing.T) {
 	defer monkey.Unpatch(time.Now)
 
 	sources := []config.SourceConfig{
-		config.SourceConfig{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
-		config.SourceConfig{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
-	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)
+	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
 	svc, _ := job.NewJobService(nil, start, "fakebucket", sources)
 	j := svc.NextJob()
 	w, err := tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.ndt5")
@@ -79,10 +79,10 @@ func TestService_NextJob(t *testing.T) {
 
 func TestJobHandler(t *testing.T) {
 	sources := []config.SourceConfig{
-		config.SourceConfig{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
-		config.SourceConfig{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
-	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)
+	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
 	svc, _ := job.NewJobService(nil, start, "fakebucket", sources)
 	req := httptest.NewRequest("", "/job", nil)
 	resp := httptest.NewRecorder()
@@ -105,7 +105,7 @@ func TestJobHandler(t *testing.T) {
 }
 
 func TestResume(t *testing.T) {
-	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)
+	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
 	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0, 0) // Only using jobmap.
 	if err != nil {
 		t.Fatal(err)
@@ -115,8 +115,8 @@ func TestResume(t *testing.T) {
 	tk.AddJob(last)
 
 	sources := []config.SourceConfig{
-		config.SourceConfig{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
-		config.SourceConfig{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
 	svc, _ := job.NewJobService(tk, start, "fake-bucket", sources)
 	j := svc.NextJob()
@@ -131,15 +131,15 @@ func TestEarlyWrapping(t *testing.T) {
 		return time.Date(2011, 2, 6, 1, 2, 3, 4, time.UTC)
 	})
 	defer monkey.Unpatch(time.Now)
-	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)
+	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
 	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0, 0) // Only using jobmap.
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	sources := []config.SourceConfig{
-		config.SourceConfig{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
-		config.SourceConfig{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
 	svc, _ := job.NewJobService(tk, start, "fake-bucket", sources)
 
@@ -162,10 +162,10 @@ func TestEarlyWrapping(t *testing.T) {
 		resp := httptest.NewRecorder()
 		svc.JobHandler(resp, req)
 		if resp.Code != result.code {
-			t.Fatal(k, resp.Code, resp.Body.String())
+			t.Error(k, resp.Code, resp.Body.String())
 		}
 		if resp.Body.String() != result.body {
-			t.Fatal(k, resp.Body.String())
+			t.Error(k, "Got:", resp.Body.String(), "!=", result.body)
 		}
 
 		if k == 2 {
