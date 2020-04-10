@@ -12,7 +12,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -69,15 +68,13 @@ func TestLegacyModeSetup(t *testing.T) {
 }
 
 func TestManagerMode(t *testing.T) {
-	flag.Set("config_path", "../../config/testdata/config.yml")
-
+	flag.Set("config_path", "testdata/config.yml")
 	mainCtx, mainCancel = context.WithCancel(context.Background())
 
 	vars := map[string]string{
-		"SERVICE_MODE":   "manager",
-		"PROJECT":        "mlab-testing",
-		"ARCHIVE_BUCKET": "archive-mlab-testing",
-		"STATUS_PORT":    ":0",
+		"SERVICE_MODE": "manager",
+		"PROJECT":      "mlab-testing",
+		"STATUS_PORT":  ":0",
 	}
 	for k, v := range vars {
 		cleanup := osx.MustSetenv(k, v)
@@ -112,16 +109,4 @@ func TestManagerMode(t *testing.T) {
 	}(t)
 
 	main()
-}
-
-func TestEnv(t *testing.T) {
-	vars := map[string]string{
-		"SERVICE_MODE":   "manager",
-		"PROJECT":        "foobar",
-		"ARCHIVE_BUCKET": "archive-mlab-testing",
-	}
-	for k := range vars {
-		v := os.Getenv(k)
-		log.Println(k, v)
-	}
 }

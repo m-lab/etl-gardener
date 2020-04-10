@@ -27,18 +27,19 @@ type MonitorConfig struct {
 
 // SourceConfig holds the config that defines all data sources to be processed.
 type SourceConfig struct {
-	Bucket      string    `yaml:"bucket"`
-	ArchivePath string    `yaml:"archive_path"`
-	Filter      string    `yaml:"filter"`
-	Start       time.Time `yaml:"start"`
-	Target      string    `yaml:"target"`
+	Bucket     string `yaml:"bucket"`
+	Experiment string `yaml:"experiment"`
+	Datatype   string `yaml:"datatype"`
+	Filter     string `yaml:"filter"`
+	Target     string `yaml:"target"`
 }
 
 // Gardener is the full config for a Gardener instance.
 type Gardener struct {
-	Tracker TrackerConfig  `yaml:"tracker"`
-	Monitor MonitorConfig  `yaml:"monitor"`
-	Sources []SourceConfig `yaml:"sources"`
+	StartDate time.Time      `yaml:"start_date"`
+	Tracker   TrackerConfig  `yaml:"tracker"`
+	Monitor   MonitorConfig  `yaml:"monitor"`
+	Sources   []SourceConfig `yaml:"sources"`
 }
 
 var gardener Gardener
@@ -48,6 +49,11 @@ func Sources() []SourceConfig {
 	src := make([]SourceConfig, len(gardener.Sources))
 	copy(src, gardener.Sources)
 	return src
+}
+
+// StartDate returns the first date that should be processed.
+func StartDate() time.Time {
+	return gardener.StartDate.UTC().Truncate(24 * time.Hour)
 }
 
 // ParseConfig loads the full Config, or Exits on failure.

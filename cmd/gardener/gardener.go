@@ -171,13 +171,7 @@ func LoadEnv() {
 
 	switch env.ServiceMode {
 	case "manager":
-		bucket := os.Getenv("ARCHIVE_BUCKET")
-		if bucket == "" {
-			log.Println("Error: ARCHIVE_BUCKET environment variable not set.")
-			env.Error = ErrNoBucket
-		} else {
-			env.Bucket = bucket
-		}
+		// Nothing requred.
 	case "legacy":
 		// load variables required for task queue based operation.
 		loadEnvVarsForTaskQueue()
@@ -387,7 +381,9 @@ func main() {
 		handler.Register(mux)
 
 		// For now, we just start in Aug 2019, and handle only new data.
-		svc, err := job.NewJobService(globalTracker, env.Bucket, time.Date(2019, 8, 1, 0, 0, 0, 0, time.UTC))
+
+		svc, err := job.NewJobService(globalTracker, config.StartDate(),
+			os.Getenv("PROJECT"), config.Sources())
 		rtx.Must(err, "Could not initialize job service")
 		mux.HandleFunc("/job", svc.JobHandler)
 		healthy = true

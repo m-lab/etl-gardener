@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 
 	"github.com/m-lab/go/rtx"
 
+	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/job-service"
 	"github.com/m-lab/etl-gardener/tracker"
 )
@@ -23,41 +23,45 @@ import (
 func init() {
 	// Always prepend the filename and line number.
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	os.Setenv("TARGET_BASE", "gs://fakebucket")
 }
 
 func TestService_NextJob(t *testing.T) {
+
 	// This allows predictable behavior from time.Since in the advanceDate function.
 	monkey.Patch(time.Now, func() time.Time {
 		return time.Date(2011, 2, 6, 1, 2, 3, 4, time.UTC)
 	})
 	defer monkey.Unpatch(time.Now)
 
-	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)
-	svc, _ := job.NewJobService(nil, "fake-bucket", start)
+	sources := []config.SourceConfig{
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+	}
+	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
+	svc, _ := job.NewJobService(nil, start, "fakebucket", sources)
 	j := svc.NextJob()
-	w, err := tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}.Target("gs://fakebucket/ndt/ndt5")
+	w, err := tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.ndt5")
 	rtx.Must(err, "")
 	diff := deep.Equal(w, j)
 	if diff != nil {
 		t.Error(diff)
 	}
 	j = svc.NextJob()
-	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Truncate(24 * time.Hour)}.Target("gs://fakebucket/ndt/tcpinfo")
+	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.tcpinfo")
 	rtx.Must(err, "")
 	diff = deep.Equal(w, j)
 	if diff != nil {
 		t.Error(diff)
 	}
 	j = svc.NextJob()
-	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}.Target("gs://fakebucket/ndt/ndt5")
+	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.ndt5")
 	rtx.Must(err, "")
 	diff = deep.Equal(w, j)
 	if diff != nil {
 		t.Error(diff)
 	}
 	j = svc.NextJob()
-	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}.Target("gs://fakebucket/ndt/tcpinfo")
+	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.tcpinfo")
 	rtx.Must(err, "")
 	diff = deep.Equal(w, j)
 	if diff != nil {
@@ -65,7 +69,7 @@ func TestService_NextJob(t *testing.T) {
 	}
 	// Wrap
 	j = svc.NextJob()
-	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}.Target("gs://fakebucket/ndt/ndt5")
+	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.ndt5")
 	rtx.Must(err, "")
 	diff = deep.Equal(w, j)
 	if diff != nil {
@@ -74,8 +78,12 @@ func TestService_NextJob(t *testing.T) {
 }
 
 func TestJobHandler(t *testing.T) {
-	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)
-	svc, _ := job.NewJobService(nil, "fake-bucket", start)
+	sources := []config.SourceConfig{
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+	}
+	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
+	svc, _ := job.NewJobService(nil, start, "fakebucket", sources)
 	req := httptest.NewRequest("", "/job", nil)
 	resp := httptest.NewRecorder()
 	svc.JobHandler(resp, req)
@@ -97,7 +105,7 @@ func TestJobHandler(t *testing.T) {
 }
 
 func TestResume(t *testing.T) {
-	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)
+	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
 	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0, 0) // Only using jobmap.
 	if err != nil {
 		t.Fatal(err)
@@ -106,7 +114,11 @@ func TestResume(t *testing.T) {
 	last := tracker.NewJob("fake-bucket", "ndt", "ndt5", lastJobDate)
 	tk.AddJob(last)
 
-	svc, _ := job.NewJobService(tk, "fake-bucket", start)
+	sources := []config.SourceConfig{
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+	}
+	svc, _ := job.NewJobService(tk, start, "fake-bucket", sources)
 	j := svc.NextJob()
 	if j.Date != last.Date {
 		t.Error(j, last)
@@ -119,13 +131,17 @@ func TestEarlyWrapping(t *testing.T) {
 		return time.Date(2011, 2, 6, 1, 2, 3, 4, time.UTC)
 	})
 	defer monkey.Unpatch(time.Now)
-	start := time.Date(2011, 2, 3, 5, 6, 7, 8, time.UTC)
+	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
 	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0, 0) // Only using jobmap.
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	svc, _ := job.NewJobService(tk, "fake-bucket", start)
+	sources := []config.SourceConfig{
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+	}
+	svc, _ := job.NewJobService(tk, start, "fake-bucket", sources)
 
 	// If a job is still present in the tracker when it wraps, /job returns an error.
 	expected := []struct {
@@ -146,10 +162,10 @@ func TestEarlyWrapping(t *testing.T) {
 		resp := httptest.NewRecorder()
 		svc.JobHandler(resp, req)
 		if resp.Code != result.code {
-			t.Fatal(k, resp.Code, resp.Body.String())
+			t.Error(k, resp.Code, resp.Body.String())
 		}
 		if resp.Body.String() != result.body {
-			t.Fatal(k, resp.Body.String())
+			t.Error(k, "Got:", resp.Body.String(), "!=", result.body)
 		}
 
 		if k == 2 {
