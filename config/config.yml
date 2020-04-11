@@ -3,7 +3,7 @@ start_date: 2020-01-01
 tracker:
   timeout: 5h
 monitor:
-  polling_interval: 5m
+  polling_interval: 1m
 sources:
 - bucket: archive-measurement-lab
   experiment: ndt
@@ -17,3 +17,9 @@ sources:
   experiment: ndt
   datatype: annotation
   target: tmp_ndt.annotation
+- bucket: archive-measurement-lab
+  experiment: ndt
+  datatype: tcpinfo
+  filter: .*T??:??:00.*Z  # Not yet used - just for illustration
+  target: tmp_ndt.tcpinfo
+
