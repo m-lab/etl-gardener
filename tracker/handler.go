@@ -106,6 +106,9 @@ func (h *Handler) update(resp http.ResponseWriter, req *http.Request) {
 	detail := req.Form.Get("detail")
 
 	if err := h.tracker.SetStatus(job, State(state), detail); err != nil {
+		// TODO this is very spammy when a parser gets out of sync.
+		// BUG - don't know why parser would get out of sync.
+		// Maybe because both parsers are trying to do the same job?
 		log.Printf("Not found %+v\n", job)
 		resp.WriteHeader(http.StatusGone)
 		return
