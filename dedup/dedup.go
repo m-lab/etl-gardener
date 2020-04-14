@@ -83,12 +83,32 @@ var ErrDatatypeNotSupported = errors.New("Datatype not supported")
 // Query creates a dedup query for a Job.
 func Query(job tracker.Job, project string) (QueryParams, error) {
 	switch job.Datatype {
+	case "annotation":
+		return QueryParams{
+			Project:   project,
+			TestTime:  "TestTime",
+			Job:       job,
+			Partition: map[string]string{"UUID": "UUID"},
+			Order:     "ParseInfo.ParseTime DESC",
+			Select:    map[string]string{"ParseTime": "ParseInfo.ParseTime"},
+		}, nil
+
 	case "ndt5":
 		return QueryParams{
 			Project:   project,
 			TestTime:  "log_time",
 			Job:       job,
 			Partition: map[string]string{"test_id": "test_id"},
+			Order:     "ParseInfo.ParseTime DESC",
+			Select:    map[string]string{"ParseTime": "ParseInfo.ParseTime"},
+		}, nil
+
+	case "ndt7":
+		return QueryParams{
+			Project:   project,
+			TestTime:  "TestTime",
+			Job:       job,
+			Partition: map[string]string{"UUID": "a.UUID"},
 			Order:     "ParseInfo.ParseTime DESC",
 			Select:    map[string]string{"ParseTime": "ParseInfo.ParseTime"},
 		}, nil
