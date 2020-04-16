@@ -18,8 +18,9 @@ import (
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
-// TODO get the tmp_ from the job Target.
-const table = "`{{.Project}}.tmp_{{.Job.Experiment}}.{{.Job.Datatype}}`"
+// TODO get the tmp_ and raw_ from the job Target?
+const tmpTable = "`{{.Project}}.tmp_{{.Job.Experiment}}.{{.Job.Datatype}}`"
+const rawTable = "`{{.Project}}.raw_{{.Job.Experiment}}.{{.Job.Datatype}}`"
 
 var dedupTemplate = template.Must(template.New("").Parse(`
 #standardSQL
@@ -28,7 +29,7 @@ var dedupTemplate = template.Must(template.New("").Parse(`
 # roughly proportional to the memory footprint of the table partition.
 # The query is very cheap if there are no duplicates.
 DELETE
-FROM ` + table + ` AS target
+FROM ` + tmpTable + ` AS target
 WHERE Date({{.TestTime}}) = "{{.Job.Date.Format "2006-01-02"}}"
 # This identifies all rows that don't match rows to preserve.
 AND NOT EXISTS (
@@ -43,7 +44,7 @@ AND NOT EXISTS (
         ORDER BY {{.Order}}
       ) row_number
       FROM (
-        SELECT * FROM ` + table + `
+        SELECT * FROM ` + tmpTable + `
         WHERE Date({{.TestTime}}) = "{{.Job.Date.Format "2006-01-02"}}"
       )
     )
@@ -57,6 +58,14 @@ AND NOT EXISTS (
     {{range $k, $v := .Select}}target.{{$v}} = keep.{{$k}} AND {{end}}TRUE
 )`))
 
+var cleanupTemplate = template.Must(template.New("").Parse(`
+#standardSQL
+# Delete all rows in a partition.
+DELETE
+FROM ` + tmpTable + ` AS target
+WHERE Date({{.TestTime}}) = "{{.Job.Date.Format "2006-01-02"}}"
+`))
+
 // QueryParams is used to construct a dedup query.
 type QueryParams struct {
 	Project  string
@@ -68,9 +77,20 @@ type QueryParams struct {
 	Select    map[string]string // Derived from Order.
 }
 
-func (params QueryParams) String() string {
+// DedupQuery creates the query for deduplicating.
+func (params QueryParams) DedupQuery() string {
 	out := bytes.NewBuffer(nil)
 	err := dedupTemplate.Execute(out, params)
+	if err != nil {
+		log.Println(err)
+	}
+	return out.String()
+}
+
+// CleanupQuery creates the query for cleanup.
+func (params QueryParams) CleanupQuery() string {
+	out := bytes.NewBuffer(nil)
+	err := cleanupTemplate.Execute(out, params)
 	if err != nil {
 		log.Println(err)
 	}
@@ -80,8 +100,8 @@ func (params QueryParams) String() string {
 // ErrDatatypeNotSupported is returned by Query for unsupported datatypes.
 var ErrDatatypeNotSupported = errors.New("Datatype not supported")
 
-// Query creates a dedup query for a Job.
-func Query(job tracker.Job, project string) (QueryParams, error) {
+// NewQueryParams creates a suitable QueryParams for a Job.
+func NewQueryParams(job tracker.Job, project string) (QueryParams, error) {
 	switch job.Datatype {
 	case "annotation":
 		return QueryParams{
@@ -128,21 +148,37 @@ func Query(job tracker.Job, project string) (QueryParams, error) {
 }
 
 // Dedup executes a query that deletes duplicates from the destination table.
-// It derives the table name from the dsExt project and the job fields.
-// TODO add cost accounting to status page?
-// TODO inject fake bqclient for testing?
 func (params QueryParams) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	c, err := bigquery.NewClient(ctx, params.Project)
 	if err != nil {
 		return nil, err
 	}
 	bqClient := bqiface.AdaptClient(c)
-	q := bqClient.Query(params.String())
+	q := bqClient.Query(params.DedupQuery())
 	if q == nil {
 		return nil, dataset.ErrNilQuery
 	}
 	if dryRun {
-		qc := bqiface.QueryConfig{QueryConfig: bigquery.QueryConfig{DryRun: dryRun, Q: params.String()}}
+		qc := bqiface.QueryConfig{QueryConfig: bigquery.QueryConfig{DryRun: dryRun, Q: params.DedupQuery()}}
+		q.SetQueryConfig(qc)
+	}
+	return q.Run(ctx)
+}
+
+// Cleanup executes a query that deletes the entire partition
+// from the tmp table.
+func (params QueryParams) Cleanup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+	c, err := bigquery.NewClient(ctx, params.Project)
+	if err != nil {
+		return nil, err
+	}
+	bqClient := bqiface.AdaptClient(c)
+	q := bqClient.Query(params.CleanupQuery())
+	if q == nil {
+		return nil, dataset.ErrNilQuery
+	}
+	if dryRun {
+		qc := bqiface.QueryConfig{QueryConfig: bigquery.QueryConfig{DryRun: dryRun, Q: params.DedupQuery()}}
 		q.SetQueryConfig(qc)
 	}
 	return q.Run(ctx)

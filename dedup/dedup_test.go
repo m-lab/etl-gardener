@@ -13,19 +13,19 @@ import (
 
 func TestTemplate(t *testing.T) {
 	job := tracker.NewJob("bucket", "ndt", "tcpinfo", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
-	q, err := dedup.Query(job, "mlab-sandbox")
+	q, err := dedup.NewQueryParams(job, "mlab-sandbox")
 	rtx.Must(err, "dedup.Query failed")
-	if !strings.Contains(q.String(), "uuid") {
+	if !strings.Contains(q.DedupQuery(), "uuid") {
 		t.Error("query should contain keep.uuid:\n", q)
 	}
-	if !strings.Contains(q.String(), `"2019-03-04"`) {
+	if !strings.Contains(q.DedupQuery(), `"2019-03-04"`) {
 		t.Error(`query should contain "2019-03-04":\n`, q)
 	}
-	if !strings.Contains(q.String(), "ParseInfo.TaskFileName") {
+	if !strings.Contains(q.DedupQuery(), "ParseInfo.TaskFileName") {
 		t.Error("query should contain ParseInfo.TaskFileName:\n", q)
 	}
 	// TODO check final WHERE clause.
-	if !strings.Contains(q.String(), "target.ParseInfo.ParseTime = keep.ParseTime AND") {
+	if !strings.Contains(q.DedupQuery(), "target.ParseInfo.ParseTime = keep.ParseTime AND") {
 		t.Error("query should contain target.ParseInfo.ParseTime = ... :\n", q)
 	}
 }
@@ -49,7 +49,7 @@ func TestValidateQueries(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			q, err := dedup.Query(tt.job, "mlab-testing")
+			q, err := dedup.NewQueryParams(tt.job, "mlab-testing")
 			if err != nil {
 				t.Fatal(tt.name, err)
 			}
@@ -83,7 +83,7 @@ func xTestDedup(t *testing.T) {
 	}
 	status, err := bqjob.Wait(context.Background())
 	if err != nil {
-		t.Fatal(err, qp.String())
+		t.Fatal(err, qp.DedupQuery())
 	}
 	t.Error(status)
 }
