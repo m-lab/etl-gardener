@@ -15,17 +15,18 @@ func TestTemplate(t *testing.T) {
 	job := tracker.NewJob("bucket", "ndt", "tcpinfo", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
 	q, err := dedup.NewQueryParams(job, "mlab-sandbox")
 	rtx.Must(err, "dedup.Query failed")
-	if !strings.Contains(q.DedupQuery(), "uuid") {
+	qs := q.QueryString("dedup")
+	if !strings.Contains(qs, "uuid") {
 		t.Error("query should contain keep.uuid:\n", q)
 	}
-	if !strings.Contains(q.DedupQuery(), `"2019-03-04"`) {
+	if !strings.Contains(qs, `"2019-03-04"`) {
 		t.Error(`query should contain "2019-03-04":\n`, q)
 	}
-	if !strings.Contains(q.DedupQuery(), "ParseInfo.TaskFileName") {
+	if !strings.Contains(qs, "ParseInfo.TaskFileName") {
 		t.Error("query should contain ParseInfo.TaskFileName:\n", q)
 	}
 	// TODO check final WHERE clause.
-	if !strings.Contains(q.DedupQuery(), "target.ParseInfo.ParseTime = keep.ParseTime AND") {
+	if !strings.Contains(qs, "target.ParseInfo.ParseTime = keep.ParseTime AND") {
 		t.Error("query should contain target.ParseInfo.ParseTime = ... :\n", q)
 	}
 }
@@ -83,7 +84,7 @@ func xTestDedup(t *testing.T) {
 	}
 	status, err := bqjob.Wait(context.Background())
 	if err != nil {
-		t.Fatal(err, qp.DedupQuery())
+		t.Fatal(err, qp.QueryString("dedup"))
 	}
 	t.Error(status)
 }
