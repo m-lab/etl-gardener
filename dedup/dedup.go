@@ -82,7 +82,6 @@ func NewQueryParams(job tracker.Job, project string) (QueryParams, error) {
 var queryTemplates = map[string]*template.Template{
 	"dedup":    dedupTemplate,
 	"preserve": preserveTemplate,
-	"copy":     copyTemplate,
 	"cleanup":  cleanupTemplate,
 }
 
@@ -96,6 +95,7 @@ func (params QueryParams) makeQuery(t *template.Template) string {
 	return out.String()
 }
 
+// QueryString returns the appropriate query in string form.
 func (params QueryParams) QueryString(key string) string {
 	t, ok := queryTemplates[key]
 	if !ok {
@@ -124,6 +124,25 @@ func (params QueryParams) Run(ctx context.Context, key string, dryRun bool) (bqi
 		q.SetQueryConfig(qc)
 	}
 	return q.Run(ctx)
+}
+
+// Copy copies the tmp_ job partition to the raw_ job partition.
+func (params QueryParams) Copy(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+	c, err := bigquery.NewClient(ctx, params.Project)
+	if err != nil {
+		return nil, err
+	}
+	bqClient := bqiface.AdaptClient(c)
+	src := bqClient.Dataset("tmp_" + params.Job.Experiment).Table(params.Job.Datatype)
+	dest := bqClient.Dataset("raw_" + params.Job.Experiment).Table(params.Job.Datatype)
+
+	copier := dest.CopierFrom(src)
+	config := bqiface.CopyConfig{}
+	config.WriteDisposition = bigquery.WriteTruncate
+	config.Dst = dest
+	config.Srcs = append(config.Srcs, src)
+	copier.SetCopyConfig(config)
+	return copier.Run(ctx)
 }
 
 // TODO get the tmp_ and raw_ from the job Target?
@@ -187,21 +206,6 @@ WHERE Date({{.TestTime}}) = "{{.Job.Date.Format "2006-01-02"}}"
 // before copying it to the raw_ table.
 func (params QueryParams) Preserve(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	return params.Run(ctx, "preserve", dryRun)
-}
-
-var copyTemplate = template.Must(template.New("").Parse(`
-UNIMPLEMENTED
-#standardSQL
-# Delete all rows in a partition.
-DELETE
-FROM ` + tmpTable + ` AS target
-WHERE Date({{.TestTime}}) = "{{.Job.Date.Format "2006-01-02"}}"
-`))
-
-// Copy executes a query that deletes the entire partition
-// from the tmp table.
-func (params QueryParams) Copy(ctx context.Context, dryRun bool) (bqiface.Job, error) {
-	return params.Run(ctx, "copy", dryRun)
 }
 
 var cleanupTemplate = template.Must(template.New("").Parse(`

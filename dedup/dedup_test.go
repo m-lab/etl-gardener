@@ -31,36 +31,42 @@ func TestTemplate(t *testing.T) {
 	}
 }
 
+// NOTE: This validates queries against actual tables in mlab-sandbox.  It only
+// runs Dryrun queries, so it does not modify the tables.
 func TestValidateQueries(t *testing.T) {
 	if testing.Short() {
 		t.Log("Skipping test for --short")
 	}
-	tests := []struct {
-		name string
-		job  tracker.Job
-	}{
-		{
-			name: "tcpinfo",
-			job:  tracker.NewJob("bucket", "ndt", "tcpinfo", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC)),
-		},
-		{
-			name: "ndt5",
-			job:  tracker.NewJob("bucket", "ndt", "ndt5", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC)),
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			q, err := dedup.NewQueryParams(tt.job, "mlab-testing")
+	ctx := context.Background()
+	dataTypes := []string{"tcpinfo", "ndt5", "annotation", "ndt7"}
+	keys := []string{"dedup", "cleanup"} // TODO Add "preserve" query
+	for _, dataType := range dataTypes {
+		job := tracker.NewJob("bucket", "ndt", dataType, time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
+		qp, err := dedup.NewQueryParams(job, "mlab-sandbox")
+		if err != nil {
+			t.Fatal(dataType, err)
+		}
+		for _, key := range keys {
+
+			t.Run(dataType+":"+key, func(t *testing.T) {
+				j, err := qp.Run(ctx, key, true)
+				if err != nil {
+					t.Fatal(t.Name(), err, qp.QueryString(key))
+				}
+				status := j.LastStatus()
+				if status.Err() != nil {
+					t.Fatal(t.Name(), err, qp.QueryString(key))
+				}
+			})
+		}
+		t.Run(dataType+":copy", func(t *testing.T) {
+			j, err := qp.Copy(ctx, true)
 			if err != nil {
-				t.Fatal(tt.name, err)
-			}
-			j, err := q.Dedup(context.Background(), true)
-			if err != nil {
-				t.Fatal(tt.name, err)
+				t.Fatal(t.Name(), err)
 			}
 			status := j.LastStatus()
 			if status.Err() != nil {
-				t.Fatal(tt.name, err)
+				t.Fatal(t.Name(), err)
 			}
 		})
 	}
