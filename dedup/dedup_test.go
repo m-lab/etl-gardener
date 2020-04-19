@@ -15,7 +15,7 @@ func TestTemplate(t *testing.T) {
 	job := tracker.NewJob("bucket", "ndt", "tcpinfo", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
 	q, err := dedup.NewQueryParams(job, "mlab-sandbox")
 	rtx.Must(err, "dedup.Query failed")
-	qs := q.QueryString("dedup")
+	qs := q.QueryFor("dedup")
 	if !strings.Contains(qs, "uuid") {
 		t.Error("query should contain keep.uuid:\n", q)
 	}
@@ -33,6 +33,7 @@ func TestTemplate(t *testing.T) {
 
 // NOTE: This validates queries against actual tables in mlab-sandbox.  It only
 // runs Dryrun queries, so it does not modify the tables.
+// TODO: These will fail in travis due to ACLs.
 func TestValidateQueries(t *testing.T) {
 	if testing.Short() {
 		t.Log("Skipping test for --short")
@@ -40,22 +41,24 @@ func TestValidateQueries(t *testing.T) {
 	ctx := context.Background()
 	dataTypes := []string{"tcpinfo", "ndt5", "annotation", "ndt7"}
 	keys := []string{"dedup", "cleanup"} // TODO Add "preserve" query
+	// Test for each datatype
 	for _, dataType := range dataTypes {
 		job := tracker.NewJob("bucket", "ndt", dataType, time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
 		qp, err := dedup.NewQueryParams(job, "mlab-sandbox")
 		if err != nil {
 			t.Fatal(dataType, err)
 		}
+		// Test each query key
 		for _, key := range keys {
-
 			t.Run(dataType+":"+key, func(t *testing.T) {
+				t.Log(t.Name())
 				j, err := qp.Run(ctx, key, true)
 				if err != nil {
-					t.Fatal(t.Name(), err, qp.QueryString(key))
+					t.Fatal(t.Name(), err, qp.QueryFor(key))
 				}
 				status := j.LastStatus()
 				if status.Err() != nil {
-					t.Fatal(t.Name(), err, qp.QueryString(key))
+					t.Fatal(t.Name(), err, qp.QueryFor(key))
 				}
 			})
 		}
@@ -70,30 +73,4 @@ func TestValidateQueries(t *testing.T) {
 			}
 		})
 	}
-}
-
-// This runs a real dedup on a real partition in mlab-sandbox for manual testing.
-// It takes about 5 minutes to run.
-func xTestDedup(t *testing.T) {
-	job := tracker.NewJob("foobar", "ndt", "tcpinfo", time.Date(2019, 8, 12, 0, 0, 0, 0, time.UTC))
-	qp := dedup.QueryParams{
-		Project:   "mlab-sandbox",
-		TestTime:  "TestTime",
-		Job:       job,
-		Partition: map[string]string{"uuid": "uuid", "ParseTime": "ParseInfo.ParseTime"},
-		Order:     "ARRAY_LENGTH(Snapshots) DESC, ParseInfo.TaskFileName, ParseInfo.ParseTime DESC",
-		Select:    map[string]string{"ParseTime": "ParseInfo.ParseTime"},
-	}
-	bqjob, err := qp.Dedup(context.Background(), false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	status, err := bqjob.Wait(context.Background())
-	if err != nil {
-		t.Fatal(err, qp.QueryString("dedup"))
-	}
-	t.Error(status)
-}
-
-func TestQueryParams_String(t *testing.T) {
 }

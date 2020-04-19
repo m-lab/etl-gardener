@@ -18,8 +18,15 @@ import (
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
-// QueryParams is used to construct a dedup query.
-type QueryParams struct {
+type QueryParams interface {
+	QueryFor(key string) string
+	Run(ctx context.Context, key string, dryRun bool) (bqiface.Job, error)
+	Copy(ctx context.Context, dryRun bool) (bqiface.Job, error)
+}
+
+// queryParams is used to construct a dedup query.
+type queryParams struct {
+	client   bqiface.Client
 	Project  string
 	TestTime string // Name of the partition field
 	Job      tracker.Job
@@ -34,9 +41,20 @@ var ErrDatatypeNotSupported = errors.New("Datatype not supported")
 
 // NewQueryParams creates a suitable QueryParams for a Job.
 func NewQueryParams(job tracker.Job, project string) (QueryParams, error) {
+	c, err := bigquery.NewClient(context.Background(), project)
+	if err != nil {
+		return nil, err
+	}
+	bqClient := bqiface.AdaptClient(c)
+	return NewQueryParamsWithClient(bqClient, job, project)
+}
+
+// NewQueryParamsWithClient creates a suitable QueryParams for a Job.
+func NewQueryParamsWithClient(client bqiface.Client, job tracker.Job, project string) (QueryParams, error) {
 	switch job.Datatype {
 	case "annotation":
-		return QueryParams{
+		return &queryParams{
+			client:    client,
 			Project:   project,
 			TestTime:  "TestTime",
 			Job:       job,
@@ -46,7 +64,8 @@ func NewQueryParams(job tracker.Job, project string) (QueryParams, error) {
 		}, nil
 
 	case "ndt5":
-		return QueryParams{
+		return &queryParams{
+			client:    client,
 			Project:   project,
 			TestTime:  "log_time",
 			Job:       job,
@@ -56,7 +75,8 @@ func NewQueryParams(job tracker.Job, project string) (QueryParams, error) {
 		}, nil
 
 	case "ndt7":
-		return QueryParams{
+		return &queryParams{
+			client:    client,
 			Project:   project,
 			TestTime:  "TestTime",
 			Job:       job,
@@ -66,7 +86,8 @@ func NewQueryParams(job tracker.Job, project string) (QueryParams, error) {
 		}, nil
 
 	case "tcpinfo":
-		return QueryParams{
+		return &queryParams{
+			client:    client,
 			Project:   project,
 			TestTime:  "TestTime",
 			Job:       job,
@@ -75,7 +96,7 @@ func NewQueryParams(job tracker.Job, project string) (QueryParams, error) {
 			Select:    map[string]string{"ParseTime": "ParseInfo.ParseTime"},
 		}, nil
 	default:
-		return QueryParams{}, ErrDatatypeNotSupported
+		return nil, ErrDatatypeNotSupported
 	}
 }
 
@@ -86,7 +107,7 @@ var queryTemplates = map[string]*template.Template{
 }
 
 // MakeQuery creates a query from a template.
-func (params QueryParams) makeQuery(t *template.Template) string {
+func (params queryParams) makeQuery(t *template.Template) string {
 	out := bytes.NewBuffer(nil)
 	err := t.Execute(out, params)
 	if err != nil {
@@ -95,8 +116,8 @@ func (params QueryParams) makeQuery(t *template.Template) string {
 	return out.String()
 }
 
-// QueryString returns the appropriate query in string form.
-func (params QueryParams) QueryString(key string) string {
+// QueryFor returns the appropriate query in string form.
+func (params queryParams) QueryFor(key string) string {
 	t, ok := queryTemplates[key]
 	if !ok {
 		return ""
@@ -105,17 +126,15 @@ func (params QueryParams) QueryString(key string) string {
 }
 
 // Run executes a query constructed from a template.  It returns the bqiface.Job.
-func (params QueryParams) Run(ctx context.Context, key string, dryRun bool) (bqiface.Job, error) {
-	c, err := bigquery.NewClient(ctx, params.Project)
-	if err != nil {
-		return nil, err
-	}
-	bqClient := bqiface.AdaptClient(c)
-	qs := params.QueryString(key)
+func (params queryParams) Run(ctx context.Context, key string, dryRun bool) (bqiface.Job, error) {
+	qs := params.QueryFor(key)
 	if len(qs) == 0 {
 		return nil, dataset.ErrNilQuery
 	}
-	q := bqClient.Query(qs)
+	if params.client == nil {
+		return nil, dataset.ErrNilBqClient
+	}
+	q := params.client.Query(qs)
 	if q == nil {
 		return nil, dataset.ErrNilQuery
 	}
@@ -127,14 +146,12 @@ func (params QueryParams) Run(ctx context.Context, key string, dryRun bool) (bqi
 }
 
 // Copy copies the tmp_ job partition to the raw_ job partition.
-func (params QueryParams) Copy(ctx context.Context, dryRun bool) (bqiface.Job, error) {
-	c, err := bigquery.NewClient(ctx, params.Project)
-	if err != nil {
-		return nil, err
+func (params queryParams) Copy(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+	if params.client == nil {
+		return nil, dataset.ErrNilBqClient
 	}
-	bqClient := bqiface.AdaptClient(c)
-	src := bqClient.Dataset("tmp_" + params.Job.Experiment).Table(params.Job.Datatype)
-	dest := bqClient.Dataset("raw_" + params.Job.Experiment).Table(params.Job.Datatype)
+	src := params.client.Dataset("tmp_" + params.Job.Experiment).Table(params.Job.Datatype)
+	dest := params.client.Dataset("raw_" + params.Job.Experiment).Table(params.Job.Datatype)
 
 	copier := dest.CopierFrom(src)
 	config := bqiface.CopyConfig{}
@@ -186,7 +203,7 @@ AND NOT EXISTS (
 )`))
 
 // Dedup executes a query that deletes duplicates from the destination table.
-func (params QueryParams) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+func (params queryParams) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	return params.Run(ctx, "dedup", dryRun)
 }
 
@@ -204,7 +221,7 @@ WHERE Date({{.TestTime}}) = "{{.Job.Date.Format "2006-01-02"}}"
 // it prevents the loss of rows.
 // HOWEVER: We still need to ensure that the tmp_ partition hasn't been deleted
 // before copying it to the raw_ table.
-func (params QueryParams) Preserve(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+func (params queryParams) Preserve(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	return params.Run(ctx, "preserve", dryRun)
 }
 
@@ -218,6 +235,6 @@ WHERE Date({{.TestTime}}) = "{{.Job.Date.Format "2006-01-02"}}"
 
 // Cleanup executes a query that deletes the entire partition
 // from the tmp table.
-func (params QueryParams) Cleanup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+func (params queryParams) Cleanup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	return params.Run(ctx, "cleanup", dryRun)
 }
