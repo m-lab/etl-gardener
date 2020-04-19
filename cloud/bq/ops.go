@@ -1,5 +1,4 @@
-// Package dedup provides functions for deduplicating bigquery table partitions.
-package dedup
+package bq
 
 import (
 	"bytes"
