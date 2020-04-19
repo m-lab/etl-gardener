@@ -1,11 +1,17 @@
 package bq_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/m-lab/etl-gardener/cloud/bq"
+	"github.com/m-lab/etl-gardener/tracker"
+	"github.com/m-lab/go/rtx"
+)
+
+func TestTemplate(t *testing.T) {
 	job := tracker.NewJob("bucket", "ndt", "tcpinfo", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
 	q, err := bq.NewQueryParams(job, "mlab-testing")
 	rtx.Must(err, "dedup.Query failed")
@@ -13,10 +19,10 @@ import (
 	if !strings.Contains(qs, "uuid") {
 		t.Error("query should contain keep.uuid:\n", q)
 	}
-	if !strings.Contains(q, `"2019-03-04"`) {
+	if !strings.Contains(qs, `"2019-03-04"`) {
 		t.Error(`query should contain "2019-03-04":\n`, q)
 	}
-	if !strings.Contains(q, "ParseInfo.TaskFileName") {
+	if !strings.Contains(qs, "ParseInfo.TaskFileName") {
 		t.Error("query should contain ParseInfo.TaskFileName:\n", q)
 	}
 	// TODO check final WHERE clause.
