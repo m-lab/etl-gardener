@@ -1,4 +1,5 @@
 // Package dedup provides functions for deduplicating bigquery table partitions.
+// Since adding other functions, we should probably rename the package.
 package dedup
 
 // TODO consider using query parameters to simplify the template.
