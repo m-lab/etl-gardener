@@ -13,7 +13,7 @@ import (
 
 func TestTemplate(t *testing.T) {
 	job := tracker.NewJob("bucket", "ndt", "tcpinfo", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
-	q, err := dedup.NewQueryParams(job, "mlab-sandbox")
+	q, err := dedup.NewQueryParams(job, "mlab-testing")
 	rtx.Must(err, "dedup.Query failed")
 	qs := q.QueryFor("dedup")
 	if !strings.Contains(qs, "uuid") {
@@ -31,9 +31,8 @@ func TestTemplate(t *testing.T) {
 	}
 }
 
-// NOTE: This validates queries against actual tables in mlab-sandbox.  It only
+// NOTE: This validates queries against actual tables in mlab-testing.  It only
 // runs Dryrun queries, so it does not modify the tables.
-// TODO: These will fail in travis due to ACLs.
 func TestValidateQueries(t *testing.T) {
 	if testing.Short() {
 		t.Log("Skipping test for --short")
@@ -44,7 +43,7 @@ func TestValidateQueries(t *testing.T) {
 	// Test for each datatype
 	for _, dataType := range dataTypes {
 		job := tracker.NewJob("bucket", "ndt", dataType, time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
-		qp, err := dedup.NewQueryParams(job, "mlab-sandbox")
+		qp, err := dedup.NewQueryParams(job, "mlab-testing")
 		if err != nil {
 			t.Fatal(dataType, err)
 		}
