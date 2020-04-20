@@ -159,6 +159,17 @@ func (params queryParams) Copy(ctx context.Context, dryRun bool) (bqiface.Job, e
 	return copier.Run(ctx)
 }
 
+// Dedup executes a query that deletes duplicates from the destination table.
+func (params queryParams) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+	return params.Run(ctx, "dedup", dryRun)
+}
+
+// Cleanup executes a query that deletes the entire partition
+// from the tmp table.
+func (params queryParams) Cleanup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+	return params.Run(ctx, "cleanup", dryRun)
+}
+
 // TODO get the tmp_ and raw_ from the job Target?
 const tmpTable = "`{{.Project}}.tmp_{{.Job.Experiment}}.{{.Job.Datatype}}`"
 const rawTable = "`{{.Project}}.raw_{{.Job.Experiment}}.{{.Job.Datatype}}`"
@@ -199,39 +210,10 @@ AND NOT EXISTS (
     {{range $k, $v := .Select}}target.{{$v}} = keep.{{$k}} AND {{end}}TRUE
 )`))
 
-// Dedup executes a query that deletes duplicates from the destination table.
-func (params queryParams) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
-	return params.Run(ctx, "dedup", dryRun)
-}
-
-var preserveTemplate = template.Must(template.New("").Parse(`
-UNIMPLEMENTED
-#standardSQL
-# Delete all rows in a partition.
-DELETE
-FROM ` + tmpTable + ` AS target
-WHERE Date({{.TestTime}}) = "{{.Job.Date.Format "2006-01-02"}}"
-`))
-
-// Preserve executes a query that finds rows in raw_ table that are missing from
-// the tmp_ table, and copies them.  This can be used instead of sanity check, since
-// it prevents the loss of rows.
-// HOWEVER: We still need to ensure that the tmp_ partition hasn't been deleted
-// before copying it to the raw_ table.
-func (params queryParams) Preserve(ctx context.Context, dryRun bool) (bqiface.Job, error) {
-	return params.Run(ctx, "preserve", dryRun)
-}
-
 var cleanupTemplate = template.Must(template.New("").Parse(`
 #standardSQL
 # Delete all rows in a partition.
 DELETE
-FROM ` + tmpTable + ` AS target
+FROM ` + tmpTable + `
 WHERE Date({{.TestTime}}) = "{{.Job.Date.Format "2006-01-02"}}"
 `))
-
-// Cleanup executes a query that deletes the entire partition
-// from the tmp table.
-func (params queryParams) Cleanup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
-	return params.Run(ctx, "cleanup", dryRun)
-}
