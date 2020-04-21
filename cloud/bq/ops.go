@@ -36,8 +36,8 @@ type queryer struct {
 // ErrDatatypeNotSupported is returned by Query for unsupported datatypes.
 var ErrDatatypeNotSupported = errors.New("Datatype not supported")
 
-// NewQueryParams creates a suitable QueryParams for a Job.
-func NewQueryParams(job tracker.Job, project string) (Queryer, error) {
+// NewQuerier creates a suitable QueryParams for a Job.
+func NewQuerier(job tracker.Job, project string) (Queryer, error) {
 	c, err := bigquery.NewClient(context.Background(), project)
 	if err != nil {
 		return nil, err
