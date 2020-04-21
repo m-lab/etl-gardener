@@ -59,16 +59,6 @@ func NewQueryParamsWithClient(client bqiface.Client, job tracker.Job, project st
 			Order:     "",
 		}, nil
 
-	case "ndt5":
-		return &queryer{
-			client:    client,
-			Project:   project,
-			TestTime:  "log_time",
-			Job:       job,
-			Partition: map[string]string{"test_id": "test_id"},
-			Order:     "",
-		}, nil
-
 	case "ndt7":
 		return &queryer{
 			client:    client,
@@ -86,7 +76,8 @@ func NewQueryParamsWithClient(client bqiface.Client, job tracker.Job, project st
 			TestTime:  "TestTime",
 			Job:       job,
 			Partition: map[string]string{"uuid": "uuid", "Timestamp": "FinalSnapshot.Timestamp"},
-			Order:     "ARRAY_LENGTH(Snapshots) DESC, ParseInfo.TaskFileName, ",
+			// TODO TaskFileName should be ArchiveURL once we update the schema.
+			Order: "ARRAY_LENGTH(Snapshots) DESC, ParseInfo.TaskFileName, ",
 		}, nil
 	default:
 		return nil, ErrDatatypeNotSupported
