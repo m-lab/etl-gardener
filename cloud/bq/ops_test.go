@@ -13,7 +13,7 @@ import (
 
 func TestTemplate(t *testing.T) {
 	job := tracker.NewJob("bucket", "ndt", "tcpinfo", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
-	q, err := bq.NewQueryParams(job, "mlab-testing")
+	q, err := bq.NewQueryParams(job, "fake-project")
 	rtx.Must(err, "dedup.Query failed")
 	qs := q.QueryFor("dedup")
 	if !strings.Contains(qs, "uuid") {
