@@ -26,8 +26,8 @@ func TestTemplate(t *testing.T) {
 		t.Error("query should contain ParseInfo.TaskFileName:\n", q)
 	}
 	// TODO check final WHERE clause.
-	if !strings.Contains(qs, "target.ParseInfo.ParseTime = keep.ParseTime AND") {
-		t.Error("query should contain target.ParseInfo.ParseTime = ... :\n", q)
+	if !strings.Contains(qs, "target.ParseInfo.ParseTime = keep.ParseTime") {
+		t.Error("query should contain target.ParseInfo.ParseTime = ... :\n", qs)
 	}
 }
 

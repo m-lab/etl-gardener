@@ -15,14 +15,15 @@ import (
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
-type QueryParams interface {
+// Queryer provides the interface for running bigquery operations.
+type Queryer interface {
 	QueryFor(key string) string
 	Run(ctx context.Context, key string, dryRun bool) (bqiface.Job, error)
 	Copy(ctx context.Context, dryRun bool) (bqiface.Job, error)
 }
 
-// queryParams is used to construct a dedup query.
-type queryParams struct {
+// queryer is used to construct a dedup query.
+type queryer struct {
 	client   bqiface.Client
 	Project  string
 	TestTime string // Name of the partition field
@@ -30,14 +31,13 @@ type queryParams struct {
 	// map key is the single field name, value is fully qualified name
 	Partition map[string]string
 	Order     string
-	Select    map[string]string // Derived from Order.
 }
 
 // ErrDatatypeNotSupported is returned by Query for unsupported datatypes.
 var ErrDatatypeNotSupported = errors.New("Datatype not supported")
 
 // NewQueryParams creates a suitable QueryParams for a Job.
-func NewQueryParams(job tracker.Job, project string) (QueryParams, error) {
+func NewQueryParams(job tracker.Job, project string) (Queryer, error) {
 	c, err := bigquery.NewClient(context.Background(), project)
 	if err != nil {
 		return nil, err
@@ -47,50 +47,46 @@ func NewQueryParams(job tracker.Job, project string) (QueryParams, error) {
 }
 
 // NewQueryParamsWithClient creates a suitable QueryParams for a Job.
-func NewQueryParamsWithClient(client bqiface.Client, job tracker.Job, project string) (QueryParams, error) {
+func NewQueryParamsWithClient(client bqiface.Client, job tracker.Job, project string) (Queryer, error) {
 	switch job.Datatype {
 	case "annotation":
-		return &queryParams{
+		return &queryer{
 			client:    client,
 			Project:   project,
 			TestTime:  "TestTime",
 			Job:       job,
 			Partition: map[string]string{"UUID": "UUID"},
-			Order:     "ParseInfo.ParseTime DESC",
-			Select:    map[string]string{"ParseTime": "ParseInfo.ParseTime"},
+			Order:     "",
 		}, nil
 
 	case "ndt5":
-		return &queryParams{
+		return &queryer{
 			client:    client,
 			Project:   project,
 			TestTime:  "log_time",
 			Job:       job,
 			Partition: map[string]string{"test_id": "test_id"},
-			Order:     "ParseInfo.ParseTime DESC",
-			Select:    map[string]string{"ParseTime": "ParseInfo.ParseTime"},
+			Order:     "",
 		}, nil
 
 	case "ndt7":
-		return &queryParams{
+		return &queryer{
 			client:    client,
 			Project:   project,
 			TestTime:  "TestTime",
 			Job:       job,
 			Partition: map[string]string{"UUID": "a.UUID"},
-			Order:     "ParseInfo.ParseTime DESC",
-			Select:    map[string]string{"ParseTime": "ParseInfo.ParseTime"},
+			Order:     "",
 		}, nil
 
 	case "tcpinfo":
-		return &queryParams{
+		return &queryer{
 			client:    client,
 			Project:   project,
 			TestTime:  "TestTime",
 			Job:       job,
 			Partition: map[string]string{"uuid": "uuid", "Timestamp": "FinalSnapshot.Timestamp"},
-			Order:     "ARRAY_LENGTH(Snapshots) DESC, ParseInfo.TaskFileName, ParseInfo.ParseTime DESC",
-			Select:    map[string]string{"ParseTime": "ParseInfo.ParseTime"},
+			Order:     "ARRAY_LENGTH(Snapshots) DESC, ParseInfo.TaskFileName, ",
 		}, nil
 	default:
 		return nil, ErrDatatypeNotSupported
@@ -98,13 +94,12 @@ func NewQueryParamsWithClient(client bqiface.Client, job tracker.Job, project st
 }
 
 var queryTemplates = map[string]*template.Template{
-	"dedup":    dedupTemplate,
-	"preserve": preserveTemplate,
-	"cleanup":  cleanupTemplate,
+	"dedup":   dedupTemplate,
+	"cleanup": cleanupTemplate,
 }
 
 // MakeQuery creates a query from a template.
-func (params queryParams) makeQuery(t *template.Template) string {
+func (params queryer) makeQuery(t *template.Template) string {
 	out := bytes.NewBuffer(nil)
 	err := t.Execute(out, params)
 	if err != nil {
@@ -114,7 +109,7 @@ func (params queryParams) makeQuery(t *template.Template) string {
 }
 
 // QueryFor returns the appropriate query in string form.
-func (params queryParams) QueryFor(key string) string {
+func (params queryer) QueryFor(key string) string {
 	t, ok := queryTemplates[key]
 	if !ok {
 		return ""
@@ -123,7 +118,7 @@ func (params queryParams) QueryFor(key string) string {
 }
 
 // Run executes a query constructed from a template.  It returns the bqiface.Job.
-func (params queryParams) Run(ctx context.Context, key string, dryRun bool) (bqiface.Job, error) {
+func (params queryer) Run(ctx context.Context, key string, dryRun bool) (bqiface.Job, error) {
 	qs := params.QueryFor(key)
 	if len(qs) == 0 {
 		return nil, dataset.ErrNilQuery
@@ -143,7 +138,7 @@ func (params queryParams) Run(ctx context.Context, key string, dryRun bool) (bqi
 }
 
 // Copy copies the tmp_ job partition to the raw_ job partition.
-func (params queryParams) Copy(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+func (params queryer) Copy(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	if params.client == nil {
 		return nil, dataset.ErrNilBqClient
 	}
@@ -160,13 +155,13 @@ func (params queryParams) Copy(ctx context.Context, dryRun bool) (bqiface.Job, e
 }
 
 // Dedup executes a query that deletes duplicates from the destination table.
-func (params queryParams) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+func (params queryer) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	return params.Run(ctx, "dedup", dryRun)
 }
 
 // Cleanup executes a query that deletes the entire partition
 // from the tmp table.
-func (params queryParams) Cleanup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+func (params queryer) Cleanup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	return params.Run(ctx, "cleanup", dryRun)
 }
 
@@ -190,10 +185,10 @@ AND NOT EXISTS (
   SELECT * EXCEPT(row_number) FROM (
     SELECT
       {{range $k, $v := .Partition}}{{$v}}, {{end}}
-      {{range $k, $v := .Select}}{{$v}}, {{end}}
+	  ParseInfo.ParseTime,
       ROW_NUMBER() OVER (
-        PARTITION BY {{range $k, $v := .Partition}}{{$v}}, {{end}}TRUE
-        ORDER BY {{.Order}}
+        PARTITION BY {{range $k, $v := .Partition}}{{$v}}, {{end}}ParseInfo.ParseTime
+        ORDER BY {{.Order}} ParseInfo.ParseTime DESC
       ) row_number
       FROM (
         SELECT * FROM ` + tmpTable + `
@@ -207,7 +202,7 @@ AND NOT EXISTS (
   # used to distinguish the preferred row from the others.
   WHERE
     {{range $k, $v := .Partition}}target.{{$v}} = keep.{{$k}} AND {{end}}
-    {{range $k, $v := .Select}}target.{{$v}} = keep.{{$k}} AND {{end}}TRUE
+    target.ParseInfo.ParseTime = keep.ParseTime
 )`))
 
 var cleanupTemplate = template.Must(template.New("").Parse(`
