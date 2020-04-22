@@ -89,52 +89,32 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 			if typedErr.Code == http.StatusBadRequest &&
 				strings.Contains(typedErr.Error(), "streaming buffer") {
 				// Wait a while and try again.
-				log.Println(err)
+				log.Println(typedErr)
 				metrics.WarningCount.WithLabelValues(
-					j.Experiment, j.DataType,
-					"StreamingBufferBackoff").Inc()
-				s.UpdateDetail("Dedup waiting for empty streaming buffer.")
-				tk.UpdateJob(j, s)
-			}
-		default:
-			// We don't know the problem...
-			log.Println(err)
-			metrics.WarningCount.WithLabelValues(
-				j.Experiment, j.DataType,
-				"UnknownBigqueryError").Inc()
-		}
-		time.Sleep(2 * time.Minute)
-		return // Try again later.
-	}
-	if status.Err() != nil {
-		err := status.Err()
-		switch typedErr := err.(type) {
-		case *googleapi.Error:
-			log.Println(err)
-			if typedErr.Code == http.StatusBadRequest &&
-				strings.Contains(typedErr.Error(), "streaming buffer") {
-				// Wait a while and try again.
-				// Since there is no job update, the tracker may eventually kill
-				// this job if it doesn't succeed within the stale job time limit.
+					j.Experiment, j.Datatype,
+					"DedupWaitingForStreamingBuffer").Inc()
 				s.UpdateDetail("Dedup waiting for empty streaming buffer.")
 				tk.UpdateJob(j, s)
 				time.Sleep(2 * time.Minute)
 				return // Try again later.
 			}
 		default:
-			log.Println(err)
-			if err == state.ErrBQRateLimitExceeded {
-				// If BQ is rate limited, this basically results in jobs queuing up
-				// and executing later.
-				// Since there is no job update, the tracker may eventually kill
-				// this job if it doesn't succeed within the stale job time limit.
-				// TODO should this use exponential backoff?
-				s.UpdateDetail("Dedup waiting because of BQ Rate Limit Exceeded.")
-				tk.UpdateJob(j, s)
-				time.Sleep(5 * time.Minute)
-				return // Try again later.
-			}
+			// We don't know the problem...
 		}
+		log.Println(err)
+		metrics.WarningCount.WithLabelValues(
+			j.Experiment, j.Datatype,
+			"UnknownDedupError").Inc()
+		// This will terminate this job.
+		tk.SetJobError(j, err.Error())
+		return
+	}
+	if status.Err() != nil {
+		err := status.Err()
+		log.Println(err)
+		metrics.WarningCount.WithLabelValues(
+			j.Experiment, j.Datatype,
+			"UnknownDedupStatusError").Inc()
 
 		// This will terminate this job.
 		tk.SetJobError(j, err.Error())
