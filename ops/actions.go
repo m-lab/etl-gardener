@@ -89,12 +89,19 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 			if typedErr.Code == http.StatusBadRequest &&
 				strings.Contains(typedErr.Error(), "streaming buffer") {
 				// Wait a while and try again.
+				log.Println(err)
+				metrics.WarningCount.WithLabelValues(
+					j.Experiment, j.DataType,
+					"StreamingBufferBackoff").Inc()
 				s.UpdateDetail("Dedup waiting for empty streaming buffer.")
 				tk.UpdateJob(j, s)
 			}
 		default:
 			// We don't know the problem...
 			log.Println(err)
+			metrics.WarningCount.WithLabelValues(
+				j.Experiment, j.DataType,
+				"UnknownBigqueryError").Inc()
 		}
 		time.Sleep(2 * time.Minute)
 		return // Try again later.
