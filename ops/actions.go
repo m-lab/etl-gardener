@@ -17,7 +17,6 @@ import (
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/cloud/bq"
 	"github.com/m-lab/etl-gardener/metrics"
-	"github.com/m-lab/etl-gardener/state"
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
@@ -63,7 +62,8 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 // TODO figure out how to test this code?
 func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
 	start := time.Now()
-	// This is the delay since entering the dedup state.
+	// This is the delay since entering the dedup state, due to monitor delay
+	// and retries.
 	delay := time.Since(s.LastStateChangeTime()).Round(time.Minute)
 
 	var bqJob bqiface.Job
@@ -140,52 +140,5 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 	err = tk.SetStatus(j, tracker.Complete, msg)
 	if err != nil {
 		log.Println(err)
-	}
-}
-
-// WaitForJob waits for job to complete.  Uses fibonacci backoff until the backoff
-// >= maxBackoff, at which point it continues using same backoff.
-// TODO - why don't we just use job.Wait()?  Just because of terminate?
-// TODO - develop a BQJob interface for wrapping bigquery.Job, and allowing fakes.
-// TODO - move this to go/dataset, since it is bigquery specific and general purpose.
-func waitForJob(ctx context.Context, job tracker.Job, bqJob bqiface.Job, maxBackoff time.Duration) error {
-	log.Println("Wait for job:", bqJob.ID())
-	backoff := 10 * time.Second // Some jobs finish much quicker, but we don't really care that much.
-	previous := backoff
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			status, err := bqJob.Wait(ctx)
-			if err != nil {
-				log.Println(job.String(), bqJob.ID(), err)
-				return err
-			} else if status.Err() != nil {
-				// NOTE we are getting rate limit exceeded errors here.
-				log.Println(job, bqJob.ID(), status.Err())
-				if strings.Contains(status.Err().Error(), "rateLimitExceeded") {
-					return state.ErrBQRateLimitExceeded
-				}
-				if strings.Contains(status.Err().Error(), "Not found: Table") {
-					return state.ErrTableNotFound
-				}
-				if strings.Contains(status.Err().Error(), "rows belong to different partitions") {
-					return state.ErrRowsFromOtherPartition
-				}
-			} else if status.Done() {
-				// TODO add metrics for dedup statistics.
-				log.Printf("DONE: %s (%s) TotalBytes: %d\n", job, bqJob.ID(), status.Statistics.TotalBytesProcessed)
-				return nil
-			}
-			if backoff+previous < maxBackoff {
-				tmp := previous
-				previous = backoff
-				backoff = backoff + tmp
-			} else {
-				backoff = maxBackoff
-			}
-		}
-		time.Sleep(backoff)
 	}
 }
