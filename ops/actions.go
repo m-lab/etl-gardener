@@ -59,6 +59,50 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 	return m, nil
 }
 
+// Waits for bqjob to complete, handles backoff and job updates.
+// Returns non-nil status if successful.
+func waitAndCheck(ctx context.Context, tk *tracker.Tracker, bqJob bqiface.Job, j tracker.Job, s tracker.Status, label string) *bigquery.JobStatus {
+	status, err := bqJob.Wait(ctx)
+	if err != nil {
+		switch typedErr := err.(type) {
+		case *googleapi.Error:
+			if typedErr.Code == http.StatusBadRequest &&
+				strings.Contains(typedErr.Error(), "streaming buffer") {
+				// Wait a while and try again.
+				log.Println(typedErr)
+				metrics.WarningCount.WithLabelValues(
+					j.Experiment, j.Datatype,
+					label+"WaitingForStreamingBuffer").Inc()
+				s.UpdateDetail("waiting for empty streaming buffer")
+				tk.UpdateJob(j, s)
+				time.Sleep(2 * time.Minute)
+				return nil
+			}
+		default:
+			// We don't know the problem...
+		}
+		log.Println(label, err)
+		metrics.WarningCount.WithLabelValues(
+			j.Experiment, j.Datatype,
+			label+"UnknownError").Inc()
+		// This will terminate this job.
+		tk.SetJobError(j, err.Error())
+		return nil
+	}
+	if status.Err() != nil {
+		err := status.Err()
+		log.Println(label, err)
+		metrics.WarningCount.WithLabelValues(
+			j.Experiment, j.Datatype,
+			label+"UnknownStatusError").Inc()
+
+		// This will terminate this job.
+		tk.SetJobError(j, err.Error())
+		return nil
+	}
+	return status
+}
+
 // TODO figure out how to test this code?
 func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
 	start := time.Now()
@@ -82,42 +126,9 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 		// Try again soon.
 		return
 	}
-	status, err := bqJob.Wait(ctx)
-	if err != nil {
-		switch typedErr := err.(type) {
-		case *googleapi.Error:
-			if typedErr.Code == http.StatusBadRequest &&
-				strings.Contains(typedErr.Error(), "streaming buffer") {
-				// Wait a while and try again.
-				log.Println(typedErr)
-				metrics.WarningCount.WithLabelValues(
-					j.Experiment, j.Datatype,
-					"DedupWaitingForStreamingBuffer").Inc()
-				s.UpdateDetail("Dedup waiting for empty streaming buffer.")
-				tk.UpdateJob(j, s)
-				time.Sleep(2 * time.Minute)
-				return // Try again later.
-			}
-		default:
-			// We don't know the problem...
-		}
-		log.Println(err)
-		metrics.WarningCount.WithLabelValues(
-			j.Experiment, j.Datatype,
-			"UnknownDedupError").Inc()
-		// This will terminate this job.
-		tk.SetJobError(j, err.Error())
-		return
-	}
-	if status.Err() != nil {
-		err := status.Err()
-		log.Println(err)
-		metrics.WarningCount.WithLabelValues(
-			j.Experiment, j.Datatype,
-			"UnknownDedupStatusError").Inc()
+	status := waitAndCheck(ctx, tk, bqJob, j, s, "Dedup")
 
-		// This will terminate this job.
-		tk.SetJobError(j, err.Error())
+	if status == nil {
 		return
 	}
 
