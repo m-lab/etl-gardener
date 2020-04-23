@@ -2,7 +2,6 @@ package ops
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -20,11 +19,6 @@ import (
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
-// PartitionedTable creates BQ Table for legacy source templated table
-func isTest() bool {
-	return flag.Lookup("test.v") != nil
-}
-
 func newStateFunc(state tracker.State, detail string) ActionFunc {
 	return func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, unused tracker.Status) {
 		log.Println(j, state)
@@ -37,7 +31,6 @@ func newStateFunc(state tracker.State, detail string) ActionFunc {
 }
 
 // NewStandardMonitor creates the standard monitor that handles several state transitions.
-// TODO Finishing action is incomplete.
 func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.Tracker) (*Monitor, error) {
 	m, err := NewMonitor(ctx, config, tk)
 	if err != nil {
