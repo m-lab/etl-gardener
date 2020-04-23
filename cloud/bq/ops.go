@@ -43,11 +43,11 @@ func NewQuerier(job tracker.Job, project string) (Queryer, error) {
 		return nil, err
 	}
 	bqClient := bqiface.AdaptClient(c)
-	return NewQueryParamsWithClient(bqClient, job, project)
+	return NewQuerierWithClient(bqClient, job, project)
 }
 
-// NewQueryParamsWithClient creates a suitable QueryParams for a Job.
-func NewQueryParamsWithClient(client bqiface.Client, job tracker.Job, project string) (Queryer, error) {
+// NewQuerierWithClient creates a suitable QueryParams for a Job.
+func NewQuerierWithClient(client bqiface.Client, job tracker.Job, project string) (Queryer, error) {
 	switch job.Datatype {
 	case "annotation":
 		return &queryer{
