@@ -26,6 +26,8 @@ type Job struct {
 	Experiment string
 	Datatype   string
 	Date       time.Time
+	// Filter is an optional regex to apply to ArchiveURL names
+	Filter string `json:",omitempty"`
 }
 
 // JobWithTarget specifies a type/date job, and a destination
