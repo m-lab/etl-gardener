@@ -15,8 +15,10 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
+
+	"github.com/m-lab/go/cloud/bqx"
+
 	"github.com/m-lab/etl-gardener/metrics"
-	"github.com/m-lab/go/bqx"
 )
 
 // Job describes a reprocessing "Job", which includes
