@@ -61,19 +61,20 @@ func waitAndCheck(ctx context.Context, tk *tracker.Tracker, bqJob bqiface.Job, j
 		case *googleapi.Error:
 			if typedErr.Code == http.StatusBadRequest &&
 				strings.Contains(typedErr.Error(), "streaming buffer") {
-				// Wait a while and try again.
 				log.Println(typedErr)
 				metrics.WarningCount.WithLabelValues(
 					j.Experiment, j.Datatype,
 					label+"WaitingForStreamingBuffer").Inc()
 				s.UpdateDetail("waiting for empty streaming buffer")
 				tk.UpdateJob(j, s)
+				// Leave in current state, Wait a while and try again.
 				time.Sleep(2 * time.Minute)
 				return nil
 			}
 		default:
 			// We don't know the problem...
 		}
+		// Not googleapi.Error, OR not streaming buffer problem.
 		log.Println(label, err)
 		metrics.WarningCount.WithLabelValues(
 			j.Experiment, j.Datatype,

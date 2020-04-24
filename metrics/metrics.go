@@ -167,15 +167,15 @@ var (
 			Name: "query_cost_seconds",
 			Help: "bigquery query cost in slot seconds",
 			Buckets: []float64{
-				// 1, 1.39, 1.93, 2.68, 3.73, 5.18, 7.2,
 				1.0, 2.15, 4.64, 10, 21.5, 46.4,
 				100, 215, 464, 1000, 2150, 4640,
-				10000, 21500, 46400, 100000, 215000, 464000,
-				1000000, 2150000, 4640000, 10000000, 21500000, 46400000,
+				10000, 21500, 46400, 100000, 215000, 464000, // ~120 hours
+				1000000, 2150000, 4640000, 10000000, 21500000, 46400000, // ~12K hours
+				// Some queries may run 100s of slot hours.  10K hours is likely
+				// excessive, but it would be annoying if the top end were missed.
 			},
 		},
 		// Worker type, e.g. ndt, sidestream, ptr, etc.
-		// TODO(soltesz): support a status field based on HTTP status.
 		[]string{"datatype", "query"},
 	)
 )
