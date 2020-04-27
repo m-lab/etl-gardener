@@ -135,6 +135,7 @@ const (
 	Stabilizing   State = "stabilizing"
 	Deduplicating State = "deduplicating"
 	Joining       State = "joining"
+	Copying       State = "copying"
 	Finishing     State = "finishing"
 	Failed        State = "failed"
 	Complete      State = "complete"
@@ -248,8 +249,9 @@ func (s *Status) Elapsed() time.Duration {
 
 // NewStatus creates a new Status with provided parameters.
 func NewStatus() Status {
+	now := time.Now()
 	return Status{
-		History: []StateInfo{StateInfo{State: Init, Start: time.Now()}},
+		History: []StateInfo{StateInfo{State: Init, Start: now, LastUpdateTime: now}},
 	}
 }
 
