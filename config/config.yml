@@ -7,12 +7,12 @@ monitor:
 sources:
 - bucket: archive-measurement-lab
   experiment: ndt
-  datatype: ndt7
-  target: tmp_ndt.ndt7
+  datatype: ndt5
+  target: tmp_ndt.ndt5
 - bucket: archive-measurement-lab
   experiment: ndt
-  datatype: annotation
-  target: tmp_ndt.annotation
+  datatype: ndt7
+  target: tmp_ndt.ndt7
 - bucket: archive-measurement-lab
   experiment: ndt
   datatype: tcpinfo
