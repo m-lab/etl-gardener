@@ -108,6 +108,7 @@ func NewJobService(tk *tracker.Tracker, startDate time.Time,
 			Bucket:     s.Bucket,
 			Experiment: s.Experiment,
 			Datatype:   s.Datatype,
+			Filter:     s.Filter,
 			Date:       time.Time{}, // This is not used.
 		}
 		// TODO - handle gs:// targets

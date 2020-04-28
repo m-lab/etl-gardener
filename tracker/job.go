@@ -42,6 +42,10 @@ type JobWithTarget struct {
 	TargetBucketAndPrefix string  `json:",omitempty"` // gs://bucket/prefix
 }
 
+func (j JobWithTarget) String() string {
+	return fmt.Sprint(j.Job.String(), j.Filter)
+}
+
 // NewJob creates a new job object.
 // DEPRECATED
 // NB:  The date will be converted to UTC and truncated to day boundary!
