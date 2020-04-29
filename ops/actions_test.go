@@ -50,7 +50,7 @@ func TestStandardMonitor(t *testing.T) {
 
 	failTime := time.Now().Add(30 * time.Second)
 
-	for time.Now().Before(failTime) && (tk.NumJobs() > 2 || tk.NumFailed() < 2) {
+	for time.Now().Before(failTime) && tk.NumFailed() < 3 && (tk.NumJobs() > 2 || tk.NumFailed() < 2) {
 		time.Sleep(time.Millisecond)
 	}
 	if tk.NumFailed() != 2 {

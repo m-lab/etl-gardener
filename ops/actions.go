@@ -73,8 +73,9 @@ func waitAndCheck(ctx context.Context, tk *tracker.Tracker, bqJob bqiface.Job, j
 				tk.UpdateJob(j, s)
 				// Leave in current state, Wait a while and try again.
 				time.Sleep(2 * time.Minute)
-				return nil
+				return status // may be nil?
 			}
+			log.Println(typedErr, typedErr.Code)
 		default:
 			// We don't know the problem...
 		}
@@ -85,7 +86,7 @@ func waitAndCheck(ctx context.Context, tk *tracker.Tracker, bqJob bqiface.Job, j
 			label+"UnknownError").Inc()
 		// This will terminate this job.
 		tk.SetJobError(j, err.Error())
-		return nil
+		return status // may be nil?
 	}
 	if status.Err() != nil {
 		err := status.Err()
@@ -96,7 +97,7 @@ func waitAndCheck(ctx context.Context, tk *tracker.Tracker, bqJob bqiface.Job, j
 
 		// This will terminate this job.
 		tk.SetJobError(j, err.Error())
-		return nil
+		return status // may be nil
 	}
 	return status
 }
@@ -127,6 +128,7 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 	status := waitAndCheck(ctx, tk, bqJob, j, s, "Dedup")
 
 	if status == nil {
+		// Nil status means the job failed.
 		return
 	}
 
@@ -145,7 +147,8 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 		log.Printf("Could not convert to QueryStatistics: %+v\n", status.Statistics.Details)
 		msg = "Could not convert Detail to QueryStatistics"
 	}
-	metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(tracker.Complete)).Set(float64(j.Date.Unix()))
+
+	metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(tracker.Copying)).Set(float64(j.Date.Unix()))
 	err = tk.SetStatus(j, tracker.Copying, msg)
 	if err != nil {
 		log.Println(err)
@@ -154,13 +157,9 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 
 // TODO figure out how to test this code?
 func copyFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
-	start := time.Now()
-	// This is the delay since entering the dedup state, due to monitor delay
-	// and retries.
 	delay := time.Since(s.LastStateChangeTime()).Round(time.Minute)
 
 	var bqJob bqiface.Job
-	var msg string
 	// TODO pass in the JobWithTarget, and get the base from the target.
 	qp, err := bq.NewQuerier(j, os.Getenv("PROJECT"))
 	if err != nil {
@@ -169,10 +168,11 @@ func copyFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker
 		tk.SetJobError(j, err.Error())
 		return
 	}
-	bqJob, err = qp.Run(ctx, "copy", false)
+	bqJob, err = qp.Copy(ctx, false)
 	if err != nil {
 		log.Println(err)
-		// Try again soon.
+		// This terminates this job.
+		tk.SetJobError(j, err.Error())
 		return
 	}
 	status := waitAndCheck(ctx, tk, bqJob, j, s, "Copy")
@@ -181,21 +181,24 @@ func copyFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker
 		return
 	}
 
-	// Dedup job was successful.  Handle the statistics, metrics, tracker update.
-	switch details := status.Statistics.Details.(type) {
-	case *bigquery.QueryStatistics:
-		metrics.QueryCostHistogram.WithLabelValues(j.Datatype, "dedup").Observe(float64(details.SlotMillis) / 1000.0)
-		msg = fmt.Sprintf("Copy took %s (after %s waiting), %5.2f Slot Minutes, %d Rows affected, %d MB Processed, %d MB Billed",
-			time.Since(start).Round(100*time.Millisecond).String(),
-			delay,
-			float64(details.SlotMillis)/60000, details.NumDMLAffectedRows,
-			details.TotalBytesProcessed/1000000, details.TotalBytesBilled/1000000)
-		log.Println(msg)
-		log.Printf("Copy %s: %+v\n", j, details)
-	default:
-		log.Printf("Could not convert to QueryStatistics: %+v\n", status.Statistics.Details)
-		msg = "Could not convert Detail to QueryStatistics"
+	// Copy job was successful.  Handle the statistics, metrics, tracker update.
+	if status.Err() != nil {
+		log.Println(status.Err())
+		tk.SetJobError(j, status.Err().Error())
+		metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(tracker.Failed)).Set(float64(j.Date.Unix()))
+		return
 	}
+	var msg string
+	stats := status.Statistics
+	if stats != nil {
+		copyTime := stats.EndTime.Sub(stats.StartTime)
+		msg = fmt.Sprintf("Copy took %s (after %s waiting), %d MB Processed",
+			copyTime.Round(100*time.Millisecond),
+			delay,
+			stats.TotalBytesProcessed/1000000)
+		log.Println(msg)
+	}
+
 	metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(tracker.Complete)).Set(float64(j.Date.Unix()))
 	err = tk.SetStatus(j, tracker.Complete, msg)
 	if err != nil {
