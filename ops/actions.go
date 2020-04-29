@@ -106,6 +106,7 @@ func waitAndCheck(ctx context.Context, tk *tracker.Tracker, bqJob bqiface.Job, j
 	return status
 }
 
+// TODO improve test coverage?
 func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
 	start := time.Now()
 	// This is the delay since entering the dedup state, due to monitor delay
@@ -157,7 +158,8 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 	}
 }
 
-// TODO figure out how to test this code?
+// TODO This is costly.  Consider using decorated table delete.
+// TODO improve test coverage?
 func cleanupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
 	start := time.Now()
 	// This is the delay since entering the dedup state, due to monitor delay
@@ -209,7 +211,7 @@ func cleanupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s trac
 	}
 }
 
-// TODO figure out how to test this code?
+// TODO improve test coverage?
 func copyFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
 	delay := time.Since(s.LastStateChangeTime()).Round(time.Minute)
 
