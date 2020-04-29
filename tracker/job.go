@@ -140,6 +140,7 @@ const (
 	Deduplicating State = "deduplicating"
 	Joining       State = "joining"
 	Copying       State = "copying"
+	Cleaning      State = "cleaning"
 	Finishing     State = "finishing"
 	Failed        State = "failed"
 	Complete      State = "complete"
