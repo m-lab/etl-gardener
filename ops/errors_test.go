@@ -23,7 +23,7 @@ func TestRetry(t *testing.T) {
 func TestFail(t *testing.T) {
 	job := tracker.Job{}
 	base := errors.New("base")
-	r := ops.Fail(job, base, "detail")
+	r := ops.Failure(job, base, "detail")
 	if !errors.Is(r, ops.ShouldFail) {
 		t.Error(r)
 	}
@@ -34,7 +34,7 @@ func TestFail(t *testing.T) {
 
 func TestDone(t *testing.T) {
 	job := tracker.Job{}
-	r := ops.Done(job, "detail")
+	r := ops.Success(job, "detail")
 	if !errors.Is(r, ops.IsDone) {
 		t.Error(r)
 	}

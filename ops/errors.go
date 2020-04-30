@@ -14,11 +14,16 @@ type Outcome struct {
 	detail string
 }
 
-var fakeError = errors.New("")
-var ShouldRetry = &Outcome{retry: true, error: fakeError}
-var ShouldFail = &Outcome{retry: false, error: fakeError}
-var IsDone = &Outcome{retry: false}
+// Specific errors for errors.Is
+var (
+	emptyError = errors.New("")
 
+	ShouldRetry = &Outcome{retry: true, error: emptyError}
+	ShouldFail  = &Outcome{retry: false, error: emptyError}
+	IsDone      = &Outcome{retry: false}
+)
+
+// Is implements errors.Is
 func (o *Outcome) Is(target error) bool {
 	t, ok := target.(*Outcome)
 	if !ok {
@@ -42,6 +47,7 @@ func (o *Outcome) Unwrap() error {
 	return o.error
 }
 
+// Update uses an outcome to update a job in tracker.
 func (o *Outcome) Update(tr *tracker.Tracker, state tracker.State) error {
 	if o.error != nil {
 		return tr.SetJobError(o.job, o.detail) // TODO - is this correct?
@@ -49,14 +55,17 @@ func (o *Outcome) Update(tr *tracker.Tracker, state tracker.State) error {
 	return tr.SetStatus(o.job, state, o.detail)
 }
 
-func Fail(job tracker.Job, err error, detail string) *Outcome {
+// Failure creates a failure Outcome
+func Failure(job tracker.Job, err error, detail string) *Outcome {
 	return &Outcome{job, err, false, detail}
 }
 
+// Retry creates a retry type Outcome
 func Retry(job tracker.Job, err error, detail string) *Outcome {
 	return &Outcome{job, err, true, detail}
 }
 
-func Done(job tracker.Job, detail string) *Outcome {
+// Success returns a successful outcome.
+func Success(job tracker.Job, detail string) *Outcome {
 	return &Outcome{job: job, detail: detail}
 }
