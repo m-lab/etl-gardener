@@ -22,7 +22,7 @@ import (
 
 func newStateFunc(detail string) ActionFunc {
 	return func(ctx context.Context, tk *tracker.Tracker, j tracker.Job) *Outcome {
-		return Done(j, detail)
+		return Success(j, detail)
 	}
 }
 
@@ -78,7 +78,7 @@ func waitAndCheck(ctx context.Context, tk *tracker.Tracker, bqJob bqiface.Job, j
 			j.Experiment, j.Datatype,
 			label+"UnknownError").Inc()
 		// This will terminate this job.
-		return status, Fail(j, err, "unknown error")
+		return status, Failure(j, err, "unknown error")
 	}
 	if status.Err() != nil {
 		err := status.Err()
@@ -88,9 +88,9 @@ func waitAndCheck(ctx context.Context, tk *tracker.Tracker, bqJob bqiface.Job, j
 			label+"UnknownStatusError").Inc()
 
 		// This will terminate this job.
-		return status, Fail(j, err, "unknown error")
+		return status, Failure(j, err, "unknown error")
 	}
-	return status, Done(j, "-")
+	return status, Success(j, "-")
 }
 
 // TODO improve test coverage?
@@ -107,7 +107,7 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job) *Outcome
 	if err != nil {
 		log.Println(err)
 		// This terminates this job.
-		return Fail(j, err, "-")
+		return Failure(j, err, "-")
 	}
 	bqJob, err = qp.Run(ctx, "dedup", false)
 	if err != nil {
@@ -121,7 +121,7 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job) *Outcome
 	}
 	if status == nil {
 		// Nil status means the job failed.
-		return Fail(j, errors.New("nil status"), "-")
+		return Failure(j, errors.New("nil status"), "-")
 	}
 
 	// Dedup job was successful.  Handle the statistics, metrics, tracker update.
@@ -140,6 +140,5 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job) *Outcome
 		msg = "Could not convert Detail to QueryStatistics"
 	}
 
-	return Done(j, msg)
+	return Success(j, msg)
 }
-

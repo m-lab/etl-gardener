@@ -22,7 +22,7 @@ func init() {
 
 func newStateFunc(detail string) ops.ActionFunc {
 	return func(ctx context.Context, tk *tracker.Tracker, j tracker.Job) *ops.Outcome {
-		return ops.Done(j, detail)
+		return ops.Success(j, detail)
 	}
 }
 
