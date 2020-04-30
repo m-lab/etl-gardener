@@ -62,11 +62,12 @@ type ConditionFunc = func(ctx context.Context, job tracker.Job) bool
 
 // An ActionFunc performs an operation on a job, and updates its state.
 // These functions may take a long time to complete, and may be resource intensive.
-type ActionFunc = func(ctx context.Context, tr *tracker.Tracker, job tracker.Job, status tracker.Status)
+type ActionFunc = func(ctx context.Context, tr *tracker.Tracker, job tracker.Job) *Outcome
 
 // An Action describes an operation to be applied to jobs that meet the required condition.
 type Action struct {
-	state tracker.State // State that action applies to.
+	fromState tracker.State // State that action applies to.
+	nextState tracker.State
 
 	// condition or action may be nil if not required
 	// condition that must be satisfied before applying action.
@@ -80,7 +81,7 @@ type Action struct {
 
 // Name returns the name of the state that the action applies to.
 func (a Action) Name() string {
-	return string(a.state)
+	return string(a.fromState)
 }
 
 // Monitor "owns" all jobs in the states that have actions.
@@ -118,8 +119,9 @@ func (m *Monitor) tryClaimJob(j tracker.Job) func() {
 }
 
 // AddAction adds a specific action to the Monitor.
-func (m *Monitor) AddAction(state tracker.State, cond ConditionFunc, op ActionFunc, annotation string) {
-	m.actions[state] = Action{state, cond, op, annotation}
+func (m *Monitor) AddAction(state tracker.State, cond ConditionFunc, op ActionFunc,
+	successState tracker.State, annotation string) {
+	m.actions[state] = Action{state, successState, cond, op, annotation}
 }
 
 // applyAction tries to claim a job and apply an action.  Returns false if the job is already claimed.
@@ -138,7 +140,9 @@ func (m *Monitor) tryApplyAction(ctx context.Context, a Action, j tracker.Job, s
 			// The op should also update the job state, detail, and error.
 			if a.action != nil {
 				start := time.Now()
-				a.action(ctx, m.tk, j, s)
+				outcome := a.action(ctx, m.tk, j)
+				outcome.Update(m.tk, a.nextState)
+				// TODO - do we still want this?
 				actionDuration.WithLabelValues(a.Name()).Observe(time.Since(start).Seconds())
 			}
 		}

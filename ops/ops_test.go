@@ -20,13 +20,9 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
-func newStateFunc(state tracker.State) ops.ActionFunc {
-	return func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
-		log.Println(j, state)
-		err := tk.SetStatus(j, state, "")
-		if err != nil {
-			log.Println(err)
-		}
+func newStateFunc(detail string) ops.ActionFunc {
+	return func(ctx context.Context, tk *tracker.Tracker, j tracker.Job) *ops.Outcome {
+		return ops.Done(j, detail)
 	}
 }
 
@@ -44,23 +40,28 @@ func TestMonitor_Watch(t *testing.T) {
 	rtx.Must(err, "NewMonitor failure")
 	m.AddAction(tracker.Init,
 		nil,
-		newStateFunc(tracker.Parsing),
+		newStateFunc(""),
+		tracker.Parsing,
 		"Init")
 	m.AddAction(tracker.Parsing,
 		nil,
-		newStateFunc(tracker.ParseComplete),
+		newStateFunc(""),
+		tracker.ParseComplete,
 		"Parsing")
 	m.AddAction(tracker.ParseComplete,
 		nil,
-		newStateFunc(tracker.Stabilizing),
+		newStateFunc(""),
+		tracker.Stabilizing,
 		"PostProcessing")
 	m.AddAction(tracker.Stabilizing,
 		nil,
-		newStateFunc(tracker.Deduplicating),
+		newStateFunc(""),
+		tracker.Deduplicating,
 		"Checking for stability")
 	m.AddAction(tracker.Deduplicating,
 		nil,
-		newStateFunc(tracker.Complete),
+		newStateFunc(""),
+		tracker.Complete,
 		"Deduplicating")
 	go m.Watch(ctx, 50*time.Millisecond)
 

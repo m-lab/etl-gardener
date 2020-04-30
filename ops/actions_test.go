@@ -38,11 +38,13 @@ func TestStandardMonitor(t *testing.T) {
 	// We add some new actions in place of the Parser activity.
 	m.AddAction(tracker.Init,
 		nil,
-		newStateFunc(tracker.Parsing),
+		newStateFunc("-"),
+		tracker.Parsing,
 		"Init")
 	m.AddAction(tracker.Parsing,
 		nil,
-		newStateFunc(tracker.ParseComplete),
+		newStateFunc("-"),
+		tracker.ParseComplete,
 		"Parsing")
 
 	// The real dedup action should fail on unknown datatype.

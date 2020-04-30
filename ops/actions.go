@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -19,14 +20,9 @@ import (
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
-func newStateFunc(state tracker.State, detail string) ActionFunc {
-	return func(ctx context.Context, tk *tracker.Tracker, j tracker.Job, unused tracker.Status) {
-		log.Println(j, state)
-		metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(state)).Set(float64(j.Date.Unix()))
-		err := tk.SetStatus(j, state, detail)
-		if err != nil {
-			log.Println(err)
-		}
+func newStateFunc(detail string) ActionFunc {
+	return func(ctx context.Context, tk *tracker.Tracker, j tracker.Job) *Outcome {
+		return Done(j, detail)
 	}
 }
 
@@ -38,23 +34,26 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 	}
 	m.AddAction(tracker.ParseComplete,
 		nil,
-		newStateFunc(tracker.Deduplicating, "-"),
+		newStateFunc("-"),
+		tracker.Deduplicating,
 		"Changing to Deduplicating")
 	// Hack to handle old jobs from previous gardener implementations
 	m.AddAction(tracker.Stabilizing,
 		nil,
-		newStateFunc(tracker.Deduplicating, "-"),
+		newStateFunc("-"),
+		tracker.Deduplicating,
 		"Changing to Deduplicating")
 	m.AddAction(tracker.Deduplicating,
 		nil,
 		dedupFunc,
+		tracker.Complete,
 		"Deduplicating")
 	return m, nil
 }
 
 // Waits for bqjob to complete, handles backoff and job updates.
 // Returns non-nil status if successful.
-func waitAndCheck(ctx context.Context, tk *tracker.Tracker, bqJob bqiface.Job, j tracker.Job, s tracker.Status, label string) *bigquery.JobStatus {
+func waitAndCheck(ctx context.Context, tk *tracker.Tracker, bqJob bqiface.Job, j tracker.Job, label string) (*bigquery.JobStatus, *Outcome) {
 	status, err := bqJob.Wait(ctx)
 	if err != nil {
 		switch typedErr := err.(type) {
@@ -65,12 +64,11 @@ func waitAndCheck(ctx context.Context, tk *tracker.Tracker, bqJob bqiface.Job, j
 				metrics.WarningCount.WithLabelValues(
 					j.Experiment, j.Datatype,
 					label+"WaitingForStreamingBuffer").Inc()
-				s.UpdateDetail("waiting for empty streaming buffer")
-				tk.UpdateJob(j, s)
+
 				// Leave in current state, Wait a while and try again.
-				time.Sleep(2 * time.Minute)
-				return nil
+				return nil, Retry(j, err, "waiting for empty streaming buffer")
 			}
+			log.Println(typedErr, typedErr.Code)
 		default:
 			// We don't know the problem...
 		}
@@ -80,8 +78,7 @@ func waitAndCheck(ctx context.Context, tk *tracker.Tracker, bqJob bqiface.Job, j
 			j.Experiment, j.Datatype,
 			label+"UnknownError").Inc()
 		// This will terminate this job.
-		tk.SetJobError(j, err.Error())
-		return nil
+		return status, Fail(j, err, "unknown error")
 	}
 	if status.Err() != nil {
 		err := status.Err()
@@ -91,18 +88,17 @@ func waitAndCheck(ctx context.Context, tk *tracker.Tracker, bqJob bqiface.Job, j
 			label+"UnknownStatusError").Inc()
 
 		// This will terminate this job.
-		tk.SetJobError(j, err.Error())
-		return nil
+		return status, Fail(j, err, "unknown error")
 	}
-	return status
+	return status, Done(j, "-")
 }
 
-// TODO figure out how to test this code?
-func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracker.Status) {
+// TODO improve test coverage?
+func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job) *Outcome {
 	start := time.Now()
 	// This is the delay since entering the dedup state, due to monitor delay
 	// and retries.
-	delay := time.Since(s.LastStateChangeTime()).Round(time.Minute)
+	// delay := time.Since(s.LastStateChangeTime()).Round(time.Minute)
 
 	var bqJob bqiface.Job
 	var msg string
@@ -111,28 +107,30 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 	if err != nil {
 		log.Println(err)
 		// This terminates this job.
-		tk.SetJobError(j, err.Error())
-		return
+		return Fail(j, err, "-")
 	}
 	bqJob, err = qp.Run(ctx, "dedup", false)
 	if err != nil {
 		log.Println(err)
 		// Try again soon.
-		return
+		return Retry(j, err, "-")
 	}
-	status := waitAndCheck(ctx, tk, bqJob, j, s, "Dedup")
-
+	status, outcome := waitAndCheck(ctx, tk, bqJob, j, "Dedup")
+	if !errors.Is(outcome, IsDone) {
+		return outcome
+	}
 	if status == nil {
-		return
+		// Nil status means the job failed.
+		return Fail(j, errors.New("nil status"), "-")
 	}
 
 	// Dedup job was successful.  Handle the statistics, metrics, tracker update.
 	switch details := status.Statistics.Details.(type) {
 	case *bigquery.QueryStatistics:
 		metrics.QueryCostHistogram.WithLabelValues(j.Datatype, "dedup").Observe(float64(details.SlotMillis) / 1000.0)
-		msg = fmt.Sprintf("Dedup took %s (after %s waiting), %5.2f Slot Minutes, %d Rows affected, %d MB Processed, %d MB Billed",
+		msg = fmt.Sprintf("Dedup took %s (after xxx waiting), %5.2f Slot Minutes, %d Rows affected, %d MB Processed, %d MB Billed",
 			time.Since(start).Round(100*time.Millisecond).String(),
-			delay,
+			//delay,
 			float64(details.SlotMillis)/60000, details.NumDMLAffectedRows,
 			details.TotalBytesProcessed/1000000, details.TotalBytesBilled/1000000)
 		log.Println(msg)
@@ -141,9 +139,7 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job, s tracke
 		log.Printf("Could not convert to QueryStatistics: %+v\n", status.Statistics.Details)
 		msg = "Could not convert Detail to QueryStatistics"
 	}
-	metrics.StateDate.WithLabelValues(j.Experiment, j.Datatype, string(tracker.Complete)).Set(float64(j.Date.Unix()))
-	err = tk.SetStatus(j, tracker.Complete, msg)
-	if err != nil {
-		log.Println(err)
-	}
+
+	return Done(j, msg)
 }
+
