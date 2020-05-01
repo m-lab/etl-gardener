@@ -7,6 +7,7 @@ import (
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
+// Outcome is a custom error for use in this package.
 type Outcome struct {
 	job    tracker.Job
 	error  // possibly nil
@@ -16,10 +17,10 @@ type Outcome struct {
 
 // Specific errors for errors.Is
 var (
-	emptyError = errors.New("")
+	errEmpty = errors.New("")
 
-	ShouldRetry = &Outcome{retry: true, error: emptyError}
-	ShouldFail  = &Outcome{retry: false, error: emptyError}
+	ShouldRetry = &Outcome{retry: true, error: errEmpty}
+	ShouldFail  = &Outcome{retry: false, error: errEmpty}
 	IsDone      = &Outcome{retry: false}
 )
 
@@ -29,18 +30,22 @@ func (o *Outcome) Is(target error) bool {
 	if !ok {
 		return false
 	}
-	if o.error == nil {
-
+	if (o.error == nil) != (t.error == nil) {
+		return false
 	}
 	return (t.retry == o.retry) &&
 		(t.detail == o.detail || t.detail == "")
 }
 
 func (o Outcome) Error() string {
-	if o.retry {
+	switch {
+	case o.retry:
 		return fmt.Sprintf("%v (Retry: %s)", o.error, o.detail)
+	case o.error == nil:
+		return ""
+	default:
+		return fmt.Sprintf("%v (Fail: %s)", o.error, o.detail)
 	}
-	return fmt.Sprintf("%v (Fail: %s)", o.error, o.detail)
 }
 
 func (o *Outcome) Unwrap() error {
@@ -49,7 +54,7 @@ func (o *Outcome) Unwrap() error {
 
 // Update uses an outcome to update a job in tracker.
 func (o *Outcome) Update(tr *tracker.Tracker, state tracker.State) error {
-	if o.error != nil {
+	if errors.Is(o, ShouldFail) {
 		return tr.SetJobError(o.job, o.detail) // TODO - is this correct?
 	}
 	return tr.SetStatus(o.job, state, o.detail)

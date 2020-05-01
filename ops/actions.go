@@ -21,7 +21,7 @@ import (
 )
 
 func newStateFunc(detail string) ActionFunc {
-	return func(ctx context.Context, tk *tracker.Tracker, j tracker.Job) *Outcome {
+	return func(ctx context.Context, j tracker.Job) *Outcome {
 		return Success(j, detail)
 	}
 }
@@ -53,7 +53,7 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 
 // Waits for bqjob to complete, handles backoff and job updates.
 // Returns non-nil status if successful.
-func waitAndCheck(ctx context.Context, tk *tracker.Tracker, bqJob bqiface.Job, j tracker.Job, label string) (*bigquery.JobStatus, *Outcome) {
+func waitAndCheck(ctx context.Context, bqJob bqiface.Job, j tracker.Job, label string) (*bigquery.JobStatus, *Outcome) {
 	status, err := bqJob.Wait(ctx)
 	if err != nil {
 		switch typedErr := err.(type) {
@@ -94,7 +94,7 @@ func waitAndCheck(ctx context.Context, tk *tracker.Tracker, bqJob bqiface.Job, j
 }
 
 // TODO improve test coverage?
-func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job) *Outcome {
+func dedupFunc(ctx context.Context, j tracker.Job) *Outcome {
 	start := time.Now()
 	// This is the delay since entering the dedup state, due to monitor delay
 	// and retries.
@@ -115,7 +115,7 @@ func dedupFunc(ctx context.Context, tk *tracker.Tracker, j tracker.Job) *Outcome
 		// Try again soon.
 		return Retry(j, err, "-")
 	}
-	status, outcome := waitAndCheck(ctx, tk, bqJob, j, "Dedup")
+	status, outcome := waitAndCheck(ctx, bqJob, j, "Dedup")
 	if !errors.Is(outcome, IsDone) {
 		return outcome
 	}

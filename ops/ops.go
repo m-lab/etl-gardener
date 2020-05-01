@@ -4,6 +4,7 @@ package ops
 
 import (
 	"context"
+	"errors"
 	"log"
 	"sync"
 	"time"
@@ -62,7 +63,7 @@ type ConditionFunc = func(ctx context.Context, job tracker.Job) bool
 
 // An ActionFunc performs an operation on a job, and updates its state.
 // These functions may take a long time to complete, and may be resource intensive.
-type ActionFunc = func(ctx context.Context, tr *tracker.Tracker, job tracker.Job) *Outcome
+type ActionFunc = func(ctx context.Context, job tracker.Job) *Outcome
 
 // An Action describes an operation to be applied to jobs that meet the required condition.
 type Action struct {
@@ -140,7 +141,10 @@ func (m *Monitor) tryApplyAction(ctx context.Context, a Action, j tracker.Job, s
 			// The op should also update the job state, detail, and error.
 			if a.action != nil {
 				start := time.Now()
-				outcome := a.action(ctx, m.tk, j)
+				outcome := a.action(ctx, j)
+				if errors.Is(outcome, ShouldRetry) {
+					time.Sleep(2 * time.Minute)
+				}
 				outcome.Update(m.tk, a.nextState)
 				// TODO - do we still want this?
 				actionDuration.WithLabelValues(a.Name()).Observe(time.Since(start).Seconds())

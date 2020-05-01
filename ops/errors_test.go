@@ -46,6 +46,9 @@ func TestFail(t *testing.T) {
 	if !errors.Is(f, base) {
 		t.Error("Should be a base:", f)
 	}
+	if errors.Is(f, ops.IsDone) {
+		t.Error("Should NOT be IsDone:", f)
+	}
 }
 
 func TestDone(t *testing.T) {
