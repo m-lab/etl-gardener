@@ -65,10 +65,13 @@ type ConditionFunc = func(ctx context.Context, job tracker.Job) bool
 // These functions may take a long time to complete, and may be resource intensive.
 type ActionFunc = func(ctx context.Context, job tracker.Job) *Outcome
 
-// An Action describes an operation to be applied to jobs that meet the required condition.
+// An Action describes an operation to be applied to jobs that meet the
+// required condition.
+// Monitor handles the selection of Action, and the transition to the
+// next State on success.
 type Action struct {
 	fromState tracker.State // State that action applies to.
-	nextState tracker.State
+	nextState tracker.State // Next State when action succeeds.
 
 	// condition or action may be nil if not required
 	// condition that must be satisfied before applying action.
@@ -122,7 +125,12 @@ func (m *Monitor) tryClaimJob(j tracker.Job) func() {
 // AddAction adds a specific action to the Monitor.
 func (m *Monitor) AddAction(state tracker.State, cond ConditionFunc, op ActionFunc,
 	successState tracker.State, annotation string) {
-	m.actions[state] = Action{state, successState, cond, op, annotation}
+	m.actions[state] = Action{
+		fromState:  state,
+		nextState:  successState,
+		condition:  cond,
+		action:     op,
+		annotation: annotation}
 }
 
 // applyAction tries to claim a job and apply an action.  Returns false if the job is already claimed.
