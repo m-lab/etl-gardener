@@ -78,6 +78,12 @@ func TestService_NextJob(t *testing.T) {
 }
 
 func TestJobHandler(t *testing.T) {
+	// This allows predictable behavior w.r.t. yesterday processing.
+	monkey.Patch(time.Now, func() time.Time {
+		return time.Date(2011, 2, 6, 1, 2, 3, 4, time.UTC)
+	})
+	defer monkey.Unpatch(time.Now)
+
 	sources := []config.SourceConfig{
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
@@ -105,6 +111,12 @@ func TestJobHandler(t *testing.T) {
 }
 
 func TestResume(t *testing.T) {
+	// This allows predictable behavior w.r.t. yesterday processing.
+	monkey.Patch(time.Now, func() time.Time {
+		return time.Date(2011, 2, 6, 1, 2, 3, 4, time.UTC)
+	})
+	defer monkey.Unpatch(time.Now)
+
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
 	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0, 0) // Only using jobmap.
 	if err != nil {
