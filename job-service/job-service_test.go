@@ -180,3 +180,81 @@ func TestEarlyWrapping(t *testing.T) {
 		}
 	}
 }
+
+func TestYesterday(t *testing.T) {
+	// This allows predictable behavior from time.Since in the advanceDate function.
+	mt := time.Date(2011, 2, 10, 0, 2, 3, 4, time.UTC)
+
+	monkey.Patch(time.Now, func() time.Time {
+		return mt
+	})
+	defer monkey.Unpatch(time.Now)
+	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
+	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0, 0) // Only using jobmap.
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sources := []config.SourceConfig{
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+	}
+	svc, _ := job.NewJobService(tk, start, "fake-bucket", sources)
+
+	// We expect to see "yesterday" interleaved with normal sequence.
+	expected := []struct {
+		code int
+		body string
+	}{
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-03T00:00:00Z"}`},
+		// Yesterday
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-09T00:00:00Z"}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-09T00:00:00Z"}`},
+		// Normal
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-04T00:00:00Z"}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-04T00:00:00Z"}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-05T00:00:00Z"}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-05T00:00:00Z"}`},
+		// Yesterday
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-10T00:00:00Z"}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-10T00:00:00Z"}`},
+		// Normal
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-06T00:00:00Z"}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-06T00:00:00Z"}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-07T00:00:00Z"}`},
+
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-11T00:00:00Z"}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-11T00:00:00Z"}`},
+
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-07T00:00:00Z"}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-08T00:00:00Z"}`},
+	}
+
+	for k, result := range expected {
+		req := httptest.NewRequest("POST", "/job", nil)
+		resp := httptest.NewRecorder()
+		svc.JobHandler(resp, req)
+		if resp.Code != result.code {
+			t.Error(k, resp.Code, resp.Body.String())
+		}
+		if resp.Body.String() != result.body {
+			t.Error(k, "Got:", resp.Body.String(), "!=", result.body)
+		}
+
+		if k == 2 {
+			job := tracker.Job{}
+			json.Unmarshal([]byte(expected[0].body), &job)
+			status, _ := tk.GetStatus(job)
+			status.Update(tracker.Complete, "")
+			err := tk.UpdateJob(job, status)
+			if err != nil {
+				t.Error(err)
+			}
+		}
+
+		// On each cycle, advance the monkey time.
+		mt = mt.Add(250 * time.Minute)
+
+	}
+}
