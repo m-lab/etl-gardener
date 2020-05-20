@@ -32,10 +32,36 @@ type Service struct {
 	startDate time.Time // The date to restart at.
 	date      time.Time // The date currently being dispatched.
 
+	startYesterday time.Time // The next time that "yesterday" should be processed.
+	yesterdayIndex int
+
 	jobSpecs  []tracker.JobWithTarget // The job prefixes to be iterated through.
 	nextIndex int                     // index of TypeSource to dispatch next.
 }
 
+// Returns nil if yesterday is not due now.
+// Yesterday jobs will be returned whenever time.Now().Before(startYesterday) is false.
+// Not thread-safe.  Caller must hold svc.lock.
+func (svc *Service) yesterday() *tracker.JobWithTarget {
+	// We don't trigger processing yesterday until Now is after startYesterday.
+	if time.Now().Before(svc.startYesterday) {
+		return nil
+	}
+	// If we are done, then advance startYesterday to tomorrow's start time.
+	if svc.yesterdayIndex >= len(svc.jobSpecs) {
+		svc.yesterdayIndex = 0
+		svc.startYesterday = svc.startYesterday.AddDate(0, 0, 1)
+		return nil
+	}
+	// Copy the jobspec.
+	job := svc.jobSpecs[svc.yesterdayIndex]
+	// Yesterday is always the day before the startYesterday date.
+	job.Date = svc.startYesterday.AddDate(0, 0, -1).UTC().Truncate(24 * time.Hour)
+	svc.yesterdayIndex++
+	return &job
+}
+
+// Not thread-safe.  Caller must hold svc.lock.
 func (svc *Service) advanceDate() {
 	date := svc.date.UTC().Add(24 * time.Hour).Truncate(24 * time.Hour)
 	if time.Since(date) < 36*time.Hour {
@@ -49,6 +75,11 @@ func (svc *Service) advanceDate() {
 func (svc *Service) NextJob() tracker.JobWithTarget {
 	svc.lock.Lock()
 	defer svc.lock.Unlock()
+	// Check whether there is yesterday work to do.
+	if y := svc.yesterday(); y != nil {
+		return *y
+	}
+
 	if svc.nextIndex >= len(svc.jobSpecs) {
 		svc.advanceDate()
 	}
@@ -124,22 +155,21 @@ func NewJobService(tk *tracker.Tracker, startDate time.Time,
 	}
 
 	resume := startDate
+	sy := time.Now().UTC().Truncate(24 * time.Hour).Add(6 * time.Hour)
 
-	if tk == nil {
-		return &Service{tracker: tk, startDate: startDate, date: resume, nextIndex: 0, jobSpecs: specs}, nil
+	if tk != nil {
+		// Last job from tracker recovery.  This may be empty Job{} if recovery failed.
+		lastJob := tk.LastJob()
+		log.Println("Last job was:", lastJob)
+
+		// TODO check for spec bucket change
+		if resume.Before(lastJob.Date) {
+			// override the resume date if lastJob was later.
+			resume = lastJob.Date
+		}
 	}
 
-	// Last job from tracker recovery.  This may be empty Job{} if recovery failed.
-	lastJob := tk.LastJob()
-	log.Println("Last job was:", lastJob)
-
-	// TODO check for spec bucket change
-	if resume.Before(lastJob.Date) {
-		// override the resume date if lastJob was later.
-		resume = lastJob.Date
-	}
 	// Ok to start here.  If there are repeated jobs, the job-service will skip
 	// them.  If they are already finished, then ok to repeat them, though a little inefficient.
-	svc := Service{tracker: tk, startDate: startDate, date: resume, nextIndex: 0, jobSpecs: specs}
-	return &svc, nil
+	return &Service{tracker: tk, startDate: startDate, date: resume, startYesterday: sy, jobSpecs: specs}, nil
 }
