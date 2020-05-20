@@ -137,13 +137,19 @@ func (m *Monitor) AddAction(state tracker.State, cond ConditionFunc, op ActionFu
 
 // UpdateJob updates the tracker state with the outcome.
 func (m *Monitor) UpdateJob(o *Outcome, state tracker.State) (string, error) {
+	// Allow error to override implicit (-) detail.
+	detail := o.detail
+	if detail == "-" && o.error != nil {
+		detail = o.error.Error()
+	}
+
 	if errors.Is(o, ShouldFail) {
-		if err := m.tk.SetJobError(o.job, o.detail); err != nil {
+		if err := m.tk.SetJobError(o.job, detail); err != nil {
 			return "set status error", err
 		}
 		return "fail", nil
 	}
-	if err := m.tk.SetStatus(o.job, state, o.detail); err != nil {
+	if err := m.tk.SetStatus(o.job, state, detail); err != nil {
 		return "set status error", err
 	}
 	if errors.Is(o, ShouldRetry) {
