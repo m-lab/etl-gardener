@@ -8,6 +8,8 @@ import (
 )
 
 // Outcome is a custom error for use in this package.
+// It is a little unusual in that it can encode a successful outcome,
+// in which case Unwrap will return nil.
 type Outcome struct {
 	job    tracker.Job
 	error  // possibly nil
@@ -19,9 +21,9 @@ type Outcome struct {
 var (
 	errEmpty = errors.New("")
 
-	ShouldRetry = &Outcome{retry: true, error: errEmpty}
+	ShouldRetry = &Outcome{retry: true, error: errEmpty} // Non-nil error.
 	ShouldFail  = &Outcome{retry: false, error: errEmpty}
-	IsDone      = &Outcome{retry: false}
+	IsDone      = &Outcome{retry: false} // nil error
 )
 
 // Is implements errors.Is
@@ -50,14 +52,6 @@ func (o Outcome) Error() string {
 
 func (o *Outcome) Unwrap() error {
 	return o.error
-}
-
-// Update uses an outcome to update a job in tracker.
-func (o *Outcome) Update(tr *tracker.Tracker, state tracker.State) error {
-	if errors.Is(o, ShouldFail) {
-		return tr.SetJobError(o.job, o.detail) // TODO - is this correct?
-	}
-	return tr.SetStatus(o.job, state, o.detail)
 }
 
 // Failure creates a failure Outcome

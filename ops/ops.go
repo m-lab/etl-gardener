@@ -41,6 +41,8 @@ an Action, it should recover when Gardener restarts the action on startup.
 
 var debug = logx.Debug
 
+// Note: this is currently redundant with StateTimeHistogram.  However, this might
+// be a better association long term, once we deprecate state and rex packages.
 var actionDuration = promauto.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Name: "gardener_action_duration",
@@ -54,7 +56,7 @@ var actionDuration = promauto.NewHistogramVec(
 			10000, 14000, 20000, 27000, 37000, 52000, 72000,
 		},
 	},
-	[]string{"action"},
+	[]string{"action", "outcome"},
 )
 
 // A ConditionFunc checks whether a Job meets some condition.
@@ -133,6 +135,23 @@ func (m *Monitor) AddAction(state tracker.State, cond ConditionFunc, op ActionFu
 		annotation: annotation}
 }
 
+// UpdateJob updates the tracker state with the outcome.
+func (m *Monitor) UpdateJob(o *Outcome, state tracker.State) (string, error) {
+	if errors.Is(o, ShouldFail) {
+		if err := m.tk.SetJobError(o.job, o.detail); err != nil {
+			return "set status error", err
+		}
+		return "fail", nil
+	}
+	if err := m.tk.SetStatus(o.job, state, o.detail); err != nil {
+		return "set status error", err
+	}
+	if errors.Is(o, ShouldRetry) {
+		return "retry", nil
+	}
+	return "done", nil
+}
+
 // applyAction tries to claim a job and apply an action.  Returns false if the job is already claimed.
 func (m *Monitor) tryApplyAction(ctx context.Context, a Action, j tracker.Job, s tracker.Status) bool {
 	// If job is not already claimed.
@@ -144,18 +163,18 @@ func (m *Monitor) tryApplyAction(ctx context.Context, a Action, j tracker.Job, s
 		defer releaser()
 		if a.condition == nil || a.condition(ctx, j) {
 			// These jobs may be deleted by other calls to GetAll, so tk.UpdateJob may fail.
-			// s.UpdateDetail = a.annotation
-			// tk.UpdateJob(j, s)
-			// The op should also update the job state, detail, and error.
 			if a.action != nil {
 				start := time.Now()
 				outcome := a.action(ctx, j)
 				if errors.Is(outcome, ShouldRetry) {
 					time.Sleep(2 * time.Minute)
 				}
-				outcome.Update(m.tk, a.nextState)
-				// TODO - do we still want this?
-				actionDuration.WithLabelValues(a.Name()).Observe(time.Since(start).Seconds())
+				// nextState will be applied only if the outcome was successful
+				status, err := m.UpdateJob(outcome, a.nextState)
+				if err != nil {
+					log.Println("Error updating job:", err)
+				}
+				actionDuration.WithLabelValues(a.Name(), status).Observe(time.Since(start).Seconds())
 			}
 		}
 	}(j, s, a, releaser)
