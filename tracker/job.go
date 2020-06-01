@@ -255,7 +255,7 @@ func (s *Status) Elapsed() time.Duration {
 func NewStatus() Status {
 	now := time.Now()
 	return Status{
-		History: []StateInfo{StateInfo{State: Init, Start: now, LastUpdateTime: now}},
+		History: []StateInfo{{State: Init, Start: now, LastUpdateTime: now}},
 	}
 }
 

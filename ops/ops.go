@@ -40,6 +40,8 @@ an Action, it should recover when Gardener restarts the action on startup.
 
 var debug = logx.Debug
 
+// Note: this is currently redundant with StateTimeHistogram.  However, this might
+// be a better association long term, once we deprecate state and rex packages.
 var actionDuration = promauto.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Name: "gardener_action_duration",
@@ -53,7 +55,7 @@ var actionDuration = promauto.NewHistogramVec(
 			10000, 14000, 20000, 27000, 37000, 52000, 72000,
 		},
 	},
-	[]string{"action"},
+	[]string{"action", "outcome"},
 )
 
 // A ConditionFunc checks whether a Job meets some condition.
@@ -62,11 +64,15 @@ type ConditionFunc = func(ctx context.Context, job tracker.Job) bool
 
 // An ActionFunc performs an operation on a job, and updates its state.
 // These functions may take a long time to complete, and may be resource intensive.
-type ActionFunc = func(ctx context.Context, tr *tracker.Tracker, job tracker.Job, status tracker.Status)
+type ActionFunc = func(ctx context.Context, job tracker.Job) *Outcome
 
-// An Action describes an operation to be applied to jobs that meet the required condition.
+// An Action describes an operation to be applied to jobs that meet the
+// required condition.
+// Monitor handles the selection of Action, and the transition to the
+// next State on success.
 type Action struct {
-	state tracker.State // State that action applies to.
+	fromState tracker.State // State that action applies to.
+	nextState tracker.State // Next State when action succeeds.
 
 	// condition or action may be nil if not required
 	// condition that must be satisfied before applying action.
@@ -80,7 +86,7 @@ type Action struct {
 
 // Name returns the name of the state that the action applies to.
 func (a Action) Name() string {
-	return string(a.state)
+	return string(a.fromState)
 }
 
 // Monitor "owns" all jobs in the states that have actions.
@@ -118,8 +124,41 @@ func (m *Monitor) tryClaimJob(j tracker.Job) func() {
 }
 
 // AddAction adds a specific action to the Monitor.
-func (m *Monitor) AddAction(state tracker.State, cond ConditionFunc, op ActionFunc, annotation string) {
-	m.actions[state] = Action{state, cond, op, annotation}
+func (m *Monitor) AddAction(state tracker.State, cond ConditionFunc, op ActionFunc,
+	successState tracker.State, annotation string) {
+	m.actions[state] = Action{
+		fromState:  state,
+		nextState:  successState,
+		condition:  cond,
+		action:     op,
+		annotation: annotation}
+}
+
+// UpdateJob updates the tracker state with the outcome.
+func (m *Monitor) UpdateJob(o *Outcome, state tracker.State) (string, error) {
+	// Allow error to override implicit (-) detail.
+	detail := o.detail
+	if detail == "-" && o.error != nil {
+		detail = o.error.Error()
+	}
+
+	switch {
+	case o.IsDone():
+		if err := m.tk.SetStatus(o.job, state, detail); err != nil {
+			return "set status error", err
+		}
+		return "done", nil
+	case o.ShouldRetry():
+		if err := m.tk.SetStatus(o.job, state, detail); err != nil {
+			return "set status error", err
+		}
+		return "retry", nil
+	default:
+		if err := m.tk.SetJobError(o.job, detail); err != nil {
+			return "set status error", err
+		}
+		return "fail", nil
+	}
 }
 
 // applyAction tries to claim a job and apply an action.  Returns false if the job is already claimed.
@@ -133,13 +172,18 @@ func (m *Monitor) tryApplyAction(ctx context.Context, a Action, j tracker.Job, s
 		defer releaser()
 		if a.condition == nil || a.condition(ctx, j) {
 			// These jobs may be deleted by other calls to GetAll, so tk.UpdateJob may fail.
-			// s.UpdateDetail = a.annotation
-			// tk.UpdateJob(j, s)
-			// The op should also update the job state, detail, and error.
 			if a.action != nil {
 				start := time.Now()
-				a.action(ctx, m.tk, j, s)
-				actionDuration.WithLabelValues(a.Name()).Observe(time.Since(start).Seconds())
+				outcome := a.action(ctx, j)
+				if outcome.ShouldRetry() {
+					time.Sleep(2 * time.Minute)
+				}
+				// nextState will be applied only if the outcome was successful
+				status, err := m.UpdateJob(outcome, a.nextState)
+				if err != nil {
+					log.Println("Error updating job:", err)
+				}
+				actionDuration.WithLabelValues(a.Name(), status).Observe(time.Since(start).Seconds())
 			}
 		}
 	}(j, s, a, releaser)
