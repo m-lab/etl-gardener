@@ -8,6 +8,56 @@
 
 Gardener provides services for maintaining and reprocessing M-Lab data.
 
+## Packages and Components
+
+Gardner primarily drives the reprocessing of archive data.  It consists of:
+
+1. a job service that provides **Job** objects to the ETL parsers,
+2. APIs for the parsers to return status to the Gardener,
+3. A **Tracker** that tracks the status of each Job, and persists
+state in DataStore,
+4. A **Monitor** that observes the status of Jobs in Tracker, and
+applies appropriate **Action**s until the **Job** is *Complete*.
+
+Much of the complexity is in BigQuery related code that checks the
+status of BQ tables, and performs operations to modify BQ partitions and copy them from temporary table published tables.
+
+### tracker/
+
+The tracker package defines **Jobs**, and implements **Tracker**, 
+which includes a map to maintain the Status for each Job.
+It also persists this map in datastore, for recovery
+when a new Gardener deployment occurs, or when Gardener crashes and restarted.
+
+**Tracker** supports some concurrency, as it receives requests and updates
+from the external API, provides data for the Status page, and handles
+requests and updates from the **Monitor** as it applies **Actions**. 
+
+### job-service
+
+The job-service directory contains the "job" package.  The naming is not
+ideal. The Job struct is defined in the *tracker* package, but moving
+it here currently creates an import cycle.
+
+### ops/ and Monitor
+
+The ops package provides a state machine and actions, and defines the StandardMonitor
+that monitors the progress of each Job and applies appropriate Actions.
+
+Ideally, it would be better to separate the state machine parts in ops.go from
+the specific actions and monitor in actions.go, but I have not taken the time to
+work out the best way to separate those.
+
+The Monitor basically checks the state of all the objects in the Tracker to
+identify objects that are ready to have an Action applied.  It attempts
+to apply the action, and either advances the state on success, transitions
+to the Failed state on failure, or waits and retries later if there is a
+condition that should be retried.
+
+There is also a Condition that may be checked prior to applying an Action,
+but this is not generally required.  In the future it may be used to
+identify whether all tables are available to do a Join action.
+
 ## Unit Testing
 
 Travis now uses the datastore emulator to better support unit tests.
