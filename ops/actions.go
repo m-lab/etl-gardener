@@ -116,7 +116,7 @@ func dedupFunc(ctx context.Context, j tracker.Job) *Outcome {
 		return Retry(j, err, "-")
 	}
 	status, outcome := waitAndCheck(ctx, bqJob, j, "Dedup")
-	if !errors.Is(outcome, IsDone) {
+	if !outcome.IsDone() {
 		return outcome
 	}
 	if status == nil {

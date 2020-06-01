@@ -4,7 +4,6 @@ package ops
 
 import (
 	"context"
-	"errors"
 	"log"
 	"sync"
 	"time"
@@ -143,19 +142,23 @@ func (m *Monitor) UpdateJob(o *Outcome, state tracker.State) (string, error) {
 		detail = o.error.Error()
 	}
 
-	if errors.Is(o, ShouldFail) {
+	switch {
+	case o.IsDone():
+		if err := m.tk.SetStatus(o.job, state, detail); err != nil {
+			return "set status error", err
+		}
+		return "done", nil
+	case o.ShouldRetry():
+		if err := m.tk.SetStatus(o.job, state, detail); err != nil {
+			return "set status error", err
+		}
+		return "retry", nil
+	default:
 		if err := m.tk.SetJobError(o.job, detail); err != nil {
 			return "set status error", err
 		}
 		return "fail", nil
 	}
-	if err := m.tk.SetStatus(o.job, state, detail); err != nil {
-		return "set status error", err
-	}
-	if errors.Is(o, ShouldRetry) {
-		return "retry", nil
-	}
-	return "done", nil
 }
 
 // applyAction tries to claim a job and apply an action.  Returns false if the job is already claimed.
@@ -172,7 +175,7 @@ func (m *Monitor) tryApplyAction(ctx context.Context, a Action, j tracker.Job, s
 			if a.action != nil {
 				start := time.Now()
 				outcome := a.action(ctx, j)
-				if errors.Is(outcome, ShouldRetry) {
+				if outcome.ShouldRetry() {
 					time.Sleep(2 * time.Minute)
 				}
 				// nextState will be applied only if the outcome was successful

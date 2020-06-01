@@ -1,7 +1,6 @@
 package ops
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/m-lab/etl-gardener/tracker"
@@ -17,26 +16,14 @@ type Outcome struct {
 	detail string
 }
 
-// Specific errors for errors.Is
-var (
-	errEmpty = errors.New("")
+// ShouldRetry indicates of the operation should be retried later.
+func (o Outcome) ShouldRetry() bool {
+	return o.error != nil && o.retry
+}
 
-	ShouldRetry = &Outcome{retry: true, error: errEmpty} // Non-nil error.
-	ShouldFail  = &Outcome{retry: false, error: errEmpty}
-	IsDone      = &Outcome{retry: false} // nil error
-)
-
-// Is implements errors.Is
-func (o *Outcome) Is(target error) bool {
-	t, ok := target.(*Outcome)
-	if !ok {
-		return false
-	}
-	if (o.error == nil) != (t.error == nil) {
-		return false
-	}
-	return (t.retry == o.retry) &&
-		(t.detail == o.detail || t.detail == "")
+// IsDone indicates if the operation was successful.
+func (o Outcome) IsDone() bool {
+	return o.error == nil
 }
 
 func (o Outcome) Error() string {

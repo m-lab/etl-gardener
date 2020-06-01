@@ -13,7 +13,7 @@ func TestRetry(t *testing.T) {
 	job := tracker.Job{}
 	base := errors.New("base")
 	r := ops.Retry(job, base, "detail")
-	if !errors.Is(r, ops.ShouldRetry) {
+	if !r.ShouldRetry() {
 		t.Error(r)
 	}
 	if errors.Unwrap(r) != base {
@@ -34,8 +34,8 @@ func TestFail(t *testing.T) {
 	job := tracker.Job{}
 	base := errors.New("base")
 	f := ops.Failure(job, base, "detail")
-	if !errors.Is(f, ops.ShouldFail) {
-		t.Error(f)
+	if f.ShouldRetry() || f.IsDone() {
+		t.Error("Incorrect:", f)
 	}
 	if errors.Unwrap(f) != base {
 		t.Error("Should be base:", errors.Unwrap(f))
@@ -46,7 +46,7 @@ func TestFail(t *testing.T) {
 	if !errors.Is(f, base) {
 		t.Error("Should be a base:", f)
 	}
-	if errors.Is(f, ops.IsDone) {
+	if f.IsDone() {
 		t.Error("Should NOT be IsDone:", f)
 	}
 }
@@ -54,7 +54,7 @@ func TestFail(t *testing.T) {
 func TestDone(t *testing.T) {
 	job := tracker.Job{}
 	s := ops.Success(job, "detail")
-	if !errors.Is(s, ops.IsDone) {
+	if !s.IsDone() {
 		t.Error(s)
 	}
 	if errors.Unwrap(s) != nil {
