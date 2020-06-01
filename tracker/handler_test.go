@@ -150,12 +150,4 @@ func TestErrorHandler(t *testing.T) {
 	if stat.State() != tracker.ParseError {
 		t.Error("Wrong state:", stat)
 	}
-
-	url = tracker.UpdateURL(server, job, tracker.Complete, "")
-	postAndExpect(t, url, http.StatusOK)
-
-	_, err = tk.GetStatus(job)
-	if err != tracker.ErrJobNotFound {
-		t.Fatal("Expected JobNotFound", err)
-	}
 }

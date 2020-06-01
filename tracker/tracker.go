@@ -133,6 +133,8 @@ func (tr *Tracker) saveEvery(interval time.Duration) {
 }
 
 // GetStatus retrieves the status of an existing job.
+// Note that the returned object is a shallow copy, and the History
+// field shares the slice objects with the JobMap.
 func (tr *Tracker) GetStatus(job Job) (Status, error) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
@@ -198,6 +200,7 @@ func (tr *Tracker) UpdateJob(job Job, state Status) error {
 
 // SetStatus updates a job's state in memory.
 func (tr *Tracker) SetStatus(job Job, newState State, detail string) error {
+	// NOTE: This is not a deep copy.  Shares the History elements.
 	status, err := tr.GetStatus(job)
 	if err != nil {
 		return err
@@ -237,11 +240,12 @@ func (tr *Tracker) SetJobError(job Job, errString string) error {
 	if err != nil {
 		return err
 	}
+	timeInState := time.Since(status.LastStateChangeTime())
+
 	// For now, we set state to failed.  We may want something different in future.
 	old := status.Update(Failed, errString)
 	job.failureMetric(errString)
 
-	timeInState := time.Since(status.LastStateChangeTime())
 	metrics.StateTimeHistogram.WithLabelValues(job.Experiment, job.Datatype, string(old.State)).Observe(timeInState.Seconds())
 	metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(old.State)).Set(float64(job.Date.Unix()))
 
@@ -260,7 +264,9 @@ func (tr *Tracker) GetState() (JobMap, Job, time.Time) {
 			(s.isDone() && time.Since(updateTime) > tr.cleanupDelay) {
 			// Remove any obsolete jobs.
 			metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Dec()
-			log.Println("Deleting stale job", j)
+			if !s.isDone() {
+				log.Println("Deleting stale job", j, time.Since(updateTime), tr.cleanupDelay)
+			}
 			tr.lastModified = time.Now()
 			delete(tr.jobs, j)
 		} else {

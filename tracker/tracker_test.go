@@ -108,9 +108,9 @@ func TestTrackerAddDelete(t *testing.T) {
 		t.Fatal("nil Tracker")
 	}
 
-	numJobs := 500
-	createJobs(t, tk, "500Jobs", "type", numJobs)
-	if tk.NumJobs() != 500 {
+	numJobs := 100
+	createJobs(t, tk, "100Jobs", "type", numJobs)
+	if tk.NumJobs() != numJobs {
 		t.Fatal("Incorrect number of jobs", tk.NumJobs())
 	}
 
@@ -120,10 +120,10 @@ func TestTrackerAddDelete(t *testing.T) {
 	}
 	// Check that the sync (and InitTracker) work.
 	// Jobs will be removed by GetStatus 50 milliseconds after Complete.
-	restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, 50*time.Millisecond)
+	restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, 500*time.Millisecond)
 	must(t, err)
 
-	if restore.NumJobs() != 500 {
+	if restore.NumJobs() != numJobs {
 		t.Fatal("Incorrect number of jobs", restore.NumJobs())
 	}
 
@@ -131,7 +131,7 @@ func TestTrackerAddDelete(t *testing.T) {
 		t.Error("Should not be any failed jobs")
 	}
 
-	completeJobs(t, tk, "500Jobs", "type", numJobs)
+	completeJobs(t, tk, "100Jobs", "type", numJobs)
 
 	// This tests proper behavior of cleanup with cleanupDelay.
 	jobs, _, _ := tk.GetState()
