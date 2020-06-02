@@ -80,7 +80,7 @@ script:
 
 # Combine coverage of unit tests and integration tests and send the results to coveralls.
 - $HOME/gopath/bin/gocovmerge _*.cov > _merge.cov
-- $HOME/gopath/bin/goveralls -coverprofile=_merge.cov -service=travis-ci
+- $HOME/gopath/bin/goveralls -coverprofile=_merge.cov -service=travis-ci || true  # Ignore failure
 
 # Docker build is done in google cloud builer
 
@@ -119,9 +119,6 @@ deploy:
   script:
     DATE_SKIP="2" TASK_FILE_SKIP="4"
     $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-sandbox data-processing-cluster ./apply-cluster.sh
-    &&
-    DATE_SKIP="2" TASK_FILE_SKIP="4"
-    $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-sandbox data-processing ./apply-cluster.sh
   on:
     repo: m-lab/etl-gardener
     all_branches: true
