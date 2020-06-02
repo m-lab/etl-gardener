@@ -254,18 +254,19 @@ func TestYesterday(t *testing.T) {
 			t.Error(k, "Got:", resp.Body.String(), "!=", result.body)
 		}
 
-		if k == 2 {
+		if k == 200 {
 			job := tracker.Job{}
 			json.Unmarshal([]byte(expected[0].body), &job)
-			status, _ := tk.GetStatus(job)
+			status, err := tk.GetStatus(job)
+			rtx.Must(err, job.String())
 			status.Update(tracker.Complete, "")
-			err := tk.UpdateJob(job, status)
+			err = tk.UpdateJob(job, status)
 			if err != nil {
 				t.Error(err)
 			}
 		}
 
-		// On each cycle, advance the monkey time.
+		// On each cycle, advance the monkey time by a bit over 4 hours.
 		mt = mt.Add(250 * time.Minute)
 
 	}
