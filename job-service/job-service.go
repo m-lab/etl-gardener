@@ -16,6 +16,8 @@ import (
 var ErrMoreJSON = errors.New("JSON body not completely consumed")
 
 // yesterdaySource provides pending jobs for yesterday's data.
+// When the scheduled delay has passed, it cycles through all the
+// job specs, then advances to the next date.
 type yesterdaySource struct {
 	jobSpecs  []tracker.JobWithTarget // The job prefixes to be iterated through.
 	date      time.Time               // The next "yesterday" date to be processed.
@@ -23,9 +25,9 @@ type yesterdaySource struct {
 	nextIndex int
 }
 
-// next returns a yesterday Job if appropriate
+// nextJob returns a yesterday Job if appropriate
 // Not thread-safe.
-func (y *yesterdaySource) next() *tracker.JobWithTarget {
+func (y *yesterdaySource) nextJob() *tracker.JobWithTarget {
 	// Defer until 0600 UTC next day.
 	if time.Since(y.date) < 24*time.Hour+y.delay {
 		return nil
@@ -94,7 +96,7 @@ func (svc *Service) NextJob() tracker.JobWithTarget {
 	defer svc.lock.Unlock()
 
 	// Check whether there is yesterday work to do.
-	if j := svc.yesterday.next(); j != nil {
+	if j := svc.yesterday.nextJob(); j != nil {
 		log.Println("Yesterday job:", j.Job)
 		return *j
 	}
@@ -191,5 +193,10 @@ func NewJobService(tk *tracker.Tracker, startDate time.Time,
 
 	// Ok to start here.  If there are repeated jobs, the job-service will skip
 	// them.  If they are already finished, then ok to repeat them, though a little inefficient.
-	return &Service{tracker: tk, startDate: startDate, date: resume, yesterday: yesterday, jobSpecs: specs}, nil
+	return &Service{
+		tracker:   tk,
+		startDate: startDate,
+		date:      resume,
+		yesterday: yesterday,
+		jobSpecs:  specs}, nil
 }
