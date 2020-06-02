@@ -155,7 +155,14 @@ func (tr *Tracker) AddJob(job Job) error {
 		return ErrJobAlreadyExists
 	}
 
-	tr.lastJob = job
+	// With the introduction of yesterday processing, we need to
+	// ignore AddJob for yesterday, so that we don't lose track of
+	// the resume date.
+	// This is a bit hacky mechanism to do that.
+	if time.Since(job.Date) < 48*time.Hour {
+		tr.lastJob = job
+	}
+
 	tr.lastModified = time.Now()
 	metrics.StartedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
 	// TODO - should call this JobsInFlight, to avoid confusion with Tasks in parser.
