@@ -143,6 +143,7 @@ func TestEarlyWrapping(t *testing.T) {
 		return time.Date(2011, 2, 6, 1, 2, 3, 4, time.UTC)
 	})
 	defer monkey.Unpatch(time.Now)
+
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
 	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0, 0) // Only using jobmap.
 	if err != nil {
@@ -201,6 +202,7 @@ func TestYesterday(t *testing.T) {
 		return mt
 	})
 	defer monkey.Unpatch(time.Now)
+
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
 	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0, 0) // Only using jobmap.
 	if err != nil {
@@ -216,34 +218,39 @@ func TestYesterday(t *testing.T) {
 	// We expect to see "yesterday" interleaved with normal sequence.
 	expected := []struct {
 		code int
+		t    time.Time
 		body string
 	}{
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`},
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-03T00:00:00Z"}`},
+		{code: 200, t: time.Date(2011, 2, 10, 0, 0, 0, 0, time.UTC), body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`},
+		{code: 200, t: time.Date(2011, 2, 10, 2, 0, 0, 0, time.UTC), body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-03T00:00:00Z"}`},
+		{code: 200, t: time.Date(2011, 2, 10, 4, 0, 0, 0, time.UTC), body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-04T00:00:00Z"}`},
 		// Yesterday
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-09T00:00:00Z"}`},
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-09T00:00:00Z"}`},
+		{code: 200, t: time.Date(2011, 2, 10, 6, 1, 0, 0, time.UTC), body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-09T00:00:00Z"}`},
+		{code: 200, t: time.Date(2011, 2, 10, 8, 0, 0, 0, time.UTC), body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-09T00:00:00Z"}`},
 		// Normal
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-04T00:00:00Z"}`},
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-04T00:00:00Z"}`},
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-05T00:00:00Z"}`},
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-05T00:00:00Z"}`},
+		{code: 200, t: time.Date(2011, 2, 10, 10, 0, 0, 0, time.UTC), body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-04T00:00:00Z"}`},
+		{code: 200, t: time.Date(2011, 2, 10, 12, 0, 0, 0, time.UTC), body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-05T00:00:00Z"}`},
+		{code: 200, t: time.Date(2011, 2, 11, 5, 0, 0, 0, time.UTC), body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-05T00:00:00Z"}`},
 		// Yesterday
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-10T00:00:00Z"}`},
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-10T00:00:00Z"}`},
+		{code: 200, t: time.Date(2011, 2, 11, 7, 0, 0, 0, time.UTC), body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-10T00:00:00Z"}`},
+		{code: 200, t: time.Date(2011, 2, 11, 10, 0, 0, 0, time.UTC), body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-10T00:00:00Z"}`},
 		// Normal
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-06T00:00:00Z"}`},
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-06T00:00:00Z"}`},
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-07T00:00:00Z"}`},
-
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-11T00:00:00Z"}`},
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-11T00:00:00Z"}`},
-
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-07T00:00:00Z"}`},
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-08T00:00:00Z"}`},
+		{code: 200, t: time.Date(2011, 2, 11, 13, 0, 0, 0, time.UTC), body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-06T00:00:00Z"}`},
+		{code: 200, t: time.Date(2011, 2, 11, 15, 0, 0, 0, time.UTC), body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-06T00:00:00Z"}`},
+		{code: 200, t: time.Date(2011, 2, 11, 19, 0, 0, 0, time.UTC), body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-07T00:00:00Z"}`},
+		// Yesterday
+		{code: 200, t: time.Date(2011, 2, 12, 7, 0, 0, 0, time.UTC), body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-11T00:00:00Z"}`},
+		{code: 200, t: time.Date(2011, 2, 12, 9, 0, 0, 0, time.UTC), body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-11T00:00:00Z"}`},
+		// Normal
+		{code: 200, t: time.Date(2011, 2, 12, 14, 0, 0, 0, time.UTC), body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-07T00:00:00Z"}`},
+		{code: 200, t: time.Date(2011, 2, 12, 15, 0, 0, 0, time.UTC), body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-08T00:00:00Z"}`},
 	}
 
 	for k, result := range expected {
+		// On each cycle, advance the monkey time by a bit over 4 hours.
+		mt = result.t
+		//mt.Add(250 * time.Minute)
+
 		req := httptest.NewRequest("POST", "/job", nil)
 		resp := httptest.NewRecorder()
 		svc.JobHandler(resp, req)
@@ -265,9 +272,6 @@ func TestYesterday(t *testing.T) {
 				t.Error(err)
 			}
 		}
-
-		// On each cycle, advance the monkey time by a bit over 4 hours.
-		mt = mt.Add(250 * time.Minute)
 
 	}
 }
