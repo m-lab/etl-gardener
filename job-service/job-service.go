@@ -28,7 +28,7 @@ type yesterdaySource struct {
 // nextJob returns a yesterday Job if appropriate
 // Not thread-safe.
 func (y *yesterdaySource) nextJob() *tracker.JobWithTarget {
-	// Defer until 0600 UTC next day.
+	// Defer until "delay" after midnight next day.
 	if time.Since(y.date) < 24*time.Hour+y.delay {
 		return nil
 	}
@@ -39,7 +39,7 @@ func (y *yesterdaySource) nextJob() *tracker.JobWithTarget {
 
 	// Advance to the next jobSpec for next call.
 	y.nextIndex++
-	// If we are done, then advance yesterdayDate to next day
+	// When we have dispatched all jobs, advance yesterdayDate to next day
 	// and reset the index.
 	if y.nextIndex >= len(y.jobSpecs) {
 		y.nextIndex = 0
@@ -51,7 +51,8 @@ func (y *yesterdaySource) nextJob() *tracker.JobWithTarget {
 
 func initYesterday(delay time.Duration, specs []tracker.JobWithTarget) *yesterdaySource {
 	// If it is less than 3 hours since trigger time, then start with
-	// day before today.  Otherwise start with today.
+	// day before today to minimize risk of missing the yesterday processing.
+	// Otherwise start with today.
 	date := time.Now().UTC().Add(-delay - 3*time.Hour).Truncate(24 * time.Hour)
 	log.Println("Yesterday:", date)
 	return &yesterdaySource{
