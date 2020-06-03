@@ -2,12 +2,14 @@
 package job
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
 	"sync"
 	"time"
 
+	"github.com/m-lab/etl-gardener/cloud/ds"
 	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/tracker"
 )
@@ -49,11 +51,11 @@ func (y *yesterdaySource) nextJob() *tracker.JobWithTarget {
 	return &job
 }
 
-func initYesterday(delay time.Duration, specs []tracker.JobWithTarget) *yesterdaySource {
+func initYesterday(delay time.Duration, specs []tracker.JobWithTarget, date time.Time) *yesterdaySource {
 	// If it is less than 3 hours since trigger time, then start with
 	// day before today to minimize risk of missing the yesterday processing.
 	// Otherwise start with today.
-	date := time.Now().UTC().Add(-delay - 3*time.Hour).Truncate(24 * time.Hour)
+	date = date.UTC().Truncate(24 * time.Hour)
 	log.Println("Yesterday:", date)
 	return &yesterdaySource{
 		jobSpecs:  specs,
@@ -79,6 +81,8 @@ type Service struct {
 	nextIndex int                     // index of TypeSource to dispatch next.
 
 	yesterday *yesterdaySource // Provides jobs for high priority yesterday
+
+	dsSaver *saver
 }
 
 // Not thread-safe.  Caller must hold svc.lock.
@@ -104,6 +108,7 @@ func (svc *Service) NextJob() tracker.JobWithTarget {
 
 	if svc.nextIndex >= len(svc.jobSpecs) {
 		svc.advanceDate()
+		svc.snapshot()
 	}
 	job := svc.jobSpecs[svc.nextIndex]
 	job.Date = svc.date
@@ -148,8 +153,11 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 var ErrInvalidStartDate = errors.New("Invalid start date")
 
 // NewJobService creates the default job service.
-func NewJobService(tk *tracker.Tracker, startDate time.Time,
-	targetBase string, sources []config.SourceConfig) (*Service, error) {
+func NewJobService(
+	dsCtx ds.Context,
+	tk *tracker.Tracker, startDate time.Time,
+	targetBase string, sources []config.SourceConfig,
+) (*Service, error) {
 	if startDate.Equal(time.Time{}) {
 		return nil, ErrInvalidStartDate
 	}
@@ -176,28 +184,95 @@ func NewJobService(tk *tracker.Tracker, startDate time.Time,
 		log.Fatal("No jobs specified")
 	}
 
-	resume := startDate
-
-	yesterday := initYesterday(6*time.Hour, specs)
-
-	if tk != nil {
-		// Last job from tracker recovery.  This may be empty Job{} if recovery failed.
-		lastJob := tk.LastJob()
-		log.Println("Last job was:", lastJob)
-
-		// TODO check for spec bucket change
-		if resume.Before(lastJob.Date) {
-			// override the resume date if lastJob was later.
-			resume = lastJob.Date
-		}
+	dsSaver := saver{
+		Context: dsCtx,
+	}
+	err := dsSaver.loadFromDatastore()
+	if err == nil {
+		yesterday := initYesterday(6*time.Hour, specs, dsSaver.YesterdayDate)
+		return &Service{
+			tracker:   tk,
+			startDate: startDate,
+			date:      dsSaver.CurrentDate,
+			yesterday: yesterday,
+			jobSpecs:  specs}, nil
 	}
 
-	// Ok to start here.  If there are repeated jobs, the job-service will skip
-	// them.  If they are already finished, then ok to repeat them, though a little inefficient.
+	y := time.Now().UTC().Truncate(24 * time.Hour)
+	if time.Since(y) < 6*time.Hour {
+		y = y.AddDate(0, 0, -1)
+	}
+	yesterday := initYesterday(6*time.Hour, specs, y)
+
+	// Deprecated - remove this code soon.
+	resume := startDate
+
+	if tk == nil {
+		return &Service{tracker: tk,
+			dsSaver: &dsSaver,
+
+			startDate: startDate,
+			date:      resume,
+
+			yesterday: yesterday,
+			jobSpecs:  specs}, nil
+	}
+
+	// Last job from tracker recovery.  This may be empty Job{} if recovery failed.
+	lastJob := tk.LastJob()
+	log.Println("Last job was:", lastJob)
+
+	// TODO check for spec bucket change
+	if resume.Before(lastJob.Date) {
+		// override the resume date if lastJob was later.
+		resume = lastJob.Date
+	}
+
 	return &Service{
-		tracker:   tk,
+		tracker: tk,
+		dsSaver: &dsSaver,
+
 		startDate: startDate,
 		date:      resume,
 		yesterday: yesterday,
 		jobSpecs:  specs}, nil
+}
+
+// snapshots the current state for persistence.
+// NOT thread-safe
+func (svc *Service) snapshot() {
+	svc.dsSaver.SaveTime = time.Now()
+	svc.dsSaver.CurrentDate = svc.date
+	svc.dsSaver.YesterdayDate = svc.yesterday.date
+	cp := svc.dsSaver
+	go cp.save()
+}
+
+// saver is used only for saving and loading from datastore.
+type saver struct {
+	SaveTime      time.Time
+	CurrentDate   time.Time // Date we should resume processing
+	YesterdayDate time.Time // Current YesterdayDate that should be processed at 0600 UTC.
+
+	ds.Context
+}
+
+func (ss *saver) save() {
+	if ss.Client == nil {
+		log.Println("saver not configured")
+		return
+	}
+	ctx, cf := context.WithTimeout(ss.Ctx, 10*time.Second)
+	defer cf()
+	_, err := ss.Context.Client.Put(ctx, ss.Key, ss)
+	if err != nil {
+		log.Println(err)
+	}
+}
+
+func (ss *saver) loadFromDatastore() error {
+	if ss.Client == nil {
+		return tracker.ErrClientIsNil
+	}
+	return ss.Client.Get(ss.Ctx, ss.Key, ss)
 }

@@ -28,6 +28,7 @@ import (
 	"github.com/m-lab/go/rtx"
 
 	"github.com/m-lab/etl-gardener/cloud"
+	"github.com/m-lab/etl-gardener/cloud/ds"
 	"github.com/m-lab/etl-gardener/config"
 	job "github.com/m-lab/etl-gardener/job-service"
 	"github.com/m-lab/etl-gardener/ops"
@@ -315,6 +316,23 @@ func mustStandardTracker() *tracker.Tracker {
 	return tk
 }
 
+func mustCreateJobService(mux *http.ServeMux) {
+	dsClient, err := datastore.NewClient(context.Background(), env.Project)
+	rtx.Must(err, "datastore client")
+	dsKey := datastore.NameKey("job-service", "state", nil)
+	dsKey.Namespace = "gardener"
+	dsCtx := ds.Context{
+		Ctx:    context.Background(),
+		Client: dsiface.AdaptClient(dsClient),
+		Key:    dsKey,
+	}
+
+	svc, err := job.NewJobService(dsCtx, globalTracker, config.StartDate(),
+		os.Getenv("PROJECT"), config.Sources())
+	rtx.Must(err, "Could not initialize job service")
+	mux.HandleFunc("/job", svc.JobHandler)
+}
+
 // ###############################################################################
 //  Main
 // ###############################################################################
@@ -380,12 +398,8 @@ func main() {
 		handler := tracker.NewHandler(globalTracker)
 		handler.Register(mux)
 
-		// For now, we just start in Aug 2019, and handle only new data.
+		mustCreateJobService(mux)
 
-		svc, err := job.NewJobService(globalTracker, config.StartDate(),
-			os.Getenv("PROJECT"), config.Sources())
-		rtx.Must(err, "Could not initialize job service")
-		mux.HandleFunc("/job", svc.JobHandler)
 		healthy = true
 		log.Println("Running as manager service")
 	case "legacy":

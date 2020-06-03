@@ -15,6 +15,7 @@ import (
 
 	"github.com/m-lab/go/rtx"
 
+	"github.com/m-lab/etl-gardener/cloud/ds"
 	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/job-service"
 	"github.com/m-lab/etl-gardener/tracker"
@@ -38,7 +39,9 @@ func TestService_NextJob(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
-	svc, _ := job.NewJobService(nil, start, "fakebucket", sources)
+	dsCtx := ds.Context{nil, nil, nil}
+	svc, err := job.NewJobService(dsCtx, nil, start, "fakebucket", sources)
+	rtx.Must(err, "job service")
 	j := svc.NextJob()
 	w, err := tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.ndt5")
 	rtx.Must(err, "")
@@ -89,7 +92,8 @@ func TestJobHandler(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
-	svc, _ := job.NewJobService(nil, start, "fakebucket", sources)
+	dsCtx := ds.Context{nil, nil, nil}
+	svc, _ := job.NewJobService(dsCtx, nil, start, "fakebucket", sources)
 	req := httptest.NewRequest("", "/job", nil)
 	resp := httptest.NewRecorder()
 	svc.JobHandler(resp, req)
@@ -110,7 +114,7 @@ func TestJobHandler(t *testing.T) {
 	}
 }
 
-func TestResume(t *testing.T) {
+func TestResumeFromJobMap(t *testing.T) {
 	// This allows predictable behavior w.r.t. yesterday processing.
 	monkey.Patch(time.Now, func() time.Time {
 		return time.Date(2011, 2, 6, 1, 2, 3, 4, time.UTC)
@@ -130,10 +134,11 @@ func TestResume(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
-	svc, _ := job.NewJobService(tk, start, "fake-bucket", sources)
+	dsCtx := ds.Context{nil, nil, nil}
+	svc, _ := job.NewJobService(dsCtx, tk, start, "fake-bucket", sources)
 	j := svc.NextJob()
 	if j.Date != last.Date {
-		t.Error(j, last)
+		t.Error(j, "!=", last)
 	}
 }
 
@@ -154,7 +159,8 @@ func TestEarlyWrapping(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
-	svc, _ := job.NewJobService(tk, start, "fake-bucket", sources)
+	dsCtx := ds.Context{nil, nil, nil}
+	svc, _ := job.NewJobService(dsCtx, tk, start, "fake-bucket", sources)
 
 	// If a job is still present in the tracker when it wraps, /job returns an error.
 	expected := []struct {
@@ -213,7 +219,8 @@ func TestYesterday(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
-	svc, _ := job.NewJobService(tk, start, "fake-bucket", sources)
+	dsCtx := ds.Context{nil, nil, nil}
+	svc, _ := job.NewJobService(dsCtx, tk, start, "fake-bucket", sources)
 
 	// We expect to see "yesterday" interleaved with normal sequence.
 	expected := []struct {
