@@ -185,7 +185,7 @@ func NewJobService(
 	}
 
 	dsSaver := saver{
-		Context: dsCtx,
+		dsCtx: dsCtx,
 	}
 	err := dsSaver.loadFromDatastore()
 	if err == nil {
@@ -254,25 +254,25 @@ type saver struct {
 	CurrentDate   time.Time // Date we should resume processing
 	YesterdayDate time.Time // Current YesterdayDate that should be processed at 0600 UTC.
 
-	ds.Context
+	dsCtx ds.Context
 }
 
 func (ss *saver) save() {
-	if ss.Client == nil {
+	if ss.dsCtx.Client == nil {
 		log.Println("saver not configured")
 		return
 	}
-	ctx, cf := context.WithTimeout(ss.Ctx, 10*time.Second)
+	ctx, cf := context.WithTimeout(ss.dsCtx.Ctx, 10*time.Second)
 	defer cf()
-	_, err := ss.Context.Client.Put(ctx, ss.Key, ss)
+	_, err := ss.dsCtx.Client.Put(ctx, ss.dsCtx.Key, ss)
 	if err != nil {
 		log.Println(err)
 	}
 }
 
 func (ss *saver) loadFromDatastore() error {
-	if ss.Client == nil {
+	if ss.dsCtx.Client == nil {
 		return tracker.ErrClientIsNil
 	}
-	return ss.Client.Get(ss.Ctx, ss.Key, ss)
+	return ss.dsCtx.Client.Get(ss.dsCtx.Ctx, ss.dsCtx.Key, ss)
 }
