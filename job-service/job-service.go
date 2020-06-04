@@ -46,6 +46,8 @@ func (y *yesterdaySource) nextJob() *tracker.JobWithTarget {
 	if y.nextIndex >= len(y.jobSpecs) {
 		y.nextIndex = 0
 		y.date = y.date.AddDate(0, 0, 1).UTC().Truncate(24 * time.Hour)
+		// Persistent state will be updated eventually by
+		// the main job Service.
 	}
 
 	return &job
@@ -164,7 +166,7 @@ func NewJobService(
 	// The service cycles through the jobSpecs.  Each spec is a job (bucket/exp/type) and a target GCS bucket or BQ table.
 	specs := make([]tracker.JobWithTarget, 0)
 	for _, s := range sources {
-		log.Println(s)
+		log.Println("Sourcing from:", s)
 		job := tracker.Job{
 			Bucket:     s.Bucket,
 			Experiment: s.Experiment,
@@ -198,6 +200,7 @@ func NewJobService(
 			jobSpecs:  specs}, nil
 	}
 
+	log.Println("No datastore entity, fallback to tracker info")
 	y := time.Now().UTC().Truncate(24 * time.Hour)
 	if time.Since(y) < 6*time.Hour {
 		y = y.AddDate(0, 0, -1)
@@ -239,35 +242,56 @@ func NewJobService(
 }
 
 // snapshots the current state for persistence.
+// May block if previous snapshot is still in progress
 // NOT thread-safe
 func (svc *Service) snapshot() {
+	svc.dsSaver.lock.Lock()
+	defer svc.dsSaver.lock.Unlock()
 	svc.dsSaver.SaveTime = time.Now()
 	svc.dsSaver.CurrentDate = svc.date
 	svc.dsSaver.YesterdayDate = svc.yesterday.date
-	cp := svc.dsSaver
-	go cp.save()
+
+	svc.dsSaver.saveAsync()
+}
+
+// ActiveDates returns the regular and yesterday dates currently
+// or soon to be processed.
+func (svc *Service) ActiveDates() (time.Time, time.Time) {
+	svc.lock.Lock()
+	defer svc.lock.Unlock()
+
+	return svc.date, svc.yesterday.date
 }
 
 // saver is used only for saving and loading from datastore.
 type saver struct {
+	lock          sync.Mutex
 	SaveTime      time.Time
 	CurrentDate   time.Time // Date we should resume processing
 	YesterdayDate time.Time // Current YesterdayDate that should be processed at 0600 UTC.
 
+	// This is constant after init.
 	dsCtx ds.Context
 }
 
-func (ss *saver) save() {
+func (ss *saver) saveAsync() {
 	if ss.dsCtx.Client == nil {
 		log.Println("saver not configured")
 		return
 	}
-	ctx, cf := context.WithTimeout(ss.dsCtx.Ctx, 10*time.Second)
-	defer cf()
-	_, err := ss.dsCtx.Client.Put(ctx, ss.dsCtx.Key, ss)
-	if err != nil {
-		log.Println(err)
-	}
+
+	go func() {
+		// This won't run until the caller releases the lock.
+		ss.lock.Lock()
+		defer ss.lock.Unlock()
+		ctx, cf := context.WithTimeout(ss.dsCtx.Ctx, 10*time.Second)
+		defer cf()
+
+		_, err := ss.dsCtx.Client.Put(ctx, ss.dsCtx.Key, ss)
+		if err != nil {
+			log.Println(err)
+		}
+	}()
 }
 
 func (ss *saver) loadFromDatastore() error {

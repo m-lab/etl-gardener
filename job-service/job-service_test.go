@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"bou.ke/monkey"
+	"cloud.google.com/go/datastore"
 	"github.com/go-test/deep"
+	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
 
 	"github.com/m-lab/go/rtx"
 
@@ -139,6 +141,74 @@ func TestResumeFromJobMap(t *testing.T) {
 	j := svc.NextJob()
 	if j.Date != last.Date {
 		t.Error(j, "!=", last)
+	}
+}
+
+type saver struct {
+	SaveTime      time.Time
+	CurrentDate   time.Time // Date we should resume processing
+	YesterdayDate time.Time // Current YesterdayDate that should be processed at 0600 UTC.
+
+	dsCtx ds.Context
+}
+
+func (ss *saver) loadFromDatastore() error {
+	if ss.dsCtx.Client == nil {
+		return tracker.ErrClientIsNil
+	}
+	return ss.dsCtx.Client.Get(ss.dsCtx.Ctx, ss.dsCtx.Key, ss)
+}
+
+func TestResumeFromDatastore(t *testing.T) {
+	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
+	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0, 0) // Only using jobmap.
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sources := []config.SourceConfig{
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+	}
+
+	dsClient, err := datastore.NewClient(context.Background(), "mlab-testing")
+	rtx.Must(err, "datastore client")
+	dsKey := datastore.NameKey("job-service", "state", nil)
+	dsKey.Namespace = "testing"
+	dsCtx := ds.Context{
+		Ctx:    context.Background(),
+		Client: dsiface.AdaptClient(dsClient),
+		Key:    dsKey,
+	}
+	// Cleanup any left over state (when running from workstation)
+	err = dsCtx.Client.Delete(dsCtx.Ctx, dsCtx.Key)
+	rtx.Must(err, "delete")
+
+	svc, err := job.NewJobService(dsCtx, tk, start,
+		"mlab-testing", sources)
+	rtx.Must(err, "Could not initialize job service")
+	j := svc.NextJob() // Asynchronously pushes to datastore when date advances.
+
+	// Depending on the time this runs, there may be yesterday jobs,
+	// so we continue until we see a job that matches lastJobDate
+	lastJobDate := start.AddDate(0, 0, 3)
+	for j = svc.NextJob(); j.Date != lastJobDate; j = svc.NextJob() {
+		time.Sleep(time.Millisecond)
+	}
+
+	// Now ensure that a new job service resumes at the expected date.
+	// We do this in a loop, because the datastore writes are asynch.
+	// If we time out, then something didn't work.
+	for i := 0; i < 100; i++ {
+		time.Sleep(100 * time.Millisecond)
+		svc, err = job.NewJobService(dsCtx, tk, start,
+			"mlab-testing", sources)
+		rtx.Must(err, "Could not initialize job service")
+		old, _ := svc.ActiveDates()
+		if !old.Before(j.Date) {
+			break
+		}
+		log.Println("Dates don't match: ", old, "<", j.Date)
 	}
 }
 
