@@ -149,7 +149,7 @@ func (m *Monitor) UpdateJob(o *Outcome, state tracker.State) (string, error) {
 		}
 		return "done", nil
 	case o.ShouldRetry():
-		if err := m.tk.SetStatus(o.job, state, detail); err != nil {
+		if err := m.tk.SetDetail(o.job, detail); err != nil {
 			return "set status error", err
 		}
 		return "retry", nil

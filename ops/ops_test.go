@@ -3,6 +3,7 @@ package ops_test
 
 import (
 	"context"
+	"errors"
 	"log"
 	"testing"
 	"time"
@@ -18,6 +19,13 @@ import (
 func init() {
 	// Always prepend the filename and line number.
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
+func must(t *testing.T, err error) {
+	if err != nil {
+		log.Output(2, err.Error())
+		t.Fatal(err)
+	}
 }
 
 func newStateFunc(detail string) ops.ActionFunc {
@@ -73,4 +81,27 @@ func TestMonitor_Watch(t *testing.T) {
 		t.Error(tk.NumJobs())
 	}
 	cancel()
+}
+
+func TestOutcomeUpdate(t *testing.T) {
+	logx.LogxDebug.Set("true")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tk, err := tracker.InitTracker(ctx, nil, nil, 0, 0, 0)
+	rtx.Must(err, "tk init")
+	job := tracker.NewJob("bucket", "exp", "type", time.Now())
+	tk.AddJob(job)
+
+	m, err := ops.NewMonitor(context.Background(), cloud.BQConfig{}, tk)
+	must(t, err)
+
+	retry := ops.Retry(job, errors.New("error"), "foobar")
+	m.UpdateJob(retry, tracker.Joining)
+
+	status, err := tk.GetStatus(job)
+	must(t, err)
+	if status.LastUpdate() != "foobar" {
+		t.Error(status.LastUpdate())
+	}
 }
