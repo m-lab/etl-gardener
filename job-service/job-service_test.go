@@ -4,6 +4,7 @@ package job_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -42,6 +43,19 @@ func (nt *NullTracker) LastJob() tracker.Job {
 	return tracker.Job{}
 }
 
+type NullSaver struct {
+}
+
+func (s *NullSaver) Save(ctx context.Context, o persistence.StateObject) error {
+	return errors.New("Null Saver")
+}
+func (s *NullSaver) Delete(ctx context.Context, o persistence.StateObject) error {
+	return errors.New("Null Saver")
+}
+func (s *NullSaver) Fetch(ctx context.Context, o persistence.StateObject) error {
+	return errors.New("Null Saver")
+}
+
 func TestService_NextJob(t *testing.T) {
 
 	// This allows predictable behavior from time.Since in the advanceDate function.
@@ -57,7 +71,7 @@ func TestService_NextJob(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
-	svc, err := job.NewJobService(&NullTracker{}, start, "fakebucket", sources, nil)
+	svc, err := job.NewJobService(&NullTracker{}, start, "fakebucket", sources, &NullSaver{})
 	must(t, err)
 
 	expected := []struct {
@@ -89,7 +103,7 @@ func TestJobHandler(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
-	svc, err := job.NewJobService(&NullTracker{}, start, "fakebucket", sources, nil)
+	svc, err := job.NewJobService(&NullTracker{}, start, "fakebucket", sources, &NullSaver{})
 	must(t, err)
 	req := httptest.NewRequest("", "/job", nil)
 	resp := httptest.NewRecorder()
@@ -127,7 +141,7 @@ func TestResume(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
-	svc, err := job.NewJobService(tk, start, "fake-bucket", sources, nil)
+	svc, err := job.NewJobService(tk, start, "fake-bucket", sources, &NullSaver{})
 	must(t, err)
 	j := svc.NextJob(ctx)
 	if j.Date != last.Date {
@@ -136,11 +150,11 @@ func TestResume(t *testing.T) {
 }
 
 // Implements persistence.Saver, for test injection.
-type saver struct {
+type FakeSaver struct {
 	Date time.Time
 }
 
-func (s *saver) Save(ctx context.Context, o persistence.StateObject) error {
+func (s *FakeSaver) Save(ctx context.Context, o persistence.StateObject) error {
 	switch svc := o.(type) {
 	case *job.Service:
 		s.Date = svc.Date
@@ -149,10 +163,10 @@ func (s *saver) Save(ctx context.Context, o persistence.StateObject) error {
 	}
 	return nil
 }
-func (s *saver) Delete(ctx context.Context, o persistence.StateObject) error {
+func (s *FakeSaver) Delete(ctx context.Context, o persistence.StateObject) error {
 	return nil
 }
-func (s *saver) Fetch(ctx context.Context, o persistence.StateObject) error {
+func (s *FakeSaver) Fetch(ctx context.Context, o persistence.StateObject) error {
 	switch s := o.(type) {
 	case *job.Service:
 		s.Date =
@@ -175,7 +189,7 @@ func TestResumeFromSaver(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
-	ss := saver{}
+	ss := FakeSaver{}
 	svc, err := job.NewJobService(&NullTracker{}, start, "fake-bucket", sources, &ss)
 	must(t, err)
 	j := svc.NextJob(ctx)
@@ -206,7 +220,7 @@ func TestEarlyWrapping(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
-	svc, err := job.NewJobService(tk, start, "fake-bucket", sources, nil)
+	svc, err := job.NewJobService(tk, start, "fake-bucket", sources, &NullSaver{})
 	must(t, err)
 
 	// If a job is still present in the tracker when it wraps, /job returns an error.

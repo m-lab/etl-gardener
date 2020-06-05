@@ -71,14 +71,12 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 	svc.nextIndex++
 	if svc.nextIndex >= len(svc.jobSpecs) {
 		svc.advanceDate()
-		if svc.saver != nil {
-			// Note that this will block other calls to NextJob
-			ctx, cf := context.WithTimeout(ctx, 5*time.Second)
-			defer cf()
-			err := svc.saver.Save(ctx, svc)
-			if err != nil {
-				log.Println(err)
-			}
+		// Note that this will block other calls to NextJob
+		ctx, cf := context.WithTimeout(ctx, 5*time.Second)
+		defer cf()
+		err := svc.saver.Save(ctx, svc)
+		if err != nil {
+			log.Println(err)
 		}
 	}
 	return job
@@ -122,14 +120,12 @@ func (svc *Service) recoverDate(ctx context.Context) {
 	// Deprecated
 	svc.Date = svc.jobAdder.LastJob().Date
 
-	// If saver provided, try to recover date from saver.
-	if svc.saver != nil {
-		ctx, cf := context.WithTimeout(ctx, 5*time.Second)
-		defer cf()
-		err := svc.saver.Fetch(ctx, svc)
-		if err != nil {
-			log.Println(err)
-		}
+	// try to recover date from saver.
+	ctx, cf := context.WithTimeout(ctx, 5*time.Second)
+	defer cf()
+	err := svc.saver.Fetch(ctx, svc)
+	if err != nil {
+		log.Println(err, svc)
 	}
 
 	// Adjust if Date is too early.
@@ -152,6 +148,10 @@ func NewJobService(tk jobAdder, startDate time.Time,
 	if tk == nil {
 		return nil, ErrNilParameter
 	}
+	if saver == nil {
+		return nil, ErrNilParameter
+	}
+
 	// The service cycles through the jobSpecs.  Each spec is a job (bucket/exp/type) and a target GCS bucket or BQ table.
 	specs := make([]tracker.JobWithTarget, 0)
 	for _, s := range sources {
@@ -175,7 +175,8 @@ func NewJobService(tk jobAdder, startDate time.Time,
 		log.Fatal("No jobs specified")
 	}
 
-	svc := Service{jobAdder: tk,
+	svc := Service{
+		jobAdder:  tk,
 		saver:     saver,
 		startDate: startDate,
 		nextIndex: 0,
