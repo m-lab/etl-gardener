@@ -316,6 +316,15 @@ func mustStandardTracker() *tracker.Tracker {
 	return tk
 }
 
+func mustCreateJobService(mux *http.ServeMux) {
+	saver, err := persistence.NewDatastoreSaver(context.Background(), os.Getenv("PROJECT"))
+	rtx.Must(err, "Could not initialize datastore saver")
+	svc, err := job.NewJobService(globalTracker, config.StartDate(),
+		os.Getenv("PROJECT"), config.Sources(), saver)
+	rtx.Must(err, "Could not initialize job service")
+	mux.HandleFunc("/job", svc.JobHandler)
+}
+
 // ###############################################################################
 //  Main
 // ###############################################################################
@@ -381,12 +390,7 @@ func main() {
 		handler := tracker.NewHandler(globalTracker)
 		handler.Register(mux)
 
-		saver, err := persistence.NewDatastoreSaver(context.Background(), os.Getenv("PROJECT"))
-		rtx.Must(err, "Could not initialize datastore saver")
-		svc, err := job.NewJobService(globalTracker, config.StartDate(),
-			os.Getenv("PROJECT"), config.Sources(), saver)
-		rtx.Must(err, "Could not initialize job service")
-		mux.HandleFunc("/job", svc.JobHandler)
+		mustCreateJobService(mux)
 
 		healthy = true
 		log.Println("Running as manager service")
