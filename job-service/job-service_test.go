@@ -14,8 +14,6 @@ import (
 	"bou.ke/monkey"
 	"github.com/go-test/deep"
 
-	"github.com/m-lab/go/rtx"
-
 	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/job-service"
 	"github.com/m-lab/etl-gardener/persistence"
@@ -25,6 +23,23 @@ import (
 func init() {
 	// Always prepend the filename and line number.
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
+func must(t *testing.T, err error) {
+	if err != nil {
+		log.Output(2, err.Error())
+		t.Fatal(err)
+	}
+}
+
+type NullTracker struct{}
+
+func (nt *NullTracker) AddJob(job tracker.Job) error {
+	return nil
+}
+
+func (nt *NullTracker) LastJob() tracker.Job {
+	return tracker.Job{}
 }
 
 func TestService_NextJob(t *testing.T) {
@@ -42,42 +57,29 @@ func TestService_NextJob(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
-	svc, _ := job.NewJobService(nil, start, "fakebucket", sources, nil)
-	j := svc.NextJob(ctx)
-	w, err := tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.ndt5")
-	rtx.Must(err, "")
-	diff := deep.Equal(w, j)
-	if diff != nil {
-		t.Error(diff)
+	svc, err := job.NewJobService(&NullTracker{}, start, "fakebucket", sources, nil)
+	must(t, err)
+
+	expected := []struct {
+		body string
+	}{
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`},
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-03T00:00:00Z"}`},
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-04T00:00:00Z"}`},
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-04T00:00:00Z"}`},
+		// Wrap
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`},
 	}
-	j = svc.NextJob(ctx)
-	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.tcpinfo")
-	rtx.Must(err, "")
-	diff = deep.Equal(w, j)
-	if diff != nil {
-		t.Error(diff)
-	}
-	j = svc.NextJob(ctx)
-	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.ndt5")
-	rtx.Must(err, "")
-	diff = deep.Equal(w, j)
-	if diff != nil {
-		t.Error(diff)
-	}
-	j = svc.NextJob(ctx)
-	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.tcpinfo")
-	rtx.Must(err, "")
-	diff = deep.Equal(w, j)
-	if diff != nil {
-		t.Error(diff)
-	}
-	// Wrap
-	j = svc.NextJob(ctx)
-	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.ndt5")
-	rtx.Must(err, "")
-	diff = deep.Equal(w, j)
-	if diff != nil {
-		t.Error(diff)
+
+	for i, e := range expected {
+		want := tracker.Job{}
+		json.Unmarshal([]byte(e.body), &want)
+		got := svc.NextJob(ctx)
+		log.Println(got)
+		diff := deep.Equal(want, got.Job)
+		if diff != nil {
+			t.Error(i, diff)
+		}
 	}
 }
 
@@ -87,7 +89,8 @@ func TestJobHandler(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
-	svc, _ := job.NewJobService(nil, start, "fakebucket", sources, nil)
+	svc, err := job.NewJobService(&NullTracker{}, start, "fakebucket", sources, nil)
+	must(t, err)
 	req := httptest.NewRequest("", "/job", nil)
 	resp := httptest.NewRecorder()
 	svc.JobHandler(resp, req)
@@ -124,7 +127,8 @@ func TestResume(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
-	svc, _ := job.NewJobService(tk, start, "fake-bucket", sources, nil)
+	svc, err := job.NewJobService(tk, start, "fake-bucket", sources, nil)
+	must(t, err)
 	j := svc.NextJob(ctx)
 	if j.Date != last.Date {
 		t.Error(j, last)
@@ -167,17 +171,13 @@ func TestResumeFromSaver(t *testing.T) {
 	ctx := context.Background()
 
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
-	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0, 0) // Only using jobmap.
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	sources := []config.SourceConfig{
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
 	ss := saver{}
-	svc, _ := job.NewJobService(tk, start, "fake-bucket", sources, &ss)
+	svc, err := job.NewJobService(&NullTracker{}, start, "fake-bucket", sources, &ss)
+	must(t, err)
 	j := svc.NextJob(ctx)
 	if j.Date != start.AddDate(0, 0, 10) {
 		t.Error("Expected 20110213", j)
@@ -206,7 +206,8 @@ func TestEarlyWrapping(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
-	svc, _ := job.NewJobService(tk, start, "fake-bucket", sources, nil)
+	svc, err := job.NewJobService(tk, start, "fake-bucket", sources, nil)
+	must(t, err)
 
 	// If a job is still present in the tracker when it wraps, /job returns an error.
 	expected := []struct {
@@ -233,6 +234,7 @@ func TestEarlyWrapping(t *testing.T) {
 			t.Error(k, "Got:", resp.Body.String(), "!=", result.body)
 		}
 
+		// TODO - this should be pulled into a separate test
 		if k == 2 {
 			job := tracker.Job{}
 			json.Unmarshal([]byte(expected[0].body), &job)

@@ -18,6 +18,14 @@ import (
 // ErrMoreJSON is returned when response from gardener has unknown fields.
 var ErrMoreJSON = errors.New("JSON body not completely consumed")
 
+// ErrNilParameter is returned on disallowed nil parameter.
+var ErrNilParameter = errors.New("nil parameter not allowed")
+
+type jobAdder interface {
+	AddJob(job tracker.Job) error
+	LastJob() tracker.Job // temporary
+}
+
 // Service contains all information needed to provide a job service.
 // It iterates through successive dates, processing that date from
 // all TypeSources in the source bucket.
@@ -28,8 +36,8 @@ type Service struct {
 
 	startDate time.Time // The date to restart at.
 
-	// Optional tracker to add jobs to.
-	tracker *tracker.Tracker
+	// Optional jobAdder to add jobs to.
+	jobAdder jobAdder
 
 	// All fields above are const after initialization.
 	// All fields below are protected by *lock*
@@ -85,21 +93,19 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 	job := svc.NextJob(req.Context())
-	if svc.tracker != nil {
-		err := svc.tracker.AddJob(job.Job)
+	err := svc.jobAdder.AddJob(job.Job)
+	if err != nil {
+		log.Println(err, job)
+		resp.WriteHeader(http.StatusInternalServerError)
+		_, err = resp.Write([]byte("Job already exists.  Try again."))
 		if err != nil {
-			log.Println(err, job)
-			resp.WriteHeader(http.StatusInternalServerError)
-			_, err = resp.Write([]byte("Job already exists.  Try again."))
-			if err != nil {
-				log.Println(err)
-			}
-			return
+			log.Println(err)
 		}
+		return
 	}
 
 	log.Println("Dispatching", job.Job)
-	_, err := resp.Write(job.Marshal())
+	_, err = resp.Write(job.Marshal())
 	if err != nil {
 		log.Println(err)
 		// This should precede the Write(), but the Write failed, so this
@@ -113,9 +119,8 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 // Not thread-safe - should be called before activating service.
 func (svc *Service) recoverDate(ctx context.Context) {
 	// Default to tracker.LastJob date.
-	if svc.tracker != nil {
-		svc.Date = svc.tracker.LastJob().Date
-	}
+	// Deprecated
+	svc.Date = svc.jobAdder.LastJob().Date
 
 	// If saver provided, try to recover date from saver.
 	if svc.saver != nil {
@@ -137,12 +142,15 @@ func (svc *Service) recoverDate(ctx context.Context) {
 var ErrInvalidStartDate = errors.New("Invalid start date")
 
 // NewJobService creates the default job service.
-func NewJobService(tk *tracker.Tracker, startDate time.Time,
+func NewJobService(tk jobAdder, startDate time.Time,
 	targetBase string, sources []config.SourceConfig,
 	saver persistence.Saver,
 ) (*Service, error) {
 	if startDate.Equal(time.Time{}) {
 		return nil, ErrInvalidStartDate
+	}
+	if tk == nil {
+		return nil, ErrNilParameter
 	}
 	// The service cycles through the jobSpecs.  Each spec is a job (bucket/exp/type) and a target GCS bucket or BQ table.
 	specs := make([]tracker.JobWithTarget, 0)
@@ -167,7 +175,7 @@ func NewJobService(tk *tracker.Tracker, startDate time.Time,
 		log.Fatal("No jobs specified")
 	}
 
-	svc := Service{tracker: tk,
+	svc := Service{jobAdder: tk,
 		saver:     saver,
 		startDate: startDate,
 		nextIndex: 0,
