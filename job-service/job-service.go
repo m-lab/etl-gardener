@@ -54,24 +54,26 @@ func (svc *Service) advanceDate() {
 	svc.nextIndex = 0
 }
 
-// CurrentDate returns the date currently being processed.
-// Primarily used for testing.
-func (svc *Service) CurrentDate() time.Time {
-	svc.lock.Lock()
-	defer svc.lock.Unlock()
-	return svc.Date
-}
-
 // NextJob returns a tracker.Job to dispatch.
 func (svc *Service) NextJob() tracker.JobWithTarget {
 	svc.lock.Lock()
 	defer svc.lock.Unlock()
-	if svc.nextIndex >= len(svc.jobSpecs) {
-		svc.advanceDate()
-	}
 	job := svc.jobSpecs[svc.nextIndex]
 	job.Date = svc.Date
+
 	svc.nextIndex++
+	if svc.nextIndex >= len(svc.jobSpecs) {
+		svc.advanceDate()
+		if svc.saver != nil {
+			// Note that this will block other calls to NextJob
+			ctx, cf := context.WithTimeout(svc.saverCtx, 5*time.Second)
+			defer cf()
+			err := svc.saver.Save(ctx, svc)
+			if err != nil {
+				log.Println(err)
+			}
+		}
+	}
 	return job
 }
 

@@ -31,6 +31,7 @@ import (
 	"github.com/m-lab/etl-gardener/config"
 	job "github.com/m-lab/etl-gardener/job-service"
 	"github.com/m-lab/etl-gardener/ops"
+	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/reproc"
 	"github.com/m-lab/etl-gardener/rex"
 	"github.com/m-lab/etl-gardener/state"
@@ -380,12 +381,13 @@ func main() {
 		handler := tracker.NewHandler(globalTracker)
 		handler.Register(mux)
 
-		// For now, we just start in Aug 2019, and handle only new data.
-
+		saver, err := persistence.NewDatastoreSaver(context.Background(), os.Getenv("PROJECT"))
+		rtx.Must(err, "Could not initialize datastore saver")
 		svc, err := job.NewJobService(globalTracker, config.StartDate(),
-			os.Getenv("PROJECT"), config.Sources())
+			os.Getenv("PROJECT"), config.Sources(), saver)
 		rtx.Must(err, "Could not initialize job service")
 		mux.HandleFunc("/job", svc.JobHandler)
+
 		healthy = true
 		log.Println("Running as manager service")
 	case "legacy":

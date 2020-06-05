@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 
 	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/job-service"
+	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
@@ -122,6 +124,63 @@ func TestResume(t *testing.T) {
 	j := svc.NextJob()
 	if j.Date != last.Date {
 		t.Error(j, last)
+	}
+}
+
+// Implements persistence.Saver, for test injection.
+type saver struct {
+	Date time.Time
+}
+
+func (s *saver) Save(ctx context.Context, o persistence.StateObject) error {
+	switch svc := o.(type) {
+	case *job.Service:
+		s.Date = svc.Date
+	default:
+		os.Exit(1)
+	}
+	return nil
+}
+func (s *saver) Delete(ctx context.Context, o persistence.StateObject) error {
+	return nil
+}
+func (s *saver) Fetch(ctx context.Context, o persistence.StateObject) error {
+	switch s := o.(type) {
+	case *job.Service:
+		s.Date =
+			time.Date(2011, 2, 13, 0, 0, 0, 0, time.UTC)
+	default:
+		os.Exit(1)
+	}
+	return nil
+}
+
+func assertStateObject(so persistence.StateObject) {
+	assertStateObject(&job.Service{})
+}
+
+func TestResumeFromSaver(t *testing.T) {
+	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
+	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0, 0) // Only using jobmap.
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sources := []config.SourceConfig{
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+	}
+	ss := saver{}
+	svc, _ := job.NewJobService(tk, start, "fake-bucket", sources, &ss)
+	j := svc.NextJob()
+	if j.Date != start.AddDate(0, 0, 10) {
+		t.Error("Expected 20110213", j)
+	}
+
+	// Now check save invocation...
+	j = svc.NextJob()
+	if ss.Date.Before(start.AddDate(0, 0, 11)) {
+		t.Error("Expected 20110214", ss.Date)
 	}
 }
 
