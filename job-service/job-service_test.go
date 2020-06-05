@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -57,10 +56,12 @@ func (s *NullSaver) Fetch(ctx context.Context, o persistence.StateObject) error 
 }
 
 func TestService_NextJob(t *testing.T) {
-
 	// This allows predictable behavior from time.Since in the advanceDate function.
+	// It will cause wrapping when the service would advance from 2011/2/4 to
+	// 2011/2/5, since 2/5 is less than 36 hours prior to "now"
+	now := time.Date(2011, 2, 6, 1, 2, 3, 4, time.UTC)
 	monkey.Patch(time.Now, func() time.Time {
-		return time.Date(2011, 2, 6, 1, 2, 3, 4, time.UTC)
+		return now
 	})
 	defer monkey.Unpatch(time.Now)
 
@@ -70,6 +71,8 @@ func TestService_NextJob(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
+	// This is three days before "now".  The job service should restart
+	// when it reaches 36 hours before "now", which is 2011-02-05
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
 	svc, err := job.NewJobService(&NullTracker{}, start, "fakebucket", sources, &NullSaver{})
 	must(t, err)
@@ -154,25 +157,24 @@ type FakeSaver struct {
 	Date time.Time
 }
 
-func (s *FakeSaver) Save(ctx context.Context, o persistence.StateObject) error {
+func (fs *FakeSaver) Save(ctx context.Context, o persistence.StateObject) error {
 	switch svc := o.(type) {
 	case *job.Service:
-		s.Date = svc.Date
+		fs.Date = svc.Date
 	default:
-		os.Exit(1)
+		log.Fatal("Not implemented")
 	}
 	return nil
 }
-func (s *FakeSaver) Delete(ctx context.Context, o persistence.StateObject) error {
+func (fs *FakeSaver) Delete(ctx context.Context, o persistence.StateObject) error {
 	return nil
 }
-func (s *FakeSaver) Fetch(ctx context.Context, o persistence.StateObject) error {
-	switch s := o.(type) {
+func (fs *FakeSaver) Fetch(ctx context.Context, o persistence.StateObject) error {
+	switch to := o.(type) {
 	case *job.Service:
-		s.Date =
-			time.Date(2011, 2, 13, 0, 0, 0, 0, time.UTC)
+		to.Date = fs.Date
 	default:
-		os.Exit(1)
+		log.Fatal("Not implemented")
 	}
 	return nil
 }
@@ -189,18 +191,23 @@ func TestResumeFromSaver(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
-	ss := FakeSaver{}
-	svc, err := job.NewJobService(&NullTracker{}, start, "fake-bucket", sources, &ss)
+	// FakeSaver that will return 2011/02/13 as resume date.
+	resume := time.Date(2011, 2, 13, 0, 0, 0, 0, time.UTC)
+	fs := FakeSaver{Date: resume}
+	svc, err := job.NewJobService(&NullTracker{}, start, "fake-bucket", sources, &fs)
 	must(t, err)
+	// NextJob should return a job with date provided by FakeSaver.
 	j := svc.NextJob(ctx)
-	if j.Date != start.AddDate(0, 0, 10) {
-		t.Error("Expected 20110213", j)
+	if j.Date != resume {
+		t.Error("Expected ", resume, "got", j)
 	}
 
-	// Now check save invocation...
+	// When NextJob returns the last job for the date, it should trigger
+	// saving the next date to process, which is 20110214.
 	j = svc.NextJob(ctx)
-	if ss.Date.Before(start.AddDate(0, 0, 11)) {
-		t.Error("Expected 20110214", ss.Date)
+	// Check that we see the new date in the FakeSaver
+	if fs.Date != resume.AddDate(0, 0, 1) {
+		t.Error("Expected", resume.AddDate(0, 0, 1), "got", fs.Date)
 	}
 }
 
