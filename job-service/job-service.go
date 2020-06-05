@@ -2,20 +2,18 @@
 package job
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
+	"reflect"
 	"sync"
 	"time"
 
-	"github.com/m-lab/etl-gardener/client"
 	"github.com/m-lab/etl-gardener/config"
+	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
 )
-
-// NextJob is required until etl code migrates to client.NextJob
-// DEPRECATED
-var NextJob = client.NextJob
 
 // ErrMoreJSON is returned when response from gardener has unknown fields.
 var ErrMoreJSON = errors.New("JSON body not completely consumed")
@@ -24,25 +22,44 @@ var ErrMoreJSON = errors.New("JSON body not completely consumed")
 // It iterates through successive dates, processing that date from
 // all TypeSources in the source bucket.
 type Service struct {
-	lock sync.Mutex
+	jobSpecs []tracker.JobWithTarget // The job prefixes to be iterated through.
+
+	saverCtx context.Context
+	saver    persistence.Saver // This injected to implement persistence.
+
+	startDate time.Time // The date to restart at.
 
 	// Optional tracker to add jobs to.
 	tracker *tracker.Tracker
 
-	startDate time.Time // The date to restart at.
-	date      time.Time // The date currently being dispatched.
+	// All fields above are const after initialization.
+	// All fields below are protected by *lock*
+	lock sync.Mutex
 
-	jobSpecs  []tracker.JobWithTarget // The job prefixes to be iterated through.
-	nextIndex int                     // index of TypeSource to dispatch next.
+	// The Date is exported for persistence.  It is the only field
+	// that is recovered after restart.  All others are injected
+	// from config.
+	Date time.Time // The date currently being dispatched.
+
+	nextIndex int // index of TypeSource to dispatch next.
 }
 
 func (svc *Service) advanceDate() {
-	date := svc.date.UTC().Add(24 * time.Hour).Truncate(24 * time.Hour)
+	date := svc.Date.UTC().AddDate(0, 0, 1).Truncate(24 * time.Hour)
+	// Start over when we reach yesterday.
 	if time.Since(date) < 36*time.Hour {
 		date = svc.startDate
 	}
-	svc.date = date
+	svc.Date = date
 	svc.nextIndex = 0
+}
+
+// CurrentDate returns the date currently being processed.
+// Primarily used for testing.
+func (svc *Service) CurrentDate() time.Time {
+	svc.lock.Lock()
+	defer svc.lock.Unlock()
+	return svc.Date
 }
 
 // NextJob returns a tracker.Job to dispatch.
@@ -53,7 +70,7 @@ func (svc *Service) NextJob() tracker.JobWithTarget {
 		svc.advanceDate()
 	}
 	job := svc.jobSpecs[svc.nextIndex]
-	job.Date = svc.date
+	job.Date = svc.Date
 	svc.nextIndex++
 	return job
 }
@@ -91,12 +108,36 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 	}
 }
 
+// Recover the processing date.
+// Not thread-safe - should be called before activating service.
+func (svc *Service) recoverDate() {
+	// Default to tracker.LastJob date.
+	if svc.tracker != nil {
+		svc.Date = svc.tracker.LastJob().Date
+	}
+
+	// If saver provided, try to recover date from saver.
+	if svc.saver != nil {
+		err := svc.saver.Fetch(svc.saverCtx, svc)
+		if err != nil {
+			log.Println(err)
+		}
+	}
+
+	// Adjust if Date is too early.
+	if svc.Date.Before(svc.startDate) {
+		svc.Date = svc.startDate
+	}
+}
+
 // ErrInvalidStartDate is returned if startDate is time.Time{}
 var ErrInvalidStartDate = errors.New("Invalid start date")
 
 // NewJobService creates the default job service.
 func NewJobService(tk *tracker.Tracker, startDate time.Time,
-	targetBase string, sources []config.SourceConfig) (*Service, error) {
+	targetBase string, sources []config.SourceConfig,
+	saver persistence.Saver,
+) (*Service, error) {
 	if startDate.Equal(time.Time{}) {
 		return nil, ErrInvalidStartDate
 	}
@@ -123,23 +164,27 @@ func NewJobService(tk *tracker.Tracker, startDate time.Time,
 		log.Fatal("No jobs specified")
 	}
 
-	resume := startDate
-
-	if tk == nil {
-		return &Service{tracker: tk, startDate: startDate, date: resume, nextIndex: 0, jobSpecs: specs}, nil
+	svc := Service{tracker: tk,
+		saverCtx:  context.Background(),
+		saver:     saver,
+		startDate: startDate,
+		nextIndex: 0,
+		jobSpecs:  specs,
 	}
 
-	// Last job from tracker recovery.  This may be empty Job{} if recovery failed.
-	lastJob := tk.LastJob()
-	log.Println("Last job was:", lastJob)
+	svc.recoverDate()
 
-	// TODO check for spec bucket change
-	if resume.Before(lastJob.Date) {
-		// override the resume date if lastJob was later.
-		resume = lastJob.Date
-	}
-	// Ok to start here.  If there are repeated jobs, the job-service will skip
-	// them.  If they are already finished, then ok to repeat them, though a little inefficient.
-	svc := Service{tracker: tk, startDate: startDate, date: resume, nextIndex: 0, jobSpecs: specs}
 	return &svc, nil
+}
+
+// ---------- Implement persistence.StateObject -------------
+
+// GetName implements StateObject.GetName
+func (svc *Service) GetName() string {
+	return "singleton" // There is only one job service.
+}
+
+// GetKind implements StateObject.GetKind
+func (svc *Service) GetKind() string {
+	return reflect.TypeOf(svc).Name()
 }

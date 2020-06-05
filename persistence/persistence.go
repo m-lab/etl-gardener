@@ -51,7 +51,7 @@ func NewDatastoreSaver(ctx context.Context, project string) (*DatastoreSaver, er
 	if err != nil {
 		return nil, err
 	}
-	return &DatastoreSaver{Client: client, Namespace: "scoreboard"}, nil
+	return &DatastoreSaver{Client: client, Namespace: "gardener"}, nil
 }
 
 func (ds *DatastoreSaver) key(o StateObject) *datastore.Key {

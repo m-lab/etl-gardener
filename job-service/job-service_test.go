@@ -38,7 +38,7 @@ func TestService_NextJob(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
-	svc, _ := job.NewJobService(nil, start, "fakebucket", sources)
+	svc, _ := job.NewJobService(nil, start, "fakebucket", sources, nil)
 	j := svc.NextJob()
 	w, err := tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.ndt5")
 	rtx.Must(err, "")
@@ -83,7 +83,7 @@ func TestJobHandler(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
-	svc, _ := job.NewJobService(nil, start, "fakebucket", sources)
+	svc, _ := job.NewJobService(nil, start, "fakebucket", sources, nil)
 	req := httptest.NewRequest("", "/job", nil)
 	resp := httptest.NewRecorder()
 	svc.JobHandler(resp, req)
@@ -118,7 +118,7 @@ func TestResume(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
-	svc, _ := job.NewJobService(tk, start, "fake-bucket", sources)
+	svc, _ := job.NewJobService(tk, start, "fake-bucket", sources, nil)
 	j := svc.NextJob()
 	if j.Date != last.Date {
 		t.Error(j, last)
@@ -141,7 +141,7 @@ func TestEarlyWrapping(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
-	svc, _ := job.NewJobService(tk, start, "fake-bucket", sources)
+	svc, _ := job.NewJobService(tk, start, "fake-bucket", sources, nil)
 
 	// If a job is still present in the tracker when it wraps, /job returns an error.
 	expected := []struct {
