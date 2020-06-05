@@ -26,6 +26,84 @@ type jobAdder interface {
 	LastJob() tracker.Job // temporary
 }
 
+// YesterdaySource provides pending jobs for yesterday's data.
+// When the scheduled delay has passed, it cycles through all the
+// job specs, then advances to the next date.
+type YesterdaySource struct {
+	saver persistence.Saver
+
+	jobSpecs  []tracker.JobWithTarget // The job prefixes to be iterated through.
+	Date      time.Time               // The next "yesterday" date to be processed.
+	delay     time.Duration           // time after UTC to process yesterday.
+	nextIndex int
+}
+
+// nextJob returns a yesterday Job if appropriate
+// Not thread-safe.
+func (y *YesterdaySource) nextJob(ctx context.Context) *tracker.JobWithTarget {
+	// Defer until "delay" after midnight next day.
+	if time.Since(y.Date) < 24*time.Hour+y.delay {
+		return nil
+	}
+
+	// Copy the jobspec and set the date.
+	job := y.jobSpecs[y.nextIndex]
+	job.Date = y.Date
+
+	// Advance to the next jobSpec for next call.
+	y.nextIndex++
+	// When we have dispatched all jobs, advance yesterdayDate to next day
+	// and reset the index.
+	if y.nextIndex >= len(y.jobSpecs) {
+		y.nextIndex = 0
+		y.Date = y.Date.AddDate(0, 0, 1).UTC().Truncate(24 * time.Hour)
+
+		ctx, cf := context.WithTimeout(ctx, 5*time.Second)
+		defer cf()
+		log.Println("Saving", y)
+		y.saver.Save(ctx, y)
+	}
+
+	return &job
+}
+
+func initYesterday(saver persistence.Saver, delay time.Duration, specs []tracker.JobWithTarget) (*YesterdaySource, error) {
+	if saver == nil {
+		return nil, ErrNilParameter
+	}
+	// This is the fallback start date.
+	date := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -1)
+
+	src := YesterdaySource{
+		saver:     saver,
+		jobSpecs:  specs,
+		Date:      date,
+		delay:     delay,
+		nextIndex: 0,
+	}
+
+	// Recover the date from datastore.
+	ctx, cf := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cf()
+	err := saver.Fetch(ctx, &src)
+	if err != nil {
+		log.Println(err)
+	}
+
+	log.Println("Yesterday starting at", src.Date)
+	return &src, nil
+}
+
+// GetName implements StateObject.GetName
+func (y *YesterdaySource) GetName() string {
+	return "singleton" // There is only one job service.
+}
+
+// GetKind implements StateObject.GetKind
+func (y *YesterdaySource) GetKind() string {
+	return reflect.TypeOf(y).Name()
+}
+
 // Service contains all information needed to provide a job service.
 // It iterates through successive dates, processing that date from
 // all TypeSources in the source bucket.
@@ -46,9 +124,10 @@ type Service struct {
 	// The Date is exported for persistence.  It is the only field
 	// that is recovered after restart.  All others are injected
 	// from config.
-	Date time.Time // The date currently being dispatched.
+	Date      time.Time // The date currently being dispatched.
+	nextIndex int       // index of TypeSource to dispatch next.
 
-	nextIndex int // index of TypeSource to dispatch next.
+	yesterday *YesterdaySource // Provides jobs for high priority yesterday
 }
 
 func (svc *Service) advanceDate() {
@@ -65,10 +144,17 @@ func (svc *Service) advanceDate() {
 func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 	svc.lock.Lock()
 	defer svc.lock.Unlock()
+
+	// Check whether there is yesterday work to do.
+	if j := svc.yesterday.nextJob(ctx); j != nil {
+		log.Println("Yesterday job:", j.Job)
+		return *j
+	}
+
 	job := svc.jobSpecs[svc.nextIndex]
 	job.Date = svc.Date
-
 	svc.nextIndex++
+
 	if svc.nextIndex >= len(svc.jobSpecs) {
 		svc.advanceDate()
 		// Note that this will block other calls to NextJob
@@ -175,12 +261,17 @@ func NewJobService(tk jobAdder, startDate time.Time,
 		log.Fatal("No jobs specified")
 	}
 
+	yesterday, err := initYesterday(saver, 6*time.Hour, specs)
+	if err != nil {
+		return nil, err
+	}
 	svc := Service{
 		jobAdder:  tk,
 		saver:     saver,
+		jobSpecs:  specs,
 		startDate: startDate,
 		nextIndex: 0,
-		jobSpecs:  specs,
+		yesterday: yesterday,
 	}
 
 	svc.recoverDate(context.Background())
