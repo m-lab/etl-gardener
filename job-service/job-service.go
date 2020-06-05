@@ -24,8 +24,7 @@ var ErrMoreJSON = errors.New("JSON body not completely consumed")
 type Service struct {
 	jobSpecs []tracker.JobWithTarget // The job prefixes to be iterated through.
 
-	saverCtx context.Context
-	saver    persistence.Saver // This injected to implement persistence.
+	saver persistence.Saver // This injected to implement persistence.
 
 	startDate time.Time // The date to restart at.
 
@@ -55,7 +54,7 @@ func (svc *Service) advanceDate() {
 }
 
 // NextJob returns a tracker.Job to dispatch.
-func (svc *Service) NextJob() tracker.JobWithTarget {
+func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 	svc.lock.Lock()
 	defer svc.lock.Unlock()
 	job := svc.jobSpecs[svc.nextIndex]
@@ -66,7 +65,7 @@ func (svc *Service) NextJob() tracker.JobWithTarget {
 		svc.advanceDate()
 		if svc.saver != nil {
 			// Note that this will block other calls to NextJob
-			ctx, cf := context.WithTimeout(svc.saverCtx, 5*time.Second)
+			ctx, cf := context.WithTimeout(ctx, 5*time.Second)
 			defer cf()
 			err := svc.saver.Save(ctx, svc)
 			if err != nil {
@@ -85,7 +84,7 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	job := svc.NextJob()
+	job := svc.NextJob(req.Context())
 	if svc.tracker != nil {
 		err := svc.tracker.AddJob(job.Job)
 		if err != nil {
@@ -112,7 +111,7 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 
 // Recover the processing date.
 // Not thread-safe - should be called before activating service.
-func (svc *Service) recoverDate() {
+func (svc *Service) recoverDate(ctx context.Context) {
 	// Default to tracker.LastJob date.
 	if svc.tracker != nil {
 		svc.Date = svc.tracker.LastJob().Date
@@ -120,7 +119,9 @@ func (svc *Service) recoverDate() {
 
 	// If saver provided, try to recover date from saver.
 	if svc.saver != nil {
-		err := svc.saver.Fetch(svc.saverCtx, svc)
+		ctx, cf := context.WithTimeout(ctx, 5*time.Second)
+		defer cf()
+		err := svc.saver.Fetch(ctx, svc)
 		if err != nil {
 			log.Println(err)
 		}
@@ -167,14 +168,13 @@ func NewJobService(tk *tracker.Tracker, startDate time.Time,
 	}
 
 	svc := Service{tracker: tk,
-		saverCtx:  context.Background(),
 		saver:     saver,
 		startDate: startDate,
 		nextIndex: 0,
 		jobSpecs:  specs,
 	}
 
-	svc.recoverDate()
+	svc.recoverDate(context.Background())
 
 	return &svc, nil
 }

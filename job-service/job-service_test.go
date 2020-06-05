@@ -35,34 +35,36 @@ func TestService_NextJob(t *testing.T) {
 	})
 	defer monkey.Unpatch(time.Now)
 
+	ctx := context.Background()
+
 	sources := []config.SourceConfig{
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
 	svc, _ := job.NewJobService(nil, start, "fakebucket", sources, nil)
-	j := svc.NextJob()
+	j := svc.NextJob(ctx)
 	w, err := tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.ndt5")
 	rtx.Must(err, "")
 	diff := deep.Equal(w, j)
 	if diff != nil {
 		t.Error(diff)
 	}
-	j = svc.NextJob()
+	j = svc.NextJob(ctx)
 	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.tcpinfo")
 	rtx.Must(err, "")
 	diff = deep.Equal(w, j)
 	if diff != nil {
 		t.Error(diff)
 	}
-	j = svc.NextJob()
+	j = svc.NextJob(ctx)
 	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.ndt5")
 	rtx.Must(err, "")
 	diff = deep.Equal(w, j)
 	if diff != nil {
 		t.Error(diff)
 	}
-	j = svc.NextJob()
+	j = svc.NextJob(ctx)
 	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start.Add(24 * time.Hour).Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.tcpinfo")
 	rtx.Must(err, "")
 	diff = deep.Equal(w, j)
@@ -70,7 +72,7 @@ func TestService_NextJob(t *testing.T) {
 		t.Error(diff)
 	}
 	// Wrap
-	j = svc.NextJob()
+	j = svc.NextJob(ctx)
 	w, err = tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.Truncate(24 * time.Hour)}.Target("fakebucket.tmp_ndt.ndt5")
 	rtx.Must(err, "")
 	diff = deep.Equal(w, j)
@@ -107,6 +109,8 @@ func TestJobHandler(t *testing.T) {
 }
 
 func TestResume(t *testing.T) {
+	ctx := context.Background()
+
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
 	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0, 0) // Only using jobmap.
 	if err != nil {
@@ -121,7 +125,7 @@ func TestResume(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
 	svc, _ := job.NewJobService(tk, start, "fake-bucket", sources, nil)
-	j := svc.NextJob()
+	j := svc.NextJob(ctx)
 	if j.Date != last.Date {
 		t.Error(j, last)
 	}
@@ -160,6 +164,8 @@ func assertStateObject(so persistence.StateObject) {
 }
 
 func TestResumeFromSaver(t *testing.T) {
+	ctx := context.Background()
+
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
 	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0, 0) // Only using jobmap.
 	if err != nil {
@@ -172,13 +178,13 @@ func TestResumeFromSaver(t *testing.T) {
 	}
 	ss := saver{}
 	svc, _ := job.NewJobService(tk, start, "fake-bucket", sources, &ss)
-	j := svc.NextJob()
+	j := svc.NextJob(ctx)
 	if j.Date != start.AddDate(0, 0, 10) {
 		t.Error("Expected 20110213", j)
 	}
 
 	// Now check save invocation...
-	j = svc.NextJob()
+	j = svc.NextJob(ctx)
 	if ss.Date.Before(start.AddDate(0, 0, 11)) {
 		t.Error("Expected 20110214", ss.Date)
 	}
