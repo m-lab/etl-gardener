@@ -189,6 +189,18 @@ func (tr *Tracker) UpdateJob(job Job, state Status) error {
 	return nil
 }
 
+// SetDetail updates a job's detail message in memory.
+func (tr *Tracker) SetDetail(job Job, detail string) error {
+	// NOTE: This is not a deep copy.  Shares the History elements.
+	status, err := tr.GetStatus(job)
+	if err != nil {
+		return err
+	}
+	status.UpdateDetail(detail)
+	status.UpdateCount++
+	return tr.UpdateJob(job, status)
+}
+
 // SetStatus updates a job's state in memory.
 func (tr *Tracker) SetStatus(job Job, newState State, detail string) error {
 	status, err := tr.GetStatus(job)

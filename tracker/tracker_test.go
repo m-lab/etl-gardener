@@ -164,9 +164,7 @@ func TestTrackerAddDelete(t *testing.T) {
 
 }
 
-// This tests basic Add and update of one jobs, and verifies
-// correct error returned when trying to update a non-existent job.
-func TestUpdate(t *testing.T) {
+func TestUpdates(t *testing.T) {
 	client := dsfake.NewClient()
 	dsKey := datastore.NameKey("TestUpdate", "jobs", nil)
 	dsKey.Namespace = "gardener"
@@ -178,15 +176,20 @@ func TestUpdate(t *testing.T) {
 	createJobs(t, tk, "JobToUpdate", "type", 1)
 
 	job := tracker.Job{"bucket", "JobToUpdate", "type", startDate, ""}
-	must(t, tk.SetStatus(job, tracker.Parsing, ""))
-	must(t, tk.SetStatus(job, tracker.Stabilizing, ""))
+	must(t, tk.SetStatus(job, tracker.Parsing, "foo"))
+	must(t, tk.SetStatus(job, tracker.Stabilizing, "bar"))
 
 	status, err := tk.GetStatus(job)
-	if err != nil {
-		t.Fatal(err)
-	}
+	must(t, err)
 	if status.State() != tracker.Stabilizing {
 		t.Error("Incorrect job state", job)
+	}
+
+	must(t, tk.SetDetail(job, "foobar"))
+	status, err = tk.GetStatus(job)
+	must(t, err)
+	if status.LastUpdate() != "foobar" {
+		t.Error("Incorrect detail", status.LastStateInfo())
 	}
 
 	err = tk.SetStatus(tracker.Job{"bucket", "JobToUpdate", "other-type", startDate, ""}, tracker.Stabilizing, "")
