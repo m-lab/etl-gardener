@@ -13,7 +13,7 @@ sources:
   experiment: ndt
   datatype: annotation
   target: tmp_ndt.annotation
-- bucket: archive-measurement-lab
-  experiment: ndt
-  datatype: tcpinfo
-  target: tmp_ndt.tcpinfo
+#- bucket: archive-measurement-lab
+#  experiment: ndt
+#  datatype: tcpinfo
+#  target: tmp_ndt.tcpinfo
