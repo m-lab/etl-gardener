@@ -31,7 +31,7 @@ func TestStandardMonitor(t *testing.T) {
 	tk.AddJob(tracker.NewJob("bucket", "exp2", "tcpinfo", time.Now()))
 	// Valid experiment and datatype
 	// This does an actual dedup, so we need to allow enough time.
-	tk.AddJob(tracker.NewJob("bucket", "ndt", "tcpinfo", time.Now()))
+	tk.AddJob(tracker.NewJob("bucket", "ndt", "annotation", time.Now()))
 
 	m, err := ops.NewStandardMonitor(context.Background(), cloud.BQConfig{}, tk)
 	rtx.Must(err, "NewMonitor failure")
