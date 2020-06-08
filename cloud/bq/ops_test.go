@@ -12,22 +12,19 @@ import (
 )
 
 func TestTemplate(t *testing.T) {
-	job := tracker.NewJob("bucket", "ndt", "tcpinfo", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
+	job := tracker.NewJob("bucket", "ndt", "annotation", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
 	q, err := bq.NewQuerier(job, "fake-project")
 	rtx.Must(err, "dedup.Query failed")
 	qs := q.QueryFor("dedup")
-	if !strings.Contains(qs, "uuid") {
+	if !strings.Contains(qs, "keep.id") {
 		t.Error("query should contain keep.uuid:\n", q)
 	}
 	if !strings.Contains(qs, `"2019-03-04"`) {
 		t.Error(`query should contain "2019-03-04":\n`, q)
 	}
-	if !strings.Contains(qs, "ParseInfo.TaskFileName") {
-		t.Error("query should contain ParseInfo.TaskFileName:\n", q)
-	}
 	// TODO check final WHERE clause.
-	if !strings.Contains(qs, "target.ParseInfo.ParseTime = keep.ParseTime") {
-		t.Error("query should contain target.ParseInfo.ParseTime = ... :\n", qs)
+	if !strings.Contains(qs, "target.parser.Time = keep.Time") {
+		t.Error("query should contain target.parser.Time = ... :\n", qs)
 	}
 }
 
@@ -38,7 +35,7 @@ func TestValidateQueries(t *testing.T) {
 		t.Log("Skipping test for --short")
 	}
 	ctx := context.Background()
-	dataTypes := []string{"tcpinfo", "annotation", "ndt7"}
+	dataTypes := []string{"annotation", "ndt7"}
 	keys := []string{"dedup", "cleanup"} // TODO Add "preserve" query
 	// Test for each datatype
 	for _, dataType := range dataTypes {
@@ -68,7 +65,7 @@ func TestValidateQueries(t *testing.T) {
 			}
 			status := j.LastStatus()
 			if status.Err() != nil {
-				t.Fatal(t.Name(), err)
+				t.Fatal(t.Name(), status.Err())
 			}
 		})
 	}

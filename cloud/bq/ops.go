@@ -24,10 +24,10 @@ type Queryer interface {
 
 // queryer is used to construct a dedup query.
 type queryer struct {
-	client   bqiface.Client
-	Project  string
-	TestTime string // Name of the partition field
-	Job      tracker.Job
+	client  bqiface.Client
+	Project string
+	Date    string // Name of the partition field
+	Job     tracker.Job
 	// map key is the single field name, value is fully qualified name
 	Partition map[string]string
 	Order     string
@@ -53,9 +53,9 @@ func NewQuerierWithClient(client bqiface.Client, job tracker.Job, project string
 		return &queryer{
 			client:    client,
 			Project:   project,
-			TestTime:  "TestTime",
+			Date:      "date",
 			Job:       job,
-			Partition: map[string]string{"UUID": "UUID"},
+			Partition: map[string]string{"id": "id"},
 			Order:     "",
 		}, nil
 
@@ -63,22 +63,24 @@ func NewQuerierWithClient(client bqiface.Client, job tracker.Job, project string
 		return &queryer{
 			client:    client,
 			Project:   project,
-			TestTime:  "TestTime",
+			Date:      "date",
 			Job:       job,
-			Partition: map[string]string{"UUID": "a.UUID"},
+			Partition: map[string]string{"id": "id"},
 			Order:     "",
 		}, nil
 
-	case "tcpinfo":
-		return &queryer{
-			client:    client,
-			Project:   project,
-			TestTime:  "TestTime",
-			Job:       job,
-			Partition: map[string]string{"uuid": "uuid", "Timestamp": "FinalSnapshot.Timestamp"},
-			// TODO TaskFileName should be ArchiveURL once we update the schema.
-			Order: "ARRAY_LENGTH(Snapshots) DESC, ParseInfo.TaskFileName, ",
-		}, nil
+		// TODO: enable tcpinfo again once it supports standard columns.
+	/*case "tcpinfo":
+	return &queryer{
+		client:    client,
+		Project:   project,
+		Date:      "DATE(TestTime)",
+		Job:       job,
+		Partition: map[string]string{"uuid": "uuid", "Timestamp": "FinalSnapshot.Timestamp"},
+		// TODO TaskFileName should be ArchiveURL once we update the schema.
+		Order: "ARRAY_LENGTH(Snapshots) DESC, ParseInfo.TaskFileName, ",
+	}, nil
+	*/
 	default:
 		return nil, ErrDatatypeNotSupported
 	}
@@ -168,7 +170,7 @@ var dedupTemplate = template.Must(template.New("").Parse(`
 # The query is very cheap if there are no duplicates.
 DELETE
 FROM ` + tmpTable + ` AS target
-WHERE Date({{.TestTime}}) = "{{.Job.Date.Format "2006-01-02"}}"
+WHERE {{.Date}} = "{{.Job.Date.Format "2006-01-02"}}"
 # This identifies all rows that don't match rows to preserve.
 AND NOT EXISTS (
   # This creates list of rows to preserve, based on key and priority.
@@ -176,14 +178,14 @@ AND NOT EXISTS (
   SELECT * EXCEPT(row_number) FROM (
     SELECT
       {{range $k, $v := .Partition}}{{$v}}, {{end}}
-	  ParseInfo.ParseTime,
+	  parser.Time,
       ROW_NUMBER() OVER (
-        PARTITION BY {{range $k, $v := .Partition}}{{$v}}, {{end}}ParseInfo.ParseTime
-        ORDER BY {{.Order}} ParseInfo.ParseTime DESC
+        PARTITION BY {{range $k, $v := .Partition}}{{$v}}, {{end}}parser.Time
+        ORDER BY {{.Order}} parser.Time DESC
       ) row_number
       FROM (
         SELECT * FROM ` + tmpTable + `
-        WHERE Date({{.TestTime}}) = "{{.Job.Date.Format "2006-01-02"}}"
+        WHERE {{.Date}} = "{{.Job.Date.Format "2006-01-02"}}"
       )
     )
     WHERE row_number = 1
@@ -193,7 +195,7 @@ AND NOT EXISTS (
   # used to distinguish the preferred row from the others.
   WHERE
     {{range $k, $v := .Partition}}target.{{$v}} = keep.{{$k}} AND {{end}}
-    target.ParseInfo.ParseTime = keep.ParseTime
+    target.parser.Time = keep.Time
 )`))
 
 var cleanupTemplate = template.Must(template.New("").Parse(`
@@ -201,5 +203,5 @@ var cleanupTemplate = template.Must(template.New("").Parse(`
 # Delete all rows in a partition.
 DELETE
 FROM ` + tmpTable + `
-WHERE Date({{.TestTime}}) = "{{.Job.Date.Format "2006-01-02"}}"
+WHERE {{.Date}} = "{{.Job.Date.Format "2006-01-02"}}"
 `))
