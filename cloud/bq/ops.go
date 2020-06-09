@@ -180,7 +180,7 @@ AND NOT EXISTS (
       {{range $k, $v := .Partition}}{{$v}}, {{end}}
 	  parser.Time,
       ROW_NUMBER() OVER (
-        PARTITION BY {{range $k, $v := .Partition}}{{$v}}, {{end}}parser.Time
+        PARTITION BY {{range $k, $v := .Partition}}{{$v}}, {{end}}date
         ORDER BY {{.Order}} parser.Time DESC
       ) row_number
       FROM (
