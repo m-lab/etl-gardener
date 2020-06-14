@@ -58,9 +58,11 @@ func InitTracker(
 		log.Println(err, key)
 		jobMap = make(JobMap, 100)
 	}
-	for j := range jobMap {
-		metrics.StartedCount.WithLabelValues(j.Experiment, j.Datatype).Inc()
-		metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Inc()
+	for j, s := range jobMap {
+		if !s.isDone() {
+			metrics.StartedCount.WithLabelValues(j.Experiment, j.Datatype).Inc()
+			metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Inc()
+		}
 	}
 	t := Tracker{
 		client: client, dsKey: key, lastModified: time.Now(),
@@ -181,9 +183,10 @@ func (tr *Tracker) UpdateJob(job Job, state Status) error {
 	tr.lastModified = time.Now()
 	if state.isDone() {
 		metrics.CompletedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
+		metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype).Dec()
+
 		// This could be done by GetStatus, but would change behaviors slightly.
 		if tr.cleanupDelay == 0 {
-			metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype).Dec()
 			delete(tr.jobs, job)
 			return nil
 		}
@@ -267,8 +270,11 @@ func (tr *Tracker) GetState() (JobMap, Job, time.Time) {
 		if (tr.expirationTime > 0 && time.Since(updateTime) > tr.expirationTime) ||
 			(s.isDone() && time.Since(updateTime) > tr.cleanupDelay) {
 			// Remove any obsolete jobs.
-			metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Dec()
-			log.Println("Deleting stale job", j)
+			if !s.isDone() {
+				// If job didn't complete, update metric and log.
+				metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Dec()
+				log.Println("Deleting stale job", j, time.Since(updateTime), tr.cleanupDelay)
+			}
 			tr.lastModified = time.Now()
 			delete(tr.jobs, j)
 		} else {
