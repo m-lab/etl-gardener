@@ -64,17 +64,16 @@ var errStringLock sync.Mutex
 var errStrings = make(map[string]struct{})
 var maxUniqueErrStrings = 10
 
-func (j Job) failureMetric(errString string) {
+func (j Job) failureMetric(state State, errString string) {
+	log.Printf("Job failed in state: %s -- %s\n", state, errString)
 	errStringLock.Lock()
 	defer errStringLock.Unlock()
 	if _, ok := errStrings[errString]; ok {
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
 	} else if len(errStrings) < maxUniqueErrStrings {
 		errStrings[errString] = struct{}{}
-		log.Println("Job failed:", errString)
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
 	} else {
-		log.Println("Job failed:", errString)
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, "generic").Inc()
 	}
 }
@@ -153,16 +152,16 @@ type StateInfo struct {
 	LastUpdate     string // status or error, e.g. last filename in Parsing state.
 }
 
-// NewStateInfo returns a properly initialized StateInfo
-func NewStateInfo(state State) StateInfo {
+// newStateInfo returns a properly initialized StateInfo
+func newStateInfo(state State) StateInfo {
 	now := time.Now()
 	si := StateInfo{State: state, Start: now, LastUpdateTime: now}
 	return si
 }
 
-// Update changes the update time and detail string (if != "-").
+// update changes the update time and detail string (if != "-").
 // NOT THREADSAFE.  Caller must control access.
-func (si *StateInfo) Update(detail string) {
+func (si *StateInfo) update(detail string) {
 	si.LastUpdateTime = time.Now()
 	if detail != "-" {
 		si.LastUpdate = detail
@@ -199,7 +198,7 @@ func (s *Status) State() State {
 // If the detail is empty, returns the previous state detail.
 func (s *Status) LastUpdate() string {
 	lsi := s.LastStateInfo()
-	if lsi.State == Failed && len(s.History) > 1 {
+	if len(lsi.LastUpdate) == 0 && len(s.History) > 1 {
 		lsi = s.History[len(s.History)-2]
 	}
 	return lsi.LastUpdate
@@ -232,7 +231,7 @@ func (s *Status) UpdateDetail(detail string) StateInfo {
 
 		last := len(h) - 1
 		lsi := &h[last]
-		lsi.Update(detail)
+		lsi.update(detail)
 		// Replace the entire history
 		s.History = h
 	}
@@ -247,18 +246,31 @@ func (s *Status) Error() string {
 	return ""
 }
 
-// Update applies the detail as LastUpdate, and transitions to new State
-// if different from the previous state.
-// Returns the previous StateInfo
-func (s *Status) Update(state State, detail string) StateInfo {
-	old := s.UpdateDetail(detail)
-	if old.State != state {
-		s.History = append(s.History, NewStateInfo(state))
-		// For failure, we want to record the error in the final state, too.
-		// TODO - deprecate ParseError?
-		if state == Failed || state == ParseError {
-			s.UpdateDetail(detail)
+// UpdateMetrics handles the StateTimeHistogram and StateDate metric updates.
+func (s *Status) updateMetrics(job Job) {
+	new := s.LastStateInfo()
+	// Update the StateDate metric for new state
+	metrics.StateDate.WithLabelValues(job.Experiment, job.Datatype, string(new.State)).Set(float64(job.Date.Unix()))
+
+	if len(s.History) > 1 {
+		// Track the time in old state
+		old := s.History[len(s.History)-2]
+		timeInState := time.Since(old.Start)
+		if new.State != Init {
+			metrics.StateTimeHistogram.WithLabelValues(job.Experiment, job.Datatype, string(old.State)).Observe(timeInState.Seconds())
 		}
+	}
+}
+
+// NewState adds a new StateInfo to the status.
+// If state is unchanged, it just logs a waring.
+// Returns the previous StateInfo
+func (s *Status) NewState(state State) StateInfo {
+	old := s.LastStateInfo()
+	if old.State == state {
+		log.Println("Warning - same state")
+	} else {
+		s.History = append(s.History, newStateInfo(state))
 	}
 	return old
 }
