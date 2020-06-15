@@ -59,6 +59,7 @@ func InitTracker(
 		jobMap = make(JobMap, 100)
 	}
 	for j, s := range jobMap {
+		// Update the metrics for all jobs still in flight or failed.
 		if !s.isDone() {
 			metrics.StartedCount.WithLabelValues(j.Experiment, j.Datatype).Inc()
 			metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Inc()
@@ -181,6 +182,7 @@ func (tr *Tracker) UpdateJob(job Job, state Status) error {
 	}
 
 	tr.lastModified = time.Now()
+	// When jobs are done, we update stats and may remove them from tracker.
 	if state.isDone() {
 		metrics.CompletedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
 		metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype).Dec()
@@ -266,12 +268,12 @@ func (tr *Tracker) GetState() (JobMap, Job, time.Time) {
 	defer tr.lock.Unlock()
 	m := make(JobMap, len(tr.jobs))
 	for j, s := range tr.jobs {
+		// Remove any obsolete jobs.
 		updateTime := s.UpdateTime()
 		if (tr.expirationTime > 0 && time.Since(updateTime) > tr.expirationTime) ||
 			(s.isDone() && time.Since(updateTime) > tr.cleanupDelay) {
-			// Remove any obsolete jobs.
 			if !s.isDone() {
-				// If job didn't complete, update metric and log.
+				// If job didn't complete, the InFlight metric needs to be updated.
 				metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Dec()
 				log.Println("Deleting stale job", j, time.Since(updateTime), tr.cleanupDelay)
 			}
