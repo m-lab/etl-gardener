@@ -136,6 +136,8 @@ func (tr *Tracker) saveEvery(interval time.Duration) {
 }
 
 // GetStatus retrieves the status of an existing job.
+// Note that the returned object is a shallow copy, and the History
+// field shares the slice objects with the JobMap.
 func (tr *Tracker) GetStatus(job Job) (Status, error) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
@@ -211,6 +213,7 @@ func (tr *Tracker) SetDetail(job Job, detail string) error {
 
 // SetStatus updates a job's state in memory.
 func (tr *Tracker) SetStatus(job Job, newState State, detail string) error {
+	// NOTE: This is not a deep copy.  Shares the History elements.
 	status, err := tr.GetStatus(job)
 	if err != nil {
 		return err
