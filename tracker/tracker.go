@@ -58,9 +58,12 @@ func InitTracker(
 		log.Println(err, key)
 		jobMap = make(JobMap, 100)
 	}
-	for j := range jobMap {
-		metrics.StartedCount.WithLabelValues(j.Experiment, j.Datatype).Inc()
-		metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Inc()
+	for j, s := range jobMap {
+		// Update the metrics for all jobs still in flight or failed.
+		if !s.isDone() {
+			metrics.StartedCount.WithLabelValues(j.Experiment, j.Datatype).Inc()
+			metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Inc()
+		}
 	}
 	t := Tracker{
 		client: client, dsKey: key, lastModified: time.Now(),
@@ -144,15 +147,18 @@ func (tr *Tracker) GetStatus(job Job) (Status, error) {
 }
 
 // AddJob adds a new job to the Tracker.
-// May return ErrJobAlreadyExists if job already exists.
+// May return ErrJobAlreadyExists if job already exists and is still in flight.
 func (tr *Tracker) AddJob(job Job) error {
 	status := NewStatus()
 
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	_, ok := tr.jobs[job]
+	s, ok := tr.jobs[job]
 	if ok {
-		return ErrJobAlreadyExists
+		if !s.isDone() {
+			return ErrJobAlreadyExists
+		}
+		log.Println("Restarting completed job", job)
 	}
 
 	tr.lastJob = job
@@ -176,11 +182,13 @@ func (tr *Tracker) UpdateJob(job Job, state Status) error {
 	}
 
 	tr.lastModified = time.Now()
+	// When jobs are done, we update stats and may remove them from tracker.
 	if state.isDone() {
 		metrics.CompletedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
+		metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype).Dec()
+
 		// This could be done by GetStatus, but would change behaviors slightly.
 		if tr.cleanupDelay == 0 {
-			metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype).Dec()
 			delete(tr.jobs, job)
 			return nil
 		}
@@ -260,12 +268,15 @@ func (tr *Tracker) GetState() (JobMap, Job, time.Time) {
 	defer tr.lock.Unlock()
 	m := make(JobMap, len(tr.jobs))
 	for j, s := range tr.jobs {
+		// Remove any obsolete jobs.
 		updateTime := s.UpdateTime()
 		if (tr.expirationTime > 0 && time.Since(updateTime) > tr.expirationTime) ||
 			(s.isDone() && time.Since(updateTime) > tr.cleanupDelay) {
-			// Remove any obsolete jobs.
-			metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Dec()
-			log.Println("Deleting stale job", j)
+			if !s.isDone() {
+				// If job didn't complete, the InFlight metric needs to be updated.
+				metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Dec()
+				log.Println("Deleting stale job", j, time.Since(updateTime), tr.cleanupDelay)
+			}
 			tr.lastModified = time.Now()
 			delete(tr.jobs, j)
 		} else {
