@@ -196,9 +196,7 @@ func (s *Status) State() State {
 }
 
 // LastUpdate returns the most recent update detail string.
-// NOTE: update field for Failed state is the error message, so
-// the previous StateInfo is used for LastUpdate.
-// TODO - is this the behavior we want?
+// If the detail is empty, returns the previous state detail.
 func (s *Status) LastUpdate() string {
 	lsi := s.LastStateInfo()
 	if lsi.State == Failed && len(s.History) > 1 {
