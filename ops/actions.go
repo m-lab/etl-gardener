@@ -35,19 +35,29 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 	m.AddAction(tracker.ParseComplete,
 		nil,
 		newStateFunc("-"),
-		tracker.Deduplicating,
-		"Changing to Deduplicating")
+		tracker.Loading,
+		"Changing to Loading")
 	// Hack to handle old jobs from previous gardener implementations
-	m.AddAction(tracker.Stabilizing,
+	m.AddAction(tracker.Loading,
 		nil,
-		newStateFunc("-"),
+		loadFunc,
 		tracker.Deduplicating,
-		"Changing to Deduplicating")
+		"Loading")
 	m.AddAction(tracker.Deduplicating,
 		nil,
 		dedupFunc,
-		tracker.Complete,
+		tracker.Copying,
 		"Deduplicating")
+	m.AddAction(tracker.Copying,
+		nil,
+		copyFunc,
+		tracker.Deleting,
+		"Copying")
+	m.AddAction(tracker.Deleting,
+		nil,
+		deleteFunc,
+		tracker.Complete,
+		"Deleting")
 	return m, nil
 }
 
@@ -83,6 +93,9 @@ func waitAndCheck(ctx context.Context, bqJob bqiface.Job, j tracker.Job, label s
 	if status.Err() != nil {
 		err := status.Err()
 		log.Println(label, err)
+		if len(status.Errors) > 0 {
+			log.Println(label, status.Errors[0])
+		}
 		metrics.WarningCount.WithLabelValues(
 			j.Experiment, j.Datatype,
 			label+"UnknownStatusError").Inc()
@@ -141,4 +154,115 @@ func dedupFunc(ctx context.Context, j tracker.Job) *Outcome {
 	}
 
 	return Success(j, msg)
+}
+
+// TODO improve test coverage?
+func loadFunc(ctx context.Context, j tracker.Job) *Outcome {
+	// This is the delay since entering the dedup state, due to monitor delay
+	// and retries.
+	//delay := time.Since(stateChangeTime).Round(time.Minute)
+
+	var bqJob bqiface.Job
+	// TODO pass in the JobWithTarget, and get this info from Target.
+	project := os.Getenv("PROJECT")
+	loadSource := fmt.Sprintf("gs://json-%s/%s/%s/%s",
+		project,
+		j.Experiment, j.Datatype, j.Date.Format("2006/01/02/*"))
+	qp, err := bq.NewQuerier(ctx, j, project, loadSource)
+	if err != nil {
+		log.Println(err)
+		// This terminates this job.
+		return Failure(j, err, "-")
+	}
+	bqJob, err = qp.LoadToTmp(ctx, false)
+	if err != nil {
+		log.Println(err)
+		// Try again soon.
+		return Retry(j, err, "-")
+	}
+	status, outcome := waitAndCheck(ctx, bqJob, j, "Load")
+	if !outcome.IsDone() {
+		return outcome
+	}
+
+	var msg string
+	stats := status.Statistics
+	if stats != nil {
+		opTime := stats.EndTime.Sub(stats.StartTime)
+		details := status.Statistics.Details
+		switch td := details.(type) {
+		case *bigquery.LoadStatistics:
+			metrics.FilesPerDateHistogram.WithLabelValues(
+				j.Experiment+"-json", j.Datatype, j.Date.Format("2006-01")).Observe(float64(td.InputFiles))
+			metrics.BytesPerDateHistogram.WithLabelValues(
+				j.Experiment+"-json", j.Datatype, j.Date.Format("2006-01")).Observe(float64(td.InputFileBytes))
+			msg = fmt.Sprintf("Load took %s (after %s waiting), %d rows with %d bytes, from %d files with %d bytes",
+				opTime.Round(100*time.Millisecond),
+				"xxx", //delay,
+				td.OutputRows, td.OutputBytes,
+				td.InputFiles, td.InputFileBytes)
+		default:
+			msg = "Load statistics unavailable"
+		}
+	}
+	log.Println(j, msg)
+	return Success(j, msg)
+}
+
+// TODO improve test coverage?
+func copyFunc(ctx context.Context, j tracker.Job) *Outcome {
+	// This is the delay since entering the dedup state, due to monitor delay
+	// and retries.
+	//delay := time.Since(stateChangeTime).Round(time.Minute)
+
+	var bqJob bqiface.Job
+	// TODO pass in the JobWithTarget, and get the base from the target.
+	qp, err := bq.NewQuerier(ctx, j, os.Getenv("PROJECT"), "")
+	if err != nil {
+		log.Println(err)
+		// This terminates this job.
+		return Failure(j, err, "-")
+	}
+	bqJob, err = qp.CopyToRaw(ctx, false)
+	if err != nil {
+		log.Println(err)
+		// Try again soon.
+		return Retry(j, err, "-")
+	}
+	status, outcome := waitAndCheck(ctx, bqJob, j, "Copy")
+	if !outcome.IsDone() {
+		return outcome
+	}
+
+	var msg string
+	stats := status.Statistics
+	if stats != nil {
+		opTime := stats.EndTime.Sub(stats.StartTime)
+		msg = fmt.Sprintf("Copy took %s (after %s waiting), %d MB Processed",
+			opTime.Round(100*time.Millisecond),
+			"xxx", //delay,
+			stats.TotalBytesProcessed/1000000)
+		log.Println(msg)
+	}
+	return Success(j, msg)
+}
+
+// TODO improve test coverage?
+func deleteFunc(ctx context.Context, j tracker.Job) *Outcome {
+	// TODO pass in the JobWithTarget, and get the base from the target.
+	qp, err := bq.NewQuerier(ctx, j, os.Getenv("PROJECT"), "")
+	if err != nil {
+		log.Println(err)
+		// This terminates this job.
+		return Failure(j, err, "-")
+	}
+	err = qp.DeleteTmp(ctx)
+	if err != nil {
+		log.Println(err)
+		// Try again soon.
+		return Retry(j, err, "-")
+	}
+
+	// TODO - add elapsed time to message.
+	return Success(j, "Successfully deleted partition")
 }
