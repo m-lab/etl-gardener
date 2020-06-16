@@ -17,11 +17,12 @@ import (
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
-// Queryer provides the interface for running bigquery operations.
-type Queryer interface {
-	QueryFor(key string) string
-	Run(ctx context.Context, key string, dryRun bool) (bqiface.Job, error)
+// OpsHandler provides the interface for running bigquery operations.
+type OpsHandler interface {
+	DedupQuery() string
+
 	LoadToTmp(ctx context.Context, dryRun bool) (bqiface.Job, error)
+	Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error)
 	CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, error)
 	DeleteTmp(ctx context.Context) error
 }
@@ -34,17 +35,17 @@ type queryer struct {
 	Date       string // Name of the partition field
 	Job        tracker.Job
 	// map key is the single field name, value is fully qualified name
-	Partition map[string]string
-	Order     string
+	PartitionKeys map[string]string
+	OrderKeys     string
 }
 
 // ErrDatatypeNotSupported is returned by Query for unsupported datatypes.
 var ErrDatatypeNotSupported = errors.New("Datatype not supported")
 
-// NewQuerier creates a suitable Querier for a Job.
+// NewQuerier creates a suitable OpsHandler for a Job.
 // The context is used to create a bigquery client, and should be kept alive while
 // the querier is in use.
-func NewQuerier(ctx context.Context, job tracker.Job, project string, loadSource string) (Queryer, error) {
+func NewQuerier(ctx context.Context, job tracker.Job, project string, loadSource string) (OpsHandler, error) {
 	c, err := bigquery.NewClient(ctx, project)
 	if err != nil {
 		return nil, err
@@ -54,28 +55,28 @@ func NewQuerier(ctx context.Context, job tracker.Job, project string, loadSource
 }
 
 // NewQuerierWithClient creates a suitable QueryParams for a Job.
-func NewQuerierWithClient(client bqiface.Client, job tracker.Job, project string, loadSource string) (Queryer, error) {
+func NewQuerierWithClient(client bqiface.Client, job tracker.Job, project string, loadSource string) (OpsHandler, error) {
 	switch job.Datatype {
 	case "annotation":
 		return &queryer{
-			client:     client,
-			LoadSource: loadSource,
-			Project:    project,
-			Date:       "date",
-			Job:        job,
-			Partition:  map[string]string{"id": "id"},
-			Order:      "",
+			client:        client,
+			LoadSource:    loadSource,
+			Project:       project,
+			Date:          "date",
+			Job:           job,
+			PartitionKeys: map[string]string{"id": "id"},
+			OrderKeys:     "",
 		}, nil
 
 	case "ndt7":
 		return &queryer{
-			client:     client,
-			LoadSource: loadSource,
-			Project:    project,
-			Date:       "date",
-			Job:        job,
-			Partition:  map[string]string{"id": "id"},
-			Order:      "",
+			client:        client,
+			LoadSource:    loadSource,
+			Project:       project,
+			Date:          "date",
+			Job:           job,
+			PartitionKeys: map[string]string{"id": "id"},
+			OrderKeys:     "",
 		}, nil
 
 		// TODO: enable tcpinfo again once it supports standard columns.
@@ -85,9 +86,9 @@ func NewQuerierWithClient(client bqiface.Client, job tracker.Job, project string
 		Project:   project,
 		Date:      "DATE(TestTime)",
 		Job:       job,
-		Partition: map[string]string{"uuid": "uuid", "Timestamp": "FinalSnapshot.Timestamp"},
+		PartitionKeys: map[string]string{"uuid": "uuid", "Timestamp": "FinalSnapshot.Timestamp"},
 		// TODO TaskFileName should be ArchiveURL once we update the schema.
-		Order: "ARRAY_LENGTH(Snapshots) DESC, ParseInfo.TaskFileName, ",
+		OrderKeys: "ARRAY_LENGTH(Snapshots) DESC, ParseInfo.TaskFileName, ",
 	}, nil
 	*/
 	default:
@@ -109,18 +110,14 @@ func (params queryer) makeQuery(t *template.Template) string {
 	return out.String()
 }
 
-// QueryFor returns the appropriate query in string form.
-func (params queryer) QueryFor(key string) string {
-	t, ok := queryTemplates[key]
-	if !ok {
-		return ""
-	}
-	return params.makeQuery(t)
+// DedupQuery returns the appropriate query in string form.
+func (params queryer) DedupQuery() string {
+	return params.makeQuery(dedupTemplate)
 }
 
 // Run executes a query constructed from a template.  It returns the bqiface.Job.
-func (params queryer) Run(ctx context.Context, key string, dryRun bool) (bqiface.Job, error) {
-	qs := params.QueryFor(key)
+func (params queryer) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+	qs := params.DedupQuery()
 	if len(qs) == 0 {
 		return nil, dataset.ErrNilQuery
 	}
@@ -205,17 +202,6 @@ func (params queryer) CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, 
 	return &xJob{j: j}, err
 }
 
-// Dedup executes a query that deletes duplicates from the destination table.
-func (params queryer) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
-	return params.Run(ctx, "dedup", dryRun)
-}
-
-// Cleanup executes a query that deletes the entire partition
-// from the tmp table.
-func (params queryer) Cleanup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
-	return params.Run(ctx, "cleanup", dryRun)
-}
-
 // TODO get the tmp_ and raw_ from the job Target?
 const tmpTable = "`{{.Project}}.tmp_{{.Job.Experiment}}.{{.Job.Datatype}}`"
 const rawTable = "`{{.Project}}.raw_{{.Job.Experiment}}.{{.Job.Datatype}}`"
@@ -235,11 +221,11 @@ AND NOT EXISTS (
   WITH keep AS (
   SELECT * EXCEPT(row_number) FROM (
     SELECT
-      {{range $k, $v := .Partition}}{{$v}}, {{end}}
+      {{range $k, $v := .PartitionKeys}}{{$v}}, {{end}}
 	  parser.Time,
       ROW_NUMBER() OVER (
-        PARTITION BY {{range $k, $v := .Partition}}{{$v}}, {{end}}date
-        ORDER BY {{.Order}} parser.Time DESC
+        PARTITION BY {{range $k, $v := .PartitionKeys}}{{$v}}, {{end}}date
+        ORDER BY {{.OrderKeys}} parser.Time DESC
       ) row_number
       FROM (
         SELECT * FROM ` + tmpTable + `
@@ -252,7 +238,7 @@ AND NOT EXISTS (
   # This matches against the keep table based on keys.  Sufficient select keys must be
   # used to distinguish the preferred row from the others.
   WHERE
-    {{range $k, $v := .Partition}}target.{{$v}} = keep.{{$k}} AND {{end}}
+    {{range $k, $v := .PartitionKeys}}target.{{$v}} = keep.{{$k}} AND {{end}}
     target.parser.Time = keep.Time
 )`))
 
