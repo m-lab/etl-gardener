@@ -13,7 +13,7 @@ import (
 
 func TestTemplate(t *testing.T) {
 	job := tracker.NewJob("bucket", "ndt", "annotation", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
-	q, err := bq.NewQuerier(context.Background(), job, "fake-project")
+	q, err := bq.NewQuerier(context.Background(), job, "fake-project", "")
 	rtx.Must(err, "dedup.Query failed")
 	qs := q.QueryFor("dedup")
 	if !strings.Contains(qs, "keep.id") {
@@ -36,11 +36,11 @@ func TestValidateQueries(t *testing.T) {
 	}
 	ctx := context.Background()
 	dataTypes := []string{"annotation", "ndt7"}
-	keys := []string{"dedup", "cleanup"} // TODO Add "preserve" query
+	keys := []string{"dedup"} // TODO Add "preserve" query
 	// Test for each datatype
 	for _, dataType := range dataTypes {
 		job := tracker.NewJob("bucket", "ndt", dataType, time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
-		qp, err := bq.NewQuerier(ctx, job, "mlab-testing")
+		qp, err := bq.NewQuerier(ctx, job, "mlab-testing", "")
 		if err != nil {
 			t.Fatal(dataType, err)
 		}
@@ -58,15 +58,15 @@ func TestValidateQueries(t *testing.T) {
 				}
 			})
 		}
-		t.Run(dataType+":copy", func(t *testing.T) {
-			j, err := qp.Copy(ctx, true)
-			if err != nil {
-				t.Fatal(t.Name(), err)
-			}
-			status := j.LastStatus()
-			if status.Err() != nil {
-				t.Fatal(t.Name(), status.Err())
-			}
-		})
+		//		t.Run(dataType+":copy", func(t *testing.T) {
+		//			j, err := qp.Copy(ctx, true)
+		//			if err != nil {
+		//				t.Fatal(t.Name(), err)
+		//			}
+		//			status := j.LastStatus()
+		//			if status.Err() != nil {
+		//				t.Fatal(t.Name(), status.Err())
+		//			}
+		//		})
 	}
 }
