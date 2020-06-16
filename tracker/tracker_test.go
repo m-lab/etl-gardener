@@ -108,9 +108,9 @@ func TestTrackerAddDelete(t *testing.T) {
 		t.Fatal("nil Tracker")
 	}
 
-	numJobs := 500
-	createJobs(t, tk, "500Jobs", "type", numJobs)
-	if tk.NumJobs() != 500 {
+	numJobs := 100
+	createJobs(t, tk, "100Jobs", "type", numJobs)
+	if tk.NumJobs() != 100 {
 		t.Fatal("Incorrect number of jobs", tk.NumJobs())
 	}
 
@@ -123,7 +123,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, 50*time.Millisecond)
 	must(t, err)
 
-	if restore.NumJobs() != 500 {
+	if restore.NumJobs() != 100 {
 		t.Fatal("Incorrect number of jobs", restore.NumJobs())
 	}
 
@@ -131,7 +131,7 @@ func TestTrackerAddDelete(t *testing.T) {
 		t.Error("Should not be any failed jobs")
 	}
 
-	completeJobs(t, tk, "500Jobs", "type", numJobs)
+	completeJobs(t, tk, "100Jobs", "type", numJobs)
 
 	// This tests proper behavior of cleanup with cleanupDelay.
 	jobs, _, _ := tk.GetState()
@@ -188,7 +188,7 @@ func TestUpdates(t *testing.T) {
 	must(t, tk.SetDetail(job, "foobar"))
 	status, err = tk.GetStatus(job)
 	must(t, err)
-	if status.LastUpdate() != "foobar" {
+	if status.Detail() != "foobar" {
 		t.Error("Incorrect detail", status.LastStateInfo())
 	}
 

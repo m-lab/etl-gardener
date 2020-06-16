@@ -144,8 +144,8 @@ func TestErrorHandler(t *testing.T) {
 	postAndExpect(t, url, http.StatusOK)
 	stat, err := tk.GetStatus(job)
 	must(t, err)
-	if stat.LastUpdate() != "error" {
-		t.Error("Expected error:", stat.LastUpdate())
+	if stat.Detail() != "error" {
+		t.Error("Expected error:", stat.Detail())
 	}
 	if stat.State() != tracker.ParseError {
 		t.Error("Wrong state:", stat)
