@@ -101,7 +101,7 @@ func TestOutcomeUpdate(t *testing.T) {
 
 	status, err := tk.GetStatus(job)
 	must(t, err)
-	if status.LastUpdate() != "foobar" {
-		t.Error(status.LastUpdate())
+	if status.Detail() != "foobar" {
+		t.Error(status.Detail())
 	}
 }

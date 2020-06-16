@@ -211,7 +211,7 @@ func (tr *Tracker) SetDetail(job Job, detail string) error {
 	if err != nil {
 		return err
 	}
-	status.UpdateDetail(detail)
+	status.SetDetail(detail)
 	status.UpdateCount++
 	return tr.UpdateJob(job, status)
 }
@@ -227,7 +227,7 @@ func (tr *Tracker) SetStatus(job Job, state State, detail string) error {
 		return err
 	}
 	last := status.LastStateInfo()
-	status.UpdateDetail(detail)
+	status.SetDetail(detail)
 
 	if state != last.State {
 		status.NewState(state)
@@ -264,7 +264,7 @@ func (tr *Tracker) SetJobError(job Job, errString string) error {
 	job.failureMetric(oldState, errString)
 	status.NewState(Failed)
 	// Set the final detail to include the prior state and error message.
-	status.UpdateDetail(fmt.Sprintf("%s: %s", oldState, errString))
+	status.SetDetail(fmt.Sprintf("%s: %s", oldState, errString))
 
 	return tr.UpdateJob(job, status)
 }
@@ -277,7 +277,7 @@ func (tr *Tracker) GetState() (JobMap, Job, time.Time) {
 	m := make(JobMap, len(tr.jobs))
 	for j, s := range tr.jobs {
 		// Remove any obsolete jobs.
-		updateTime := s.UpdateTime()
+		updateTime := s.DetailTime()
 		if (tr.expirationTime > 0 && time.Since(updateTime) > tr.expirationTime) ||
 			(s.isDone() && time.Since(updateTime) > tr.cleanupDelay) {
 			if !s.isDone() {

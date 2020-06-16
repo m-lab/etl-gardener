@@ -188,7 +188,7 @@ func TestUpdates(t *testing.T) {
 	must(t, tk.SetDetail(job, "foobar"))
 	status, err = tk.GetStatus(job)
 	must(t, err)
-	if status.LastUpdate() != "foobar" {
+	if status.Detail() != "foobar" {
 		t.Error("Incorrect detail", status.LastStateInfo())
 	}
 

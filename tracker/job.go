@@ -146,25 +146,25 @@ const (
 
 // StateInfo describes each state in processing history.
 type StateInfo struct {
-	State          State
-	Start          time.Time
-	LastUpdateTime time.Time
-	LastUpdate     string // status or error, e.g. last filename in Parsing state.
+	State      State     // const after creation
+	Start      time.Time // const after creation
+	DetailTime time.Time
+	Detail     string // status or error, e.g. last filename in Parsing state.
 }
 
 // newStateInfo returns a properly initialized StateInfo
 func newStateInfo(state State) StateInfo {
 	now := time.Now()
-	si := StateInfo{State: state, Start: now, LastUpdateTime: now}
+	si := StateInfo{State: state, Start: now, DetailTime: now}
 	return si
 }
 
-// update changes the update time and detail string (if != "-").
+// setDetail changes the setDetail time and detail string (if != "-").
 // NOT THREADSAFE.  Caller must control access.
-func (si *StateInfo) update(detail string) {
-	si.LastUpdateTime = time.Now()
+func (si *StateInfo) setDetail(detail string) {
+	si.DetailTime = time.Now()
 	if detail != "-" {
-		si.LastUpdate = detail
+		si.Detail = detail
 	}
 }
 
@@ -194,23 +194,23 @@ func (s *Status) State() State {
 	return s.LastStateInfo().State
 }
 
-// LastUpdate returns the most recent update detail string.
+// Detail returns the most recent detail string.
 // If the detail is empty, returns the previous state detail.
-func (s *Status) LastUpdate() string {
+func (s *Status) Detail() string {
 	lsi := s.LastStateInfo()
-	if len(lsi.LastUpdate) == 0 && len(s.History) > 1 {
+	if len(lsi.Detail) == 0 && len(s.History) > 1 {
 		lsi = s.History[len(s.History)-2]
 	}
-	return lsi.LastUpdate
+	return lsi.Detail
 }
 
-// UpdateTime returns the timestamp of the most recent update.
-func (s *Status) UpdateTime() time.Time {
-	return s.LastStateInfo().LastUpdateTime
+// DetailTime returns the timestamp of the most recent detail update.
+func (s *Status) DetailTime() time.Time {
+	return s.LastStateInfo().DetailTime
 }
 
-// LastStateChangeTime returns the start time of the current state.
-func (s *Status) LastStateChangeTime() time.Time {
+// StateChangeTime returns the start time of the current state.
+func (s *Status) StateChangeTime() time.Time {
 	return s.LastStateInfo().Start
 }
 
@@ -219,9 +219,9 @@ func (s *Status) StartTime() time.Time {
 	return s.History[0].Start
 }
 
-// UpdateDetail replaces the most recent StateInfo with copy containing new detail.
+// SetDetail replaces the most recent StateInfo with copy containing new detail.
 // It returns the previous StateInfo value.
-func (s *Status) UpdateDetail(detail string) StateInfo {
+func (s *Status) SetDetail(detail string) StateInfo {
 	result := s.LastStateInfo()
 	if detail != "-" {
 		// The History is not deep copied, so we do copy on write
@@ -231,7 +231,7 @@ func (s *Status) UpdateDetail(detail string) StateInfo {
 
 		last := len(h) - 1
 		lsi := &h[last]
-		lsi.update(detail)
+		lsi.setDetail(detail)
 		// Replace the entire history
 		s.History = h
 	}
@@ -241,7 +241,7 @@ func (s *Status) UpdateDetail(detail string) StateInfo {
 func (s *Status) Error() string {
 	ls := s.LastStateInfo()
 	if ls.State == Failed {
-		return ls.LastUpdate
+		return ls.Detail
 	}
 	return ""
 }
@@ -263,7 +263,7 @@ func (s *Status) updateMetrics(job Job) {
 }
 
 // NewState adds a new StateInfo to the status.
-// If state is unchanged, it just logs a waring.
+// If state is unchanged, it just logs a warning.
 // Returns the previous StateInfo
 func (s *Status) NewState(state State) StateInfo {
 	old := s.LastStateInfo()
@@ -278,9 +278,9 @@ func (s *Status) NewState(state State) StateInfo {
 func (s Status) String() string {
 	last := s.LastStateInfo()
 	return fmt.Sprintf("%s %s (%s)",
-		s.UpdateTime().Format("01/02~15:04:05"),
+		s.DetailTime().Format("01/02~15:04:05"),
 		last.State,
-		last.LastUpdate)
+		last.Detail)
 }
 
 func (s *Status) isDone() bool {
@@ -289,14 +289,14 @@ func (s *Status) isDone() bool {
 
 // Elapsed returns the elapsed time of the Job, rounded to nearest second.
 func (s *Status) Elapsed() time.Duration {
-	return s.UpdateTime().Sub(s.History[0].Start).Round(time.Second)
+	return s.DetailTime().Sub(s.History[0].Start).Round(time.Second)
 }
 
 // NewStatus creates a new Status with provided parameters.
 func NewStatus() Status {
 	now := time.Now()
 	return Status{
-		History: []StateInfo{{State: Init, Start: now, LastUpdateTime: now}},
+		History: []StateInfo{{State: Init, Start: now, DetailTime: now}},
 	}
 }
 
@@ -353,7 +353,7 @@ var jobsTemplate = template.Must(template.New("").Parse(
 		<tr>
 			<th> Job </th>
 			<th> Elapsed </th>
-			<th> UpdateTime </th>
+			<th> Update Time </th>
 			<th> State </th>
 			<th> Detail </th>
 			<th> Updates </th>
@@ -363,12 +363,12 @@ var jobsTemplate = template.Must(template.New("").Parse(
 		<tr>
 			<td> {{.Job}} </td>
 			<td> {{.Status.Elapsed}} </td>
-			<td> {{.Status.UpdateTime.Format "01/02~15:04:05"}} </td>
+			<td> {{.Status.DetailTime.Format "01/02~15:04:05"}} </td>
 			<td {{ if or (eq .Status.State "%s") (eq .Status.State "%s")}}
 					style="color: red;"
 					{{ else }}{{ end }}>
 			  {{.Status.State}} </td>
-			<td> {{.Status.LastUpdate}} </td>
+			<td> {{.Status.Detail}} </td>
 			<td> {{.Status.UpdateCount}} </td>
 			<td> {{.Status.Error}} </td>
 		</tr>
