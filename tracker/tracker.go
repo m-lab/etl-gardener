@@ -96,7 +96,7 @@ func (tr *Tracker) NumFailed() int {
 
 // Sync snapshots the full job state and saves it to the datastore client IFF it has changed.
 // Returns time last saved, which may or may not be updated.
-func (tr *Tracker) Sync(lastSave time.Time) (time.Time, error) {
+func (tr *Tracker) Sync(ctx context.Context, lastSave time.Time) (time.Time, error) {
 	jobs, lastInit, lastMod := tr.GetState()
 	if lastMod.Before(lastSave) {
 		logx.Debug.Println("Skipping save", lastMod, lastSave)
@@ -111,7 +111,7 @@ func (tr *Tracker) Sync(lastSave time.Time) (time.Time, error) {
 	// Save the full state.
 	lastTry := time.Now()
 	state := saverStruct{time.Now(), lastInit, jsonJobs}
-	ctx, cf := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cf := context.WithTimeout(ctx, 10*time.Second)
 	defer cf()
 	_, err = tr.client.Put(ctx, tr.dsKey, &state)
 
@@ -125,9 +125,11 @@ func (tr *Tracker) saveEvery(interval time.Duration) {
 	tr.ticker = time.NewTicker(interval)
 	go func() {
 		lastSave := time.Time{}
+		// TODO - is there a better source for this context?
+		ctx := context.Background()
 		for range tr.ticker.C {
 			var err error
-			lastSave, err = tr.Sync(lastSave)
+			lastSave, err = tr.Sync(ctx, lastSave)
 			if err != nil {
 				log.Println(err)
 			}

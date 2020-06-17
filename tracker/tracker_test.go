@@ -95,6 +95,7 @@ func TestJobPath(t *testing.T) {
 }
 
 func TestTrackerAddDelete(t *testing.T) {
+	ctx := context.Background()
 	logx.LogxDebug.Set("true")
 
 	client := dsfake.NewClient()
@@ -102,7 +103,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	dsKey.Namespace = "gardener"
 	defer must(t, cleanup(client, dsKey))
 
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, time.Second)
+	tk, err := tracker.InitTracker(ctx, client, dsKey, 0, 0, time.Second)
 	must(t, err)
 	if tk == nil {
 		t.Fatal("nil Tracker")
@@ -115,7 +116,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	}
 
 	log.Println("Calling Sync")
-	if _, err := tk.Sync(time.Time{}); err != nil {
+	if _, err := tk.Sync(ctx, time.Time{}); err != nil {
 		must(t, err)
 	}
 	// Check that the sync (and InitTracker) work.
@@ -154,7 +155,7 @@ func TestTrackerAddDelete(t *testing.T) {
 		time.Sleep(time.Millisecond)
 		tk.GetState()
 	}
-	if _, err := tk.Sync(time.Time{}); err != nil {
+	if _, err := tk.Sync(ctx, time.Time{}); err != nil {
 		must(t, err)
 	}
 
