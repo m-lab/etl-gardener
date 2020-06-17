@@ -67,7 +67,7 @@ func (y *YesterdaySource) nextJob(ctx context.Context) *tracker.JobWithTarget {
 	return &job
 }
 
-func initYesterday(saver persistence.Saver, delay time.Duration, specs []tracker.JobWithTarget) (*YesterdaySource, error) {
+func initYesterday(ctx context.Context, saver persistence.Saver, delay time.Duration, specs []tracker.JobWithTarget) (*YesterdaySource, error) {
 	if saver == nil {
 		return nil, ErrNilParameter
 	}
@@ -83,7 +83,7 @@ func initYesterday(saver persistence.Saver, delay time.Duration, specs []tracker
 	}
 
 	// Recover the date from datastore.
-	ctx, cf := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cf := context.WithTimeout(ctx, 5*time.Second)
 	defer cf()
 	err := saver.Fetch(ctx, &src)
 	if err != nil {
@@ -224,17 +224,15 @@ func (svc *Service) recoverDate(ctx context.Context) {
 var ErrInvalidStartDate = errors.New("Invalid start date")
 
 // NewJobService creates the default job service.
-func NewJobService(tk jobAdder, startDate time.Time,
+// Context is used for retrieving state from datastore.
+func NewJobService(ctx context.Context, tk jobAdder, startDate time.Time,
 	targetBase string, sources []config.SourceConfig,
 	saver persistence.Saver,
 ) (*Service, error) {
 	if startDate.Equal(time.Time{}) {
 		return nil, ErrInvalidStartDate
 	}
-	if tk == nil {
-		return nil, ErrNilParameter
-	}
-	if saver == nil {
+	if tk == nil || ctx == nil || saver == nil {
 		return nil, ErrNilParameter
 	}
 
@@ -261,7 +259,7 @@ func NewJobService(tk jobAdder, startDate time.Time,
 		log.Fatal("No jobs specified")
 	}
 
-	yesterday, err := initYesterday(saver, 6*time.Hour, specs)
+	yesterday, err := initYesterday(ctx, saver, 6*time.Hour, specs)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +272,7 @@ func NewJobService(tk jobAdder, startDate time.Time,
 		yesterday: yesterday,
 	}
 
-	svc.recoverDate(context.Background())
+	svc.recoverDate(ctx)
 
 	return &svc, nil
 }

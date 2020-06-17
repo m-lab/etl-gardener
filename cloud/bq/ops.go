@@ -37,8 +37,10 @@ type queryer struct {
 var ErrDatatypeNotSupported = errors.New("Datatype not supported")
 
 // NewQuerier creates a suitable QueryParams for a Job.
-func NewQuerier(job tracker.Job, project string) (Queryer, error) {
-	c, err := bigquery.NewClient(context.Background(), project)
+// The context is used to create a bigquery client, and should be kept alive while
+// the querier is in use.
+func NewQuerier(ctx context.Context, job tracker.Job, project string) (Queryer, error) {
+	c, err := bigquery.NewClient(ctx, project)
 	if err != nil {
 		return nil, err
 	}

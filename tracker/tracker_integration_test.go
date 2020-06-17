@@ -17,7 +17,9 @@ import (
 // This test uses an actual datastore client.
 // It should generally be run with the datastore emulator.
 func TestWithDatastore(t *testing.T) {
-	dsc, err := datastore.NewClient(context.Background(), "mlab-testing")
+	ctx := context.Background()
+
+	dsc, err := datastore.NewClient(ctx, "mlab-testing")
 	must(t, err)
 	client := dsiface.AdaptClient(dsc)
 
@@ -27,7 +29,7 @@ func TestWithDatastore(t *testing.T) {
 	// quite a while to propogate.
 	defer must(t, cleanup(client, dsKey))
 
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, 0)
+	tk, err := tracker.InitTracker(ctx, client, dsKey, 0, 0, 0)
 	must(t, err)
 	if tk == nil {
 		t.Fatal("nil Tracker")
@@ -40,10 +42,10 @@ func TestWithDatastore(t *testing.T) {
 	}
 
 	log.Println("Calling Sync")
-	_, err = tk.Sync(time.Time{})
+	_, err = tk.Sync(ctx, time.Time{})
 	must(t, err)
 	// Check that the sync (and InitTracker) work.
-	restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, 0)
+	restore, err := tracker.InitTracker(ctx, client, dsKey, 0, 0, 0)
 	must(t, err)
 
 	if restore.NumJobs() != 500 {
@@ -52,7 +54,7 @@ func TestWithDatastore(t *testing.T) {
 
 	completeJobs(t, tk, "500Jobs", "type", numJobs)
 
-	_, err = tk.Sync(time.Time{})
+	_, err = tk.Sync(ctx, time.Time{})
 	must(t, err)
 
 	if tk.NumJobs() != 0 {

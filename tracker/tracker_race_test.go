@@ -25,6 +25,8 @@ func TestConcurrentUpdates(t *testing.T) {
 		t.Skip("Skipping for -short")
 	}
 
+	ctx := context.Background()
+
 	client := dsfake.NewClient()
 	dsKey := datastore.NameKey("TestConcurrentUpdates", "jobs", nil)
 	dsKey.Namespace = "gardener"
@@ -32,7 +34,7 @@ func TestConcurrentUpdates(t *testing.T) {
 
 	// For testing, push to the saver every 5 milliseconds.
 	saverInterval := 5 * time.Millisecond
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, saverInterval, 0, 0)
+	tk, err := tracker.InitTracker(ctx, client, dsKey, saverInterval, 0, 0)
 	must(t, err)
 
 	jobs := 20
@@ -74,7 +76,7 @@ func TestConcurrentUpdates(t *testing.T) {
 
 	// If verbose, dump the final state.
 	if testing.Verbose() {
-		_, err := tk.Sync(time.Time{})
+		_, err := tk.Sync(ctx, time.Time{})
 		must(t, err)
 		restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, 0)
 		must(t, err)
