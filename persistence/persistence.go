@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"context"
+	"log"
 	"reflect"
 	"time"
 
@@ -11,7 +12,12 @@ import (
 // StateObject defines the interface for objects to be saved/retrieved from datastore.
 type StateObject interface {
 	GetName() string
-	GetKind() string // Should be implemented in the actual type, as return reflect.TypeOf(o).Name()
+	// Should be implemented in the actual type, as
+	// func (o ConcreteType) GetKind() string {
+	//   t := reflect.TypeOf(o)
+	//   return t.PkgPath() + t.Name()
+	// }
+	GetKind() string
 }
 
 // Base is the base for persistent objects.  All StateObjects should embed
@@ -66,6 +72,7 @@ func (ds *DatastoreSaver) Save(ctx context.Context, o StateObject) error {
 	defer cancel()
 	_, err := ds.Client.Put(ctx, ds.key(o), o)
 	if err != nil {
+		log.Println("Save error", err, ds.key(o))
 		return err
 	}
 	return nil
@@ -77,6 +84,7 @@ func (ds *DatastoreSaver) Delete(ctx context.Context, o StateObject) error {
 	defer cancel()
 	err := ds.Client.Delete(ctx, ds.key(o))
 	if err != nil {
+		log.Println("Delete error", err, ds.key(o))
 		return err
 	}
 	return nil
@@ -95,6 +103,7 @@ func (ds *DatastoreSaver) FetchAll(ctx context.Context, o StateObject) ([]*datas
 	q := datastore.NewQuery(o.GetKind()).Namespace(ds.Namespace)
 	keys, err := ds.Client.GetAll(ctx, q.KeysOnly(), nil)
 	if err != nil {
+		log.Println("FetchAll error", err)
 		return nil, nil, err
 	}
 	// Passing .Interface() to GetAll doesn't work, whether the slice is empty
@@ -108,6 +117,7 @@ func (ds *DatastoreSaver) FetchAll(ctx context.Context, o StateObject) ([]*datas
 	objs := reflect.MakeSlice(reflect.SliceOf(reflect.TypeOf(o)), len(keys), len(keys)).Interface()
 	err = ds.Client.GetMulti(ctx, keys, objs)
 	if err != nil {
+		log.Println(err)
 		return nil, nil, err
 	}
 	return keys, objs, err
