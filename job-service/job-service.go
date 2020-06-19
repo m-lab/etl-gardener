@@ -61,7 +61,6 @@ func (y *YesterdaySource) nextJob(ctx context.Context) *tracker.JobWithTarget {
 		ctx, cf := context.WithTimeout(ctx, 5*time.Second)
 		defer cf()
 		log.Println("Saving", y)
-		y.saver.Save(ctx, y)
 		err := y.saver.Save(ctx, y)
 		if err != nil {
 			log.Println(err)
@@ -105,16 +104,13 @@ func (y YesterdaySource) GetName() string {
 
 // GetKind implements StateObject.GetKind
 func (y YesterdaySource) GetKind() string {
-	// This copies the lock, but does not use it.
-	t := reflect.TypeOf(y)
-	return t.PkgPath() + t.Name()
+	return reflect.TypeOf(y).String()
 }
 
 // Service contains all information needed to provide a job service.
 // It iterates through successive dates, processing that date from
 // all TypeSources in the source bucket.
 type Service struct {
-	//persistence.Base
 	jobSpecs []tracker.JobWithTarget // The job prefixes to be iterated through.
 
 	saver persistence.Saver // This injected to implement persistence.
@@ -126,7 +122,7 @@ type Service struct {
 
 	// All fields above are const after initialization.
 	// All fields below are protected by *lock*
-	lock sync.Mutex
+	lock *sync.Mutex
 
 	// The Date is exported for persistence.  It is the only field
 	// that is recovered after restart.  All others are injected
@@ -275,6 +271,7 @@ func NewJobService(ctx context.Context, tk jobAdder, startDate time.Time,
 		saver:     saver,
 		jobSpecs:  specs,
 		startDate: startDate,
+		lock:      &sync.Mutex{},
 		nextIndex: 0,
 		yesterday: yesterday,
 	}
@@ -293,7 +290,5 @@ func (svc Service) GetName() string {
 
 // GetKind implements StateObject.GetKind
 func (svc Service) GetKind() string {
-	// This copies the lock, but does not use it.
-	t := reflect.TypeOf(svc)
-	return t.PkgPath() + t.Name()
+	return reflect.TypeOf(svc).String()
 }

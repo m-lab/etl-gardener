@@ -14,8 +14,7 @@ type StateObject interface {
 	GetName() string
 	// Should be implemented in the actual type, as
 	// func (o ConcreteType) GetKind() string {
-	//   t := reflect.TypeOf(o)
-	//   return t.PkgPath() + t.Name()
+	//   return reflect.TypeOf(o).String()
 	// }
 	GetKind() string
 }
