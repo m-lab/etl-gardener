@@ -83,7 +83,7 @@ func waitAndCheck(ctx context.Context, bqJob bqiface.Job, j tracker.Job, label s
 			// We don't know the problem...
 		}
 		// Not googleapi.Error, OR not streaming buffer problem.
-		log.Println(label, err)
+		log.Println(j, label, err)
 		metrics.WarningCount.WithLabelValues(
 			j.Experiment, j.Datatype,
 			label+"UnknownError").Inc()
@@ -92,9 +92,9 @@ func waitAndCheck(ctx context.Context, bqJob bqiface.Job, j tracker.Job, label s
 	}
 	if status.Err() != nil {
 		err := status.Err()
-		log.Println(label, err)
-		if len(status.Errors) > 0 {
-			log.Println(label, status.Errors[0])
+		log.Println(j, label, err)
+		for i := range status.Errors {
+			log.Println("---", j, label, status.Errors[i])
 		}
 		metrics.WarningCount.WithLabelValues(
 			j.Experiment, j.Datatype,
@@ -154,6 +154,60 @@ func dedupFunc(ctx context.Context, j tracker.Job) *Outcome {
 	}
 
 	return Success(j, msg)
+}
+
+func handleLoadError(label string, j tracker.Job, status *bigquery.JobStatus) *Outcome {
+	err := status.Err()
+	log.Println(label, err)
+	msg := "unknown error"
+	for _, e := range status.Errors {
+		if strings.Contains(e.Message, "Please look into") {
+			continue
+		}
+		if strings.Contains(e.Message, "No such field:") {
+			log.Printf("--- %s: %s -- %s", label, e.Message, e.Location)
+			metrics.WarningCount.WithLabelValues(
+				j.Experiment, j.Datatype,
+				label+"GCS load failed").Inc()
+			msg = e.Message
+			continue
+		}
+		log.Println("---", label, e)
+		metrics.WarningCount.WithLabelValues(
+			j.Experiment, j.Datatype,
+			label+"UnknownStatusError").Inc()
+	}
+
+	// This will terminate this job.
+	return Failure(j, err, msg)
+}
+
+func handleWaitError(label string, j tracker.Job, status *bigquery.JobStatus) *Outcome {
+	err := status.Err()
+	log.Println(label, err)
+	for i := range status.Errors {
+		log.Println("---", label, status.Errors[i])
+	}
+	metrics.WarningCount.WithLabelValues(
+		j.Experiment, j.Datatype,
+		label+"UnknownStatusError").Inc()
+
+	// This will terminate this job.
+	return Failure(j, err, "unknown error")
+}
+
+// Returns non-nil Outcome even if successful.
+func waitForLoad(ctx context.Context, bqJob bqiface.Job, j tracker.Job, label string) (*bigquery.JobStatus, *Outcome) {
+	status, err := bqJob.Wait(ctx)
+	if err != nil {
+		outcome := handleWaitError(label, j, status)
+		return status, outcome
+	}
+	if status.Err() != nil {
+		outcome := handleLoadError(label, j, status)
+		return status, outcome
+	}
+	return status, Success(j, "-")
 }
 
 // TODO improve test coverage?
