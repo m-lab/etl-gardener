@@ -12,7 +12,10 @@ import (
 	"time"
 
 	"bou.ke/monkey"
+	"cloud.google.com/go/datastore"
 	"github.com/go-test/deep"
+
+	"github.com/m-lab/go/rtx"
 
 	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/job-service"
@@ -350,5 +353,38 @@ func TestEarlyWrapping(t *testing.T) {
 				t.Error(err)
 			}
 		}
+	}
+}
+
+func assertYesterdayStateObject(so persistence.StateObject) {
+	assertYesterdayStateObject(&job.YesterdaySource{})
+}
+
+func TestPersistence(t *testing.T) {
+	ctx := context.Background()
+	ds, err := persistence.NewDatastoreSaver(ctx, "mlab-testing")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now()
+	svc := job.Service{Date: now}
+	err = ds.Save(ctx, &svc)
+	rtx.Must(err, "Save error")
+	t.Log(&svc)
+
+	svc.Date = time.Time{}
+	err = ds.Fetch(ctx, &svc)
+	rtx.Must(err, "Fetch error")
+	t.Log(&svc)
+	if svc.Date.Unix() != now.Unix() {
+		t.Error("Date should be now", &svc, now.Unix(), svc.Date.Unix())
+	}
+
+	err = ds.Delete(ctx, &svc)
+	rtx.Must(err, "Delete error")
+	err = ds.Fetch(ctx, &svc)
+	if err != datastore.ErrNoSuchEntity {
+		t.Fatal("Should have errored", err)
 	}
 }

@@ -60,8 +60,11 @@ func (y *YesterdaySource) nextJob(ctx context.Context) *tracker.JobWithTarget {
 
 		ctx, cf := context.WithTimeout(ctx, 5*time.Second)
 		defer cf()
-		log.Println("Saving", y)
-		y.saver.Save(ctx, y)
+		log.Println("Saving", y.GetName(), y.GetKind(), y.Date.Format("2006-01-02"))
+		err := y.saver.Save(ctx, y)
+		if err != nil {
+			log.Println(err)
+		}
 	}
 
 	return &job
@@ -95,13 +98,13 @@ func initYesterday(ctx context.Context, saver persistence.Saver, delay time.Dura
 }
 
 // GetName implements StateObject.GetName
-func (y *YesterdaySource) GetName() string {
+func (y YesterdaySource) GetName() string {
 	return "singleton" // There is only one job service.
 }
 
 // GetKind implements StateObject.GetKind
-func (y *YesterdaySource) GetKind() string {
-	return reflect.TypeOf(y).Name()
+func (y YesterdaySource) GetKind() string {
+	return reflect.TypeOf(y).String()
 }
 
 // Service contains all information needed to provide a job service.
@@ -119,7 +122,7 @@ type Service struct {
 
 	// All fields above are const after initialization.
 	// All fields below are protected by *lock*
-	lock sync.Mutex
+	lock *sync.Mutex
 
 	// The Date is exported for persistence.  It is the only field
 	// that is recovered after restart.  All others are injected
@@ -160,6 +163,7 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 		// Note that this will block other calls to NextJob
 		ctx, cf := context.WithTimeout(ctx, 5*time.Second)
 		defer cf()
+		log.Println("Saving", svc.GetName(), svc.GetKind(), svc.Date.Format("2006-01-02"))
 		err := svc.saver.Save(ctx, svc)
 		if err != nil {
 			log.Println(err)
@@ -268,6 +272,7 @@ func NewJobService(ctx context.Context, tk jobAdder, startDate time.Time,
 		saver:     saver,
 		jobSpecs:  specs,
 		startDate: startDate,
+		lock:      &sync.Mutex{},
 		nextIndex: 0,
 		yesterday: yesterday,
 	}
@@ -280,11 +285,11 @@ func NewJobService(ctx context.Context, tk jobAdder, startDate time.Time,
 // ---------- Implement persistence.StateObject -------------
 
 // GetName implements StateObject.GetName
-func (svc *Service) GetName() string {
+func (svc Service) GetName() string {
 	return "singleton" // There is only one job service.
 }
 
 // GetKind implements StateObject.GetKind
-func (svc *Service) GetKind() string {
-	return reflect.TypeOf(svc).Name()
+func (svc Service) GetKind() string {
+	return reflect.TypeOf(svc).String()
 }
