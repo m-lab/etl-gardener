@@ -223,7 +223,7 @@ func loadFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 	loadSource := fmt.Sprintf("gs://json-%s/%s/%s/%s",
 		project,
 		j.Experiment, j.Datatype, j.Date.Format("2006/01/02/*"))
-	qp, err := bq.NewQuerier(ctx, j, project, loadSource)
+	qp, err := bq.NewTableOps(ctx, j, project, loadSource)
 	if err != nil {
 		log.Println(err)
 		// This terminates this job.
@@ -272,7 +272,7 @@ func copyFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 
 	var bqJob bqiface.Job
 	// TODO pass in the JobWithTarget, and get the base from the target.
-	qp, err := bq.NewQuerier(ctx, j, os.Getenv("PROJECT"), "")
+	qp, err := bq.NewTableOps(ctx, j, os.Getenv("PROJECT"), "")
 	if err != nil {
 		log.Println(err)
 		// This terminates this job.
@@ -305,7 +305,7 @@ func copyFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 // TODO improve test coverage?
 func deleteFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
 	// TODO pass in the JobWithTarget, and get the base from the target.
-	qp, err := bq.NewQuerier(ctx, j, os.Getenv("PROJECT"), "")
+	qp, err := bq.NewTableOps(ctx, j, os.Getenv("PROJECT"), "")
 	if err != nil {
 		log.Println(err)
 		// This terminates this job.
