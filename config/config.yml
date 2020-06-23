@@ -13,7 +13,12 @@ sources:
   experiment: ndt
   datatype: annotation
   target: tmp_ndt.annotation
-#- bucket: archive-measurement-lab
-#  experiment: ndt
-#  datatype: tcpinfo
-#  target: tmp_ndt.tcpinfo
+- bucket: archive-measurement-lab
+  experiment: ndt
+  datatype: ndt5
+  target: tmp_ndt.ndt5
+- bucket: archive-measurement-lab
+  experiment: ndt
+  datatype: tcpinfo
+  filter: .*T[0-9]{6}\.00.*Z.* # Process only 1/100 of data.
+  target: tmp_ndt.tcpinfo

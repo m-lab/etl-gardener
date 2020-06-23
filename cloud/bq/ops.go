@@ -68,6 +68,17 @@ func NewQuerierWithClient(client bqiface.Client, job tracker.Job, project string
 			OrderKeys:     "",
 		}, nil
 
+	case "ndt5":
+		return &queryer{
+			client:        client,
+			LoadSource:    loadSource,
+			Project:       project,
+			Date:          "DATE(log_time)",
+			Job:           job,
+			PartitionKeys: map[string]string{"test_id": "test_id"},
+			OrderKeys:     "",
+		}, nil
+
 	case "ndt7":
 		return &queryer{
 			client:        client,
@@ -80,17 +91,18 @@ func NewQuerierWithClient(client bqiface.Client, job tracker.Job, project string
 		}, nil
 
 		// TODO: enable tcpinfo again once it supports standard columns.
-	/*case "tcpinfo":
-	return &queryer{
-		client:    client,
-		Project:   project,
-		Date:      "DATE(TestTime)",
-		Job:       job,
-		PartitionKeys: map[string]string{"uuid": "uuid", "Timestamp": "FinalSnapshot.Timestamp"},
-		// TODO TaskFileName should be ArchiveURL once we update the schema.
-		OrderKeys: "ARRAY_LENGTH(Snapshots) DESC, ParseInfo.TaskFileName, ",
-	}, nil
-	*/
+	case "tcpinfo":
+		return &queryer{
+			client:        client,
+			LoadSource:    loadSource,
+			Project:       project,
+			Date:          "DATE(TestTime)",
+			Job:           job,
+			PartitionKeys: map[string]string{"uuid": "uuid", "Timestamp": "FinalSnapshot.Timestamp"},
+			// TODO TaskFileName should be ArchiveURL once we update the schema.
+			OrderKeys: "ARRAY_LENGTH(Snapshots) DESC, ParseInfo.TaskFileName, ",
+		}, nil
+
 	default:
 		return nil, ErrDatatypeNotSupported
 	}
@@ -112,7 +124,14 @@ func (params queryer) makeQuery(t *template.Template) string {
 
 // DedupQuery returns the appropriate query in string form.
 func (params queryer) DedupQuery() string {
-	return params.makeQuery(dedupTemplate)
+	switch params.Job.Datatype {
+	case "ndt5":
+		fallthrough
+	case "tcpinfo":
+		return params.makeQuery(oldDedupTemplate)
+	default:
+		return params.makeQuery(dedupTemplate)
+	}
 }
 
 // Run executes a query constructed from a template.  It returns the bqiface.Job.
@@ -205,6 +224,42 @@ func (params queryer) CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, 
 // TODO get the tmp_ and raw_ from the job Target?
 const tmpTable = "`{{.Project}}.tmp_{{.Job.Experiment}}.{{.Job.Datatype}}`"
 const rawTable = "`{{.Project}}.raw_{{.Job.Experiment}}.{{.Job.Datatype}}`"
+
+var oldDedupTemplate = template.Must(template.New("").Parse(`
+#standardSQL
+# Delete all duplicate rows based on key and prefered priority ordering.
+# This is resource intensive for tcpinfo - 20 slot hours for 12M rows with 250M snapshots,
+# roughly proportional to the memory footprint of the table partition.
+# The query is very cheap if there are no duplicates.
+DELETE
+FROM ` + tmpTable + ` AS target
+WHERE {{.Date}} = "{{.Job.Date.Format "2006-01-02"}}"
+# This identifies all rows that don't match rows to preserve.
+AND NOT EXISTS (
+  # This creates list of rows to preserve, based on key and priority.
+  WITH keep AS (
+  SELECT * EXCEPT(row_number) FROM (
+	SELECT
+      {{range $k, $v := .PartitionKeys}}{{$v}}, {{end}}
+	  parseInfo.ParseTime,
+      ROW_NUMBER() OVER (
+        PARTITION BY {{range $k, $v := .PartitionKeys}}{{$v}}, {{end}} {{.Date}}
+        ORDER BY {{.OrderKeys}} ParseInfo.ParseTime DESC
+      ) row_number
+      FROM (
+        SELECT * FROM ` + tmpTable + `
+        WHERE {{.Date}} = "{{.Job.Date.Format "2006-01-02"}}"
+      )
+    )
+    WHERE row_number = 1
+  )
+  SELECT * FROM keep
+  # This matches against the keep table based on keys.  Sufficient select keys must be
+  # used to distinguish the preferred row from the others.
+  WHERE
+    {{range $k, $v := .PartitionKeys}}target.{{$v}} = keep.{{$k}} AND {{end}}
+    target.ParseInfo.ParseTime = keep.ParseTime
+)`))
 
 var dedupTemplate = template.Must(template.New("").Parse(`
 #standardSQL

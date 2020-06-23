@@ -56,13 +56,13 @@ func TestStandardMonitor(t *testing.T) {
 	// The real dedup action should fail on unknown datatype.
 	go m.Watch(ctx, 50*time.Millisecond)
 
-	failTime := time.Now().Add(30 * time.Second)
+	failTime := time.Now().Add(20 * time.Second)
 
-	for time.Now().Before(failTime) && (tk.NumJobs() > 2 || tk.NumFailed() < 2) {
+	for time.Now().Before(failTime) && (tk.NumJobs() > 2 || tk.NumFailed() < 1) {
 		time.Sleep(time.Millisecond)
 	}
-	if tk.NumFailed() != 2 {
-		t.Error("Expected NumFailed = 2:", tk.NumFailed())
+	if tk.NumFailed() != 1 {
+		t.Error("Expected NumFailed = 1:", tk.NumFailed())
 	}
 	if tk.NumJobs() != 2 {
 		t.Error("Expected NumJobs = 2:", tk.NumJobs())

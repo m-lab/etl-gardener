@@ -35,7 +35,7 @@ func TestValidateQueries(t *testing.T) {
 		t.Log("Skipping test for --short")
 	}
 	ctx := context.Background()
-	dataTypes := []string{"annotation", "ndt7"}
+	dataTypes := []string{"annotation", "ndt7", "tcpinfo", "ndt5"}
 	// TODO Add "preserve" query
 	// Test for each datatype
 	for _, dataType := range dataTypes {
