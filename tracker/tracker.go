@@ -159,10 +159,15 @@ func (tr *Tracker) AddJob(job Job) error {
 	defer tr.lock.Unlock()
 	s, ok := tr.jobs[job]
 	if ok {
-		if !s.isDone() {
+		if s.isDone() {
+			log.Println("Restarting completed job", job)
+		} else if s.State() == Failed {
+			// If job didn't complete, the InFlight metric needs to be updated.
+			metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype).Dec()
+			log.Println("Restarting failed job", job)
+		} else {
 			return ErrJobAlreadyExists
 		}
-		log.Println("Restarting completed job", job)
 	}
 
 	tr.lastJob = job
