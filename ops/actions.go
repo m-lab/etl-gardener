@@ -21,7 +21,7 @@ import (
 )
 
 func newStateFunc(detail string) ActionFunc {
-	return func(ctx context.Context, j tracker.Job) *Outcome {
+	return func(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
 		return Success(j, detail)
 	}
 }
@@ -107,11 +107,10 @@ func waitAndCheck(ctx context.Context, bqJob bqiface.Job, j tracker.Job, label s
 }
 
 // TODO improve test coverage?
-func dedupFunc(ctx context.Context, j tracker.Job) *Outcome {
-	start := time.Now()
+func dedupFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
 	// This is the delay since entering the dedup state, due to monitor delay
 	// and retries.
-	// delay := time.Since(s.LastStateChangeTime()).Round(time.Minute)
+	delay := time.Since(stateChangeTime).Round(time.Minute)
 
 	var bqJob bqiface.Job
 	var msg string
@@ -138,12 +137,14 @@ func dedupFunc(ctx context.Context, j tracker.Job) *Outcome {
 	}
 
 	// Dedup job was successful.  Handle the statistics, metrics, tracker update.
-	switch details := status.Statistics.Details.(type) {
+	stats := status.Statistics
+	switch details := stats.Details.(type) {
 	case *bigquery.QueryStatistics:
+		opTime := stats.EndTime.Sub(stats.StartTime)
 		metrics.QueryCostHistogram.WithLabelValues(j.Datatype, "dedup").Observe(float64(details.SlotMillis) / 1000.0)
-		msg = fmt.Sprintf("Dedup took %s (after xxx waiting), %5.2f Slot Minutes, %d Rows affected, %d MB Processed, %d MB Billed",
-			time.Since(start).Round(100*time.Millisecond).String(),
-			//delay,
+		msg = fmt.Sprintf("Dedup took %s (after %v waiting), %5.2f Slot Minutes, %d Rows affected, %d MB Processed, %d MB Billed",
+			opTime.Round(100*time.Millisecond),
+			delay,
 			float64(details.SlotMillis)/60000, details.NumDMLAffectedRows,
 			details.TotalBytesProcessed/1000000, details.TotalBytesBilled/1000000)
 		log.Println(msg)
@@ -211,10 +212,10 @@ func waitForLoad(ctx context.Context, bqJob bqiface.Job, j tracker.Job, label st
 }
 
 // TODO improve test coverage?
-func loadFunc(ctx context.Context, j tracker.Job) *Outcome {
+func loadFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
 	// This is the delay since entering the dedup state, due to monitor delay
 	// and retries.
-	//delay := time.Since(stateChangeTime).Round(time.Minute)
+	delay := time.Since(stateChangeTime).Round(time.Minute)
 
 	var bqJob bqiface.Job
 	// TODO pass in the JobWithTarget, and get this info from Target.
@@ -252,7 +253,7 @@ func loadFunc(ctx context.Context, j tracker.Job) *Outcome {
 				j.Experiment+"-json", j.Datatype, j.Date.Format("2006-01")).Observe(float64(td.InputFileBytes))
 			msg = fmt.Sprintf("Load took %s (after %s waiting), %d rows with %d bytes, from %d files with %d bytes",
 				opTime.Round(100*time.Millisecond),
-				"xxx", //delay,
+				delay,
 				td.OutputRows, td.OutputBytes,
 				td.InputFiles, td.InputFileBytes)
 		default:
@@ -264,10 +265,10 @@ func loadFunc(ctx context.Context, j tracker.Job) *Outcome {
 }
 
 // TODO improve test coverage?
-func copyFunc(ctx context.Context, j tracker.Job) *Outcome {
+func copyFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
 	// This is the delay since entering the dedup state, due to monitor delay
 	// and retries.
-	//delay := time.Since(stateChangeTime).Round(time.Minute)
+	delay := time.Since(stateChangeTime).Round(time.Minute)
 
 	var bqJob bqiface.Job
 	// TODO pass in the JobWithTarget, and get the base from the target.
@@ -294,7 +295,7 @@ func copyFunc(ctx context.Context, j tracker.Job) *Outcome {
 		opTime := stats.EndTime.Sub(stats.StartTime)
 		msg = fmt.Sprintf("Copy took %s (after %s waiting), %d MB Processed",
 			opTime.Round(100*time.Millisecond),
-			"xxx", //delay,
+			delay,
 			stats.TotalBytesProcessed/1000000)
 		log.Println(msg)
 	}
@@ -302,7 +303,7 @@ func copyFunc(ctx context.Context, j tracker.Job) *Outcome {
 }
 
 // TODO improve test coverage?
-func deleteFunc(ctx context.Context, j tracker.Job) *Outcome {
+func deleteFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
 	// TODO pass in the JobWithTarget, and get the base from the target.
 	qp, err := bq.NewQuerier(ctx, j, os.Getenv("PROJECT"), "")
 	if err != nil {
