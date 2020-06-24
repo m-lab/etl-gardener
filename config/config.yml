@@ -20,5 +20,5 @@ sources:
 - bucket: archive-measurement-lab
   experiment: ndt
   datatype: tcpinfo
-  filter: .*T[0-9]{6}\.00.*Z.* # Process only 1/100 of data.
+  filter: .*T[0-9]{6}\.0.*Z.* # Process only 1/10 of data.
   target: tmp_ndt.tcpinfo
