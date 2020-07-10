@@ -17,8 +17,8 @@ sources:
   experiment: ndt
   datatype: ndt5
   target: tmp_ndt.ndt5
-- bucket: archive-measurement-lab
-  experiment: ndt
-  datatype: tcpinfo
-  # filter: .*T[0-9]{6}\.000.*Z.* # Process only 0.1% of data.
-  target: tmp_ndt.tcpinfo
+#- bucket: archive-measurement-lab
+#  experiment: ndt
+#  datatype: tcpinfo
+#  # filter: .*T[0-9]{6}\.000.*Z.* # Process only 0.1% of data.
+#  target: tmp_ndt.tcpinfo
