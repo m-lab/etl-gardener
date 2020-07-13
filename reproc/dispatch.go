@@ -276,23 +276,23 @@ queueLoop:
 	return maxDate, nil
 }
 
-// dailyDelay is set to 4 hours and 10 minutes to allow time for the maximum
+// dailyDelay is set to 8:30 to allow time for the maximum
 // possible pusher delay for the previous day, plus several GCS transfer jobs to
-// complete. At 04:10 UTC, the daily parsing should be possible.
-var dailyDelay = 4*time.Hour + 10*time.Minute
+// complete.
+var dailyDelay = 8*time.Hour + 30*time.Minute
 
 // findNextRecentDay finds an appropriate date to start daily processing.
 func findNextRecentDay(start time.Time, skip int) time.Time {
-	// Normally we'll reprocess yesterday sometime after 3:00 am UTC.
+	// Normally we'll reprocess yesterday sometime after 6:00 am UTC.
 	// When restarting, we want to be a little generous, in case the
 	// previous instance hadn't started yesterday already.  So, if it
-	// is before UTC 6:00 am, we still want to process yesterday.  So
-	// we subtract 6 hours from current time and truncate to determine
+	// is before UTC 8:00 am, we still want to process yesterday.  So
+	// we subtract (dailyDelay + 2 hours) from current time and truncate to determine
 	// the starting date.
 	// This may mean yesterday gets processed twice in a row, but it
 	// should be rare, since we will rarely restart Gardener between 3am
 	// and 6am utc.
-	yesterday := time.Now().Add(-3*time.Hour - dailyDelay).UTC().Truncate(24 * time.Hour)
+	yesterday := time.Now().Add(-(2*time.Hour + dailyDelay)).UTC().Truncate(24 * time.Hour)
 	if skip == 0 {
 		log.Println("Most recent day to process is:", yesterday.Format("2006/01/02"))
 		return yesterday
@@ -319,7 +319,7 @@ func doDispatchLoop(ctx context.Context, handler *TaskHandler, bucket string, ex
 	next := startDate.Truncate(24 * time.Hour)
 
 	for {
-		// If it is 3 hours past the end of the nextRecent day, we should process it now.
+		// If it is dailyDelay past the end of the nextRecent day, we should process it now.
 		if time.Since(nextRecent) > 24*time.Hour+dailyDelay {
 			// Only process if next isn't same or later date.
 			if nextRecent.After(next.Add(time.Hour)) {
