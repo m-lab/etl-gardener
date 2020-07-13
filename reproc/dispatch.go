@@ -276,10 +276,10 @@ queueLoop:
 	return maxDate, nil
 }
 
-// dailyDelay is set to 6 hours to allow time for the maximum
+// dailyDelay is set to 8:30 to allow time for the maximum
 // possible pusher delay for the previous day, plus several GCS transfer jobs to
-// complete. At 04:10 UTC, the daily parsing should be possible.
-var dailyDelay = 6 * time.Hour
+// complete.
+var dailyDelay = 8*time.Hour + 30*time.Minute
 
 // findNextRecentDay finds an appropriate date to start daily processing.
 func findNextRecentDay(start time.Time, skip int) time.Time {
@@ -319,7 +319,7 @@ func doDispatchLoop(ctx context.Context, handler *TaskHandler, bucket string, ex
 	next := startDate.Truncate(24 * time.Hour)
 
 	for {
-		// If it is 3 hours past the end of the nextRecent day, we should process it now.
+		// If it is dailyDelay past the end of the nextRecent day, we should process it now.
 		if time.Since(nextRecent) > 24*time.Hour+dailyDelay {
 			// Only process if next isn't same or later date.
 			if nextRecent.After(next.Add(time.Hour)) {
