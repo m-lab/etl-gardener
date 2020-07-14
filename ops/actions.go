@@ -109,7 +109,7 @@ func dedupFunc(ctx context.Context, j tracker.Job) *Outcome {
 		// This terminates this job.
 		return Failure(j, err, "-")
 	}
-	bqJob, err = qp.Run(ctx, "dedup", false)
+	bqJob, err = qp.Dedup(ctx, false)
 	if err != nil {
 		log.Println(err)
 		// Try again soon.

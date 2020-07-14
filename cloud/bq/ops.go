@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"html/template"
 	"log"
 
@@ -17,9 +18,11 @@ import (
 
 // TableOps provides the interface for running bigquery operations to modify table partitions.
 type TableOps interface {
-	QueryFor(key string) string
-	Run(ctx context.Context, key string, dryRun bool) (bqiface.Job, error)
-	Copy(ctx context.Context, dryRun bool) (bqiface.Job, error)
+	DedupQuery() string
+
+	Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error)
+	CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, error)
+	DeleteTmp(ctx context.Context) error
 }
 
 // queryer is used to construct a dedup query.
@@ -90,18 +93,14 @@ func (params queryer) makeQuery(t *template.Template) string {
 	return out.String()
 }
 
-// QueryFor returns the appropriate query in string form.
-func (params queryer) QueryFor(key string) string {
-	t, ok := queryTemplates[key]
-	if !ok {
-		return ""
-	}
-	return params.makeQuery(t)
+// DedupQuery returns the appropriate query in string form.
+func (params queryer) DedupQuery() string {
+	return params.makeQuery(dedupTemplate)
 }
 
 // Run executes a query constructed from a template.  It returns the bqiface.Job.
-func (params queryer) Run(ctx context.Context, key string, dryRun bool) (bqiface.Job, error) {
-	qs := params.QueryFor(key)
+func (params queryer) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+	qs := params.DedupQuery()
 	if len(qs) == 0 {
 		return nil, dataset.ErrNilQuery
 	}
@@ -120,7 +119,7 @@ func (params queryer) Run(ctx context.Context, key string, dryRun bool) (bqiface
 }
 
 // Copy copies the tmp_ job partition to the raw_ job partition.
-func (params queryer) Copy(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+func (params queryer) CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	if params.client == nil {
 		return nil, dataset.ErrNilBqClient
 	}
@@ -134,17 +133,6 @@ func (params queryer) Copy(ctx context.Context, dryRun bool) (bqiface.Job, error
 	config.Srcs = append(config.Srcs, src)
 	copier.SetCopyConfig(config)
 	return copier.Run(ctx)
-}
-
-// Dedup executes a query that deletes duplicates from the destination table.
-func (params queryer) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
-	return params.Run(ctx, "dedup", dryRun)
-}
-
-// Cleanup executes a query that deletes the entire partition
-// from the tmp table.
-func (params queryer) Cleanup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
-	return params.Run(ctx, "cleanup", dryRun)
 }
 
 // TODO get the tmp_ and raw_ from the job Target?
@@ -186,3 +174,15 @@ AND NOT EXISTS (
     {{range $k, $v := .PartitionKeys}}target.{{$v}} = keep.{{$k}} AND {{end}}
     target.parser.Time = keep.Time
 )`))
+
+// DeleteTmp deletes the tmp table partition.
+func (params queryer) DeleteTmp(ctx context.Context) error {
+	if params.client == nil {
+		return dataset.ErrNilBqClient
+	}
+	// TODO - name should be field in queryer.
+	tmp := params.client.Dataset("tmp_" + params.Job.Experiment).Table(
+		fmt.Sprintf("%s$%s", params.Job.Datatype, params.Job.Date.Format("20060102")))
+	log.Println("Deleting", tmp.FullyQualifiedName())
+	return tmp.Delete(ctx)
+}
