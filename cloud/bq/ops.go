@@ -18,10 +18,11 @@ import (
 
 // TableOps is used to construct and execute table partition operations.
 type TableOps struct {
-	client  bqiface.Client
-	Project string
-	Date    string // Name of the partition field
-	Job     tracker.Job
+	client     bqiface.Client
+	LoadSource string // The bucket/path to load from.
+	Project    string
+	Date       string // Name of the partition field
+	Job        tracker.Job
 	// map key is the single field name, value is fully qualified name
 	PartitionKeys map[string]string
 	OrderKeys     string
@@ -33,21 +34,22 @@ var ErrDatatypeNotSupported = errors.New("Datatype not supported")
 // NewTableOps creates a suitable QueryParams for a Job.
 // The context is used to create a bigquery client, and should be kept alive while
 // the querier is in use.
-func NewTableOps(ctx context.Context, job tracker.Job, project string) (*TableOps, error) {
+func NewTableOps(ctx context.Context, job tracker.Job, project string, loadSource string) (*TableOps, error) {
 	c, err := bigquery.NewClient(ctx, project)
 	if err != nil {
 		return nil, err
 	}
 	bqClient := bqiface.AdaptClient(c)
-	return NewTableOpsWithClient(bqClient, job, project)
+	return NewTableOpsWithClient(bqClient, job, project, loadSource)
 }
 
 // NewTableOpsWithClient creates a suitable QueryParams for a Job.
-func NewTableOpsWithClient(client bqiface.Client, job tracker.Job, project string) (*TableOps, error) {
+func NewTableOpsWithClient(client bqiface.Client, job tracker.Job, project string, loadSource string) (*TableOps, error) {
 	switch job.Datatype {
 	case "annotation":
 		return &TableOps{
 			client:        client,
+			LoadSource:    loadSource,
 			Project:       project,
 			Date:          "date",
 			Job:           job,
@@ -58,6 +60,7 @@ func NewTableOpsWithClient(client bqiface.Client, job tracker.Job, project strin
 	case "ndt7":
 		return &TableOps{
 			client:        client,
+			LoadSource:    loadSource,
 			Project:       project,
 			Date:          "date",
 			Job:           job,
@@ -107,6 +110,34 @@ func (to TableOps) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) 
 		q.SetQueryConfig(qc)
 	}
 	return q.Run(ctx)
+}
+
+// LoadToTmp loads the tmp_ exp table from GCS files.
+func (to TableOps) LoadToTmp(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+	if dryRun {
+		return nil, errors.New("dryrun not implemented")
+	}
+	if to.client == nil {
+		return nil, dataset.ErrNilBqClient
+	}
+
+	gcsRef := bigquery.NewGCSReference(to.LoadSource)
+	gcsRef.SourceFormat = bigquery.JSON
+
+	dest := to.client.
+		Dataset("tmp_" + to.Job.Experiment).
+		Table(to.Job.Datatype)
+	if dest == nil {
+		return nil, ErrTableNotFound
+	}
+	loader := dest.LoaderFrom(gcsRef)
+	loadConfig := bqiface.LoadConfig{}
+	loadConfig.WriteDisposition = bigquery.WriteAppend
+	loadConfig.Dst = dest
+	loadConfig.Src = gcsRef
+	loader.SetLoadConfig(loadConfig)
+
+	return loader.Run(ctx)
 }
 
 // CopyToRaw copies the tmp_ job partition to the raw_ job partition.
