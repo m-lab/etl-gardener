@@ -118,13 +118,17 @@ func (params queryer) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, erro
 	return q.Run(ctx)
 }
 
-// Copy copies the tmp_ job partition to the raw_ job partition.
+// CopyToRaw copies the tmp_ job partition to the raw_ job partition.
 func (params queryer) CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+	if dryRun {
+		return nil, errors.New("dryrun not implemented")
+	}
 	if params.client == nil {
 		return nil, dataset.ErrNilBqClient
 	}
-	src := params.client.Dataset("tmp_" + params.Job.Experiment).Table(params.Job.Datatype)
-	dest := params.client.Dataset("raw_" + params.Job.Experiment).Table(params.Job.Datatype)
+	tableName := params.Job.Datatype + "$" + params.Job.Date.Format("20060102")
+	src := params.client.Dataset("tmp_" + params.Job.Experiment).Table(tableName)
+	dest := params.client.Dataset("raw_" + params.Job.Experiment).Table(tableName)
 
 	copier := dest.CopierFrom(src)
 	config := bqiface.CopyConfig{}
