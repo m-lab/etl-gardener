@@ -248,7 +248,8 @@ func TestYesterdayFromSaver(t *testing.T) {
 
 	// This allows predictable behavior from time.Since in the advanceDate function.
 	monkey.Patch(time.Now, func() time.Time {
-		return time.Date(2011, 2, 16, 6, 2, 3, 4, time.UTC)
+		// NOTE: must be later than the default "yesterday" delay.
+		return time.Date(2011, 2, 16, 11, 2, 3, 4, time.UTC)
 	})
 
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)

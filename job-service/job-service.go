@@ -263,7 +263,7 @@ func NewJobService(ctx context.Context, tk jobAdder, startDate time.Time,
 		log.Fatal("No jobs specified")
 	}
 
-	yesterday, err := initYesterday(ctx, saver, 6*time.Hour, specs)
+	yesterday, err := initYesterday(ctx, saver, 10*time.Hour+30*time.Minute, specs)
 	if err != nil {
 		return nil, err
 	}
