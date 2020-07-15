@@ -25,8 +25,8 @@ type TableOps interface {
 	DeleteTmp(ctx context.Context) error
 }
 
-// queryer is used to construct a dedup query.
-type queryer struct {
+// tableOps is used to construct and execute table partition operations.
+type tableOps struct {
 	client  bqiface.Client
 	Project string
 	Date    string // Name of the partition field
@@ -55,7 +55,7 @@ func NewTableOps(ctx context.Context, job tracker.Job, project string) (TableOps
 func NewTableOpsWithClient(client bqiface.Client, job tracker.Job, project string) (TableOps, error) {
 	switch job.Datatype {
 	case "annotation":
-		return &queryer{
+		return &tableOps{
 			client:        client,
 			Project:       project,
 			Date:          "date",
@@ -65,7 +65,7 @@ func NewTableOpsWithClient(client bqiface.Client, job tracker.Job, project strin
 		}, nil
 
 	case "ndt7":
-		return &queryer{
+		return &tableOps{
 			client:        client,
 			Project:       project,
 			Date:          "date",
@@ -83,10 +83,10 @@ var queryTemplates = map[string]*template.Template{
 	"dedup": dedupTemplate,
 }
 
-// MakeQuery creates a query from a template.
-func (params queryer) makeQuery(t *template.Template) string {
+// makeQuery creates a query from a template.
+func (to tableOps) makeQuery(t *template.Template) string {
 	out := bytes.NewBuffer(nil)
-	err := t.Execute(out, params)
+	err := t.Execute(out, to)
 	if err != nil {
 		log.Println(err)
 	}
@@ -94,20 +94,20 @@ func (params queryer) makeQuery(t *template.Template) string {
 }
 
 // DedupQuery returns the appropriate query in string form.
-func (params queryer) DedupQuery() string {
-	return params.makeQuery(dedupTemplate)
+func (to tableOps) DedupQuery() string {
+	return to.makeQuery(dedupTemplate)
 }
 
-// Run executes a query constructed from a template.  It returns the bqiface.Job.
-func (params queryer) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
-	qs := params.DedupQuery()
+// Deup initiates a deduplication query, and returns the bqiface.Job.
+func (to tableOps) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+	qs := to.DedupQuery()
 	if len(qs) == 0 {
 		return nil, dataset.ErrNilQuery
 	}
-	if params.client == nil {
+	if to.client == nil {
 		return nil, dataset.ErrNilBqClient
 	}
-	q := params.client.Query(qs)
+	q := to.client.Query(qs)
 	if q == nil {
 		return nil, dataset.ErrNilQuery
 	}
@@ -119,16 +119,16 @@ func (params queryer) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, erro
 }
 
 // CopyToRaw copies the tmp_ job partition to the raw_ job partition.
-func (params queryer) CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+func (to tableOps) CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	if dryRun {
 		return nil, errors.New("dryrun not implemented")
 	}
-	if params.client == nil {
+	if to.client == nil {
 		return nil, dataset.ErrNilBqClient
 	}
-	tableName := params.Job.Datatype + "$" + params.Job.Date.Format("20060102")
-	src := params.client.Dataset("tmp_" + params.Job.Experiment).Table(tableName)
-	dest := params.client.Dataset("raw_" + params.Job.Experiment).Table(tableName)
+	tableName := to.Job.Datatype + "$" + to.Job.Date.Format("20060102")
+	src := to.client.Dataset("tmp_" + to.Job.Experiment).Table(tableName)
+	dest := to.client.Dataset("raw_" + to.Job.Experiment).Table(tableName)
 
 	copier := dest.CopierFrom(src)
 	config := bqiface.CopyConfig{}
@@ -180,13 +180,13 @@ AND NOT EXISTS (
 )`))
 
 // DeleteTmp deletes the tmp table partition.
-func (params queryer) DeleteTmp(ctx context.Context) error {
-	if params.client == nil {
+func (to tableOps) DeleteTmp(ctx context.Context) error {
+	if to.client == nil {
 		return dataset.ErrNilBqClient
 	}
 	// TODO - name should be field in queryer.
-	tmp := params.client.Dataset("tmp_" + params.Job.Experiment).Table(
-		fmt.Sprintf("%s$%s", params.Job.Datatype, params.Job.Date.Format("20060102")))
+	tmp := to.client.Dataset("tmp_" + to.Job.Experiment).Table(
+		fmt.Sprintf("%s$%s", to.Job.Datatype, to.Job.Date.Format("20060102")))
 	log.Println("Deleting", tmp.FullyQualifiedName())
 	return tmp.Delete(ctx)
 }
