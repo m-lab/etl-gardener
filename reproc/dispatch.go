@@ -276,10 +276,10 @@ queueLoop:
 	return maxDate, nil
 }
 
-// dailyDelay is set to 8:30 to allow time for the maximum
+// dailyDelay is set to 10:30 to allow time for the maximum
 // possible pusher delay for the previous day, plus several GCS transfer jobs to
 // complete.
-var dailyDelay = 8*time.Hour + 30*time.Minute
+var dailyDelay = 10*time.Hour + 30*time.Minute
 
 // findNextRecentDay finds an appropriate date to start daily processing.
 func findNextRecentDay(start time.Time, skip int) time.Time {
