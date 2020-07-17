@@ -103,7 +103,7 @@ func dedupFunc(ctx context.Context, j tracker.Job) *Outcome {
 	var bqJob bqiface.Job
 	var msg string
 	// TODO pass in the JobWithTarget, and get the base from the target.
-	qp, err := bq.NewTableOps(ctx, j, os.Getenv("PROJECT"))
+	qp, err := bq.NewTableOps(ctx, j, os.Getenv("PROJECT"), "")
 	if err != nil {
 		log.Println(err)
 		// This terminates this job.

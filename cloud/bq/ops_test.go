@@ -13,7 +13,7 @@ import (
 
 func TestTemplate(t *testing.T) {
 	job := tracker.NewJob("bucket", "ndt", "annotation", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
-	q, err := bq.NewTableOps(context.Background(), job, "fake-project")
+	q, err := bq.NewTableOps(context.Background(), job, "fake-project", "")
 	rtx.Must(err, "NewTableOps failed")
 	qs := bq.DedupQuery(*q)
 	if !strings.Contains(qs, "keep.id") {
@@ -40,7 +40,7 @@ func TestValidateQueries(t *testing.T) {
 	// Test for each datatype
 	for _, dataType := range dataTypes {
 		job := tracker.NewJob("bucket", "ndt", dataType, time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
-		qp, err := bq.NewTableOps(ctx, job, "mlab-testing")
+		qp, err := bq.NewTableOps(ctx, job, "mlab-testing", "")
 		if err != nil {
 			t.Fatal(dataType, err)
 		}

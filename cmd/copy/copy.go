@@ -42,7 +42,7 @@ func init() {
 
 func copyFunc(ctx context.Context, j tracker.Job) {
 	var bqJob bqiface.Job
-	qp, err := bq.NewTableOps(ctx, j, "mlab-sandbox")
+	qp, err := bq.NewTableOps(ctx, j, "mlab-sandbox", "")
 	if err != nil {
 		log.Println(err)
 		return
