@@ -21,7 +21,7 @@ var (
 var usageText = `
 NAME
   load - load from a GCS prefix into tmp_ndt.*
-  
+
 DESCRIPTION
   loads data for a single datatype/date from json files in GCS into mlab-sandbox.tmp_ndt.datatype table.
   Intended primarily for testing and development.
