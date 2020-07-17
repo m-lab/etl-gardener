@@ -16,17 +16,17 @@ import (
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
-// TableOps provides the interface for running bigquery operations to modify table partitions.
-type TableOps interface {
-	DedupQuery() string
+// xTableOps provides the interface for running bigquery operations to modify table partitions.
+type xTableOps interface {
+	dedupQuery() string // Used for testing
 
 	Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error)
 	CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, error)
 	DeleteTmp(ctx context.Context) error
 }
 
-// tableOps is used to construct and execute table partition operations.
-type tableOps struct {
+// TableOps is used to construct and execute table partition operations.
+type TableOps struct {
 	client  bqiface.Client
 	Project string
 	Date    string // Name of the partition field
@@ -42,7 +42,7 @@ var ErrDatatypeNotSupported = errors.New("Datatype not supported")
 // NewTableOps creates a suitable QueryParams for a Job.
 // The context is used to create a bigquery client, and should be kept alive while
 // the querier is in use.
-func NewTableOps(ctx context.Context, job tracker.Job, project string) (TableOps, error) {
+func NewTableOps(ctx context.Context, job tracker.Job, project string) (*TableOps, error) {
 	c, err := bigquery.NewClient(ctx, project)
 	if err != nil {
 		return nil, err
@@ -52,10 +52,10 @@ func NewTableOps(ctx context.Context, job tracker.Job, project string) (TableOps
 }
 
 // NewTableOpsWithClient creates a suitable QueryParams for a Job.
-func NewTableOpsWithClient(client bqiface.Client, job tracker.Job, project string) (TableOps, error) {
+func NewTableOpsWithClient(client bqiface.Client, job tracker.Job, project string) (*TableOps, error) {
 	switch job.Datatype {
 	case "annotation":
-		return &tableOps{
+		return &TableOps{
 			client:        client,
 			Project:       project,
 			Date:          "date",
@@ -65,7 +65,7 @@ func NewTableOpsWithClient(client bqiface.Client, job tracker.Job, project strin
 		}, nil
 
 	case "ndt7":
-		return &tableOps{
+		return &TableOps{
 			client:        client,
 			Project:       project,
 			Date:          "date",
@@ -84,7 +84,7 @@ var queryTemplates = map[string]*template.Template{
 }
 
 // makeQuery creates a query from a template.
-func (to tableOps) makeQuery(t *template.Template) string {
+func (to TableOps) makeQuery(t *template.Template) string {
 	out := bytes.NewBuffer(nil)
 	err := t.Execute(out, to)
 	if err != nil {
@@ -93,14 +93,14 @@ func (to tableOps) makeQuery(t *template.Template) string {
 	return out.String()
 }
 
-// DedupQuery returns the appropriate query in string form.
-func (to tableOps) DedupQuery() string {
+// dedupQuery returns the appropriate query in string form.
+func dedupQuery(to TableOps) string {
 	return to.makeQuery(dedupTemplate)
 }
 
-// Deup initiates a deduplication query, and returns the bqiface.Job.
-func (to tableOps) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
-	qs := to.DedupQuery()
+// Dedup initiates a deduplication query, and returns the bqiface.Job.
+func (to TableOps) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+	qs := dedupQuery(to)
 	if len(qs) == 0 {
 		return nil, dataset.ErrNilQuery
 	}
@@ -119,7 +119,7 @@ func (to tableOps) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) 
 }
 
 // CopyToRaw copies the tmp_ job partition to the raw_ job partition.
-func (to tableOps) CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+func (to TableOps) CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	if dryRun {
 		return nil, errors.New("dryrun not implemented")
 	}
@@ -180,7 +180,7 @@ AND NOT EXISTS (
 )`))
 
 // DeleteTmp deletes the tmp table partition.
-func (to tableOps) DeleteTmp(ctx context.Context) error {
+func (to TableOps) DeleteTmp(ctx context.Context) error {
 	if to.client == nil {
 		return dataset.ErrNilBqClient
 	}

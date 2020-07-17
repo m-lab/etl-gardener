@@ -15,7 +15,7 @@ func TestTemplate(t *testing.T) {
 	job := tracker.NewJob("bucket", "ndt", "annotation", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
 	q, err := bq.NewTableOps(context.Background(), job, "fake-project")
 	rtx.Must(err, "NewTableOps failed")
-	qs := q.DedupQuery()
+	qs := bq.DedupQuery(*q)
 	if !strings.Contains(qs, "keep.id") {
 		t.Error("query should contain keep.uuid:\n", q)
 	}
@@ -48,11 +48,11 @@ func TestValidateQueries(t *testing.T) {
 			t.Log(t.Name())
 			j, err := qp.Dedup(ctx, true)
 			if err != nil {
-				t.Fatal(t.Name(), err, qp.DedupQuery())
+				t.Fatal(t.Name(), err, bq.DedupQuery(*qp))
 			}
 			status := j.LastStatus()
 			if status.Err() != nil {
-				t.Fatal(t.Name(), err, qp.DedupQuery())
+				t.Fatal(t.Name(), err, bq.DedupQuery(*qp))
 			}
 		})
 	}
