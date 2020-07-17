@@ -16,15 +16,6 @@ import (
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
-// xTableOps provides the interface for running bigquery operations to modify table partitions.
-type xTableOps interface {
-	dedupQuery() string // Used for testing
-
-	Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error)
-	CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, error)
-	DeleteTmp(ctx context.Context) error
-}
-
 // TableOps is used to construct and execute table partition operations.
 type TableOps struct {
 	client  bqiface.Client
