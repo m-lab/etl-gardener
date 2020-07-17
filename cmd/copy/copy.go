@@ -14,22 +14,33 @@ import (
 	"github.com/m-lab/go/rtx"
 )
 
+var (
+	dataType = flag.String("datatype", "ndt7", "datatype")
+	date     = flag.String("date", "", "partition date")
+)
+
+var usageText = `
+NAME
+  copy - copy partition from mlab-sandbox.tmp_ndt to raw_ndt
+
+DESCRIPTION
+  copy copies a single partition from a table in mlab-sandbox.tmp_ndt to a table in mlab-sandbox.raw_ndt
+  It is intended for manual testing of the bq.TableOps.CopyTmpToRaw, and has no other practical purpose.
+
+EXAMPLES
+  copy -datatype=ndt7 -date=2020-03-01
+`
+
 func init() {
 	// Always prepend the filename and line number.
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), usageText)
+		flag.PrintDefaults()
+	}
 }
 
-var (
-	exp  = flag.String("exp", "ndt7", "experiment")
-	date = flag.String("date", "2020/05/22", "date")
-)
-
-// TODO improve test coverage?
 func copyFunc(ctx context.Context, j tracker.Job) {
-	// This is the delay since entering the dedup state, due to monitor delay
-	// and retries.
-	//delay := time.Since(stateChangeTime).Round(time.Minute)
-
 	var bqJob bqiface.Job
 	qp, err := bq.NewTableOps(ctx, j, "mlab-sandbox")
 	if err != nil {
@@ -51,9 +62,8 @@ func copyFunc(ctx context.Context, j tracker.Job) {
 	stats := status.Statistics
 	if stats != nil {
 		opTime := stats.EndTime.Sub(stats.StartTime)
-		msg = fmt.Sprintf("Copy took %s (after %s waiting), %d MB Processed",
+		msg = fmt.Sprintf("Copy took %s, %d MB Processed",
 			opTime.Round(100*time.Millisecond),
-			"xxx", //delay,
 			stats.TotalBytesProcessed/1000000)
 		log.Println(msg)
 	}
@@ -70,7 +80,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	j := tracker.NewJob("bucket", "ndt", *exp, d)
+	j := tracker.NewJob("unused-bucket", "unused-experiment", *dataType, d)
 	log.Println(j)
 	copyFunc(ctx, j)
 }
