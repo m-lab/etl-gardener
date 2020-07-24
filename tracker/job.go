@@ -196,6 +196,24 @@ func (s *Status) State() State {
 	return s.LastStateInfo().State
 }
 
+// Prev returns the penultimate job State enum, or Init
+func (s *Status) Prev() State {
+	if len(s.History) < 2 {
+		return Init
+	}
+	old := s.History[len(s.History)-2]
+	return old.State
+}
+
+// Label provides a state label for metrics.
+// If the final state is Failed, it composes the previous and final state, e.g. Loading-Failed
+func (s *Status) Label() string {
+	if s.State() == Failed {
+		return string(s.Prev()) + "-Failed"
+	}
+	return string(s.State())
+}
+
 // Detail returns the most recent detail string.
 // If the detail is empty, returns the previous state detail.
 func (s *Status) Detail() string {
@@ -249,6 +267,7 @@ func (s *Status) Error() string {
 }
 
 // UpdateMetrics handles the StateTimeHistogram and StateDate metric updates.
+// Not thread-safe.  Caller must hold the job's lock.
 func (s *Status) updateMetrics(job Job) {
 	new := s.LastStateInfo()
 	// Update the StateDate metric for new state
@@ -258,10 +277,13 @@ func (s *Status) updateMetrics(job Job) {
 		// Track the time in old state
 		old := s.History[len(s.History)-2]
 		timeInState := time.Since(old.Start)
-		if new.State != Init {
-			metrics.StateTimeHistogram.WithLabelValues(job.Experiment, job.Datatype, string(old.State)).Observe(timeInState.Seconds())
-		}
+		metrics.StateTimeHistogram.WithLabelValues(job.Experiment, job.Datatype, string(old.State)).Observe(timeInState.Seconds())
+		// old state will never be Failed, so the label is just the old.State.
+		metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype, string(old.State)).Dec()
 	}
+
+	// Use s.Label() which takes into account whether the state is Failed.
+	metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype, s.Label()).Inc()
 }
 
 // NewState adds a new StateInfo to the status.

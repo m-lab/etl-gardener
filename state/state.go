@@ -330,8 +330,8 @@ type Terminator interface {
 
 // Process handles all steps of processing a task.
 func (t Task) Process(ctx context.Context, ex Executor, doneWithQueue func(), term Terminator) {
-	metrics.TasksInFlight.WithLabelValues(t.Experiment, t.Experiment).Inc()
-	defer metrics.TasksInFlight.WithLabelValues(t.Experiment, t.Experiment).Dec()
+	metrics.TasksInFlight.WithLabelValues(t.Experiment, t.Experiment, "").Inc()
+	defer metrics.TasksInFlight.WithLabelValues(t.Experiment, t.Experiment, "").Dec()
 loop:
 	for t.State != Done { //&& t.ErrMsg == "" {
 		select {

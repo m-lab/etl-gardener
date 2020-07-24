@@ -73,10 +73,11 @@ var (
 	// metrics.TasksInFlight.WithLabelValues(exp, dt).Inc
 	TasksInFlight = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
+			// TODO - should call this JobsInFlight (gardener_jobs_in_flight), to avoid confusion with Tasks in parser.
 			Name: "gardener_tasks_in_flight",
 			Help: "Number of tasks in flight",
 		},
-		[]string{"experiment", "datatype"},
+		[]string{"experiment", "datatype", "state"},
 	)
 
 	// StateDate identifies the date of the most recent update to each state.
