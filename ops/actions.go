@@ -39,6 +39,9 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 		"Changing to Deduplicating")
 	// NOTE: This does not actually work properly.  Because of streaming insert delays,
 	// it actually deduplicates the previously parsed data, not the latest parsed data.
+	// Future use of BQ Loads eliminates this problem.  If we want to continue
+	// using streaming inserts, we would have to figure out how to determine
+	// when the inserts have started showing up, and when they are completed.
 	m.AddAction(tracker.Deduplicating,
 		nil,
 		dedupFunc,
@@ -92,22 +95,32 @@ func waitAndCheck(ctx context.Context, bqJob bqiface.Job, j tracker.Job, label s
 	return status, Success(j, "-")
 }
 
+// TODO - would be nice to persist this object, instead of creating it
+// repeatedly.  If we end up with separate state machine per job, that
+// would be a good place for the TableOps object.
+func tableOps(ctx context.Context, j tracker.Job) (*bq.TableOps, error) {
+	// TODO pass in the JobWithTarget, and get this info from Target.
+	project := os.Getenv("PROJECT")
+	loadSource := fmt.Sprintf("gs://etl-%s/%s/%s/%s",
+		project,
+		j.Experiment, j.Datatype, j.Date.Format("2006/01/02/*"))
+	return bq.NewTableOps(ctx, j, project, loadSource)
+}
+
 // TODO improve test coverage?
 func dedupFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
 	// This is the delay since entering the dedup state, due to monitor delay
 	// and retries.
 	delay := time.Since(stateChangeTime).Round(time.Minute)
 
-	var bqJob bqiface.Job
-	var msg string
 	// TODO pass in the JobWithTarget, and get the base from the target.
-	qp, err := bq.NewTableOps(ctx, j, os.Getenv("PROJECT"), "")
+	qp, err := tableOps(ctx, j)
 	if err != nil {
 		log.Println(err)
 		// This terminates this job.
 		return Failure(j, err, "-")
 	}
-	bqJob, err = qp.Dedup(ctx, false)
+	bqJob, err := qp.Dedup(ctx, false)
 	if err != nil {
 		log.Println(err)
 		// Try again soon.
@@ -123,6 +136,7 @@ func dedupFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *O
 	}
 
 	// Dedup job was successful.  Handle the statistics, metrics, tracker update.
+	var msg string
 	stats := status.Statistics
 	switch details := stats.Details.(type) {
 	case *bigquery.QueryStatistics:
@@ -149,13 +163,18 @@ func handleLoadError(label string, j tracker.Job, status *bigquery.JobStatus) *O
 	msg := "unknown error"
 	for _, e := range status.Errors {
 		if strings.Contains(e.Message, "Please look into") {
-			continue
-		}
-		if strings.Contains(e.Message, "No such field:") {
-			log.Printf("--- %s: %s -- %s", label, e.Message, e.Location)
 			metrics.WarningCount.WithLabelValues(
 				j.Experiment, j.Datatype,
-				label+"GCS load failed").Inc()
+				label+"-PleaseLookInto").Inc()
+			continue
+		}
+		// When there is mismatch between row content and table schema,
+		// the bigquery Load may return "No such field:" errors.
+		if strings.Contains(e.Message, "No such field:") {
+			log.Printf("--- Field missing in bigquery: %s: %s -- %s", label, e.Message, e.Location)
+			metrics.WarningCount.WithLabelValues(
+				j.Experiment, j.Datatype,
+				label+"GCS load failed - missing field").Inc()
 			msg = e.Message
 			continue
 		}
@@ -187,8 +206,11 @@ func handleWaitError(label string, j tracker.Job, status *bigquery.JobStatus) *O
 func waitForLoad(ctx context.Context, bqJob bqiface.Job, j tracker.Job, label string) (*bigquery.JobStatus, *Outcome) {
 	status, err := bqJob.Wait(ctx)
 	if err != nil {
-		outcome := handleWaitError(label, j, status)
-		return status, outcome
+		if status != nil {
+			outcome := handleWaitError(label, j, status)
+			return status, outcome
+		}
+		return status, Failure(j, err, "unknown error")
 	}
 	if status.Err() != nil {
 		outcome := handleLoadError(label, j, status)
@@ -203,19 +225,13 @@ func loadFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 	// and retries.
 	delay := time.Since(stateChangeTime).Round(time.Minute)
 
-	var bqJob bqiface.Job
-	// TODO pass in the JobWithTarget, and get this info from Target.
-	project := os.Getenv("PROJECT")
-	loadSource := fmt.Sprintf("gs://etl-%s/%s/%s/%s",
-		project,
-		j.Experiment, j.Datatype, j.Date.Format("2006/01/02/*"))
-	qp, err := bq.NewTableOps(ctx, j, project, loadSource)
+	qp, err := tableOps(ctx, j)
 	if err != nil {
 		log.Println(err)
 		// This terminates this job.
 		return Failure(j, err, "-")
 	}
-	bqJob, err = qp.LoadToTmp(ctx, false)
+	bqJob, err := qp.LoadToTmp(ctx, false)
 	if err != nil {
 		log.Println(err)
 		// Try again soon.
@@ -226,11 +242,12 @@ func loadFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 		return outcome
 	}
 
-	var msg string
+	msg := "nil stats" // In case stats are nil.
 	stats := status.Statistics
 	if stats != nil {
+		// TODO: Add a histogram metric
 		opTime := stats.EndTime.Sub(stats.StartTime)
-		details := status.Statistics.Details
+		details := stats.Details
 		switch td := details.(type) {
 		case *bigquery.LoadStatistics:
 			metrics.FilesPerDateHistogram.WithLabelValues(
@@ -243,7 +260,7 @@ func loadFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 				td.OutputRows, td.OutputBytes,
 				td.InputFiles, td.InputFileBytes)
 		default:
-			msg = "Load statistics unavailable"
+			msg = "Load statistics unknown type"
 		}
 	}
 	log.Println(j, msg)
@@ -256,15 +273,13 @@ func copyFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 	// and retries.
 	delay := time.Since(stateChangeTime).Round(time.Minute)
 
-	var bqJob bqiface.Job
-	// TODO pass in the JobWithTarget, and get the base from the target.
-	qp, err := bq.NewTableOps(ctx, j, os.Getenv("PROJECT"), "")
+	qp, err := tableOps(ctx, j)
 	if err != nil {
 		log.Println(err)
 		// This terminates this job.
 		return Failure(j, err, "-")
 	}
-	bqJob, err = qp.CopyToRaw(ctx, false)
+	bqJob, err := qp.CopyToRaw(ctx, false)
 	if err != nil {
 		log.Println(err)
 		// Try again soon.
@@ -275,23 +290,24 @@ func copyFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 		return outcome
 	}
 
-	var msg string
+	msg := "nil stats"
 	stats := status.Statistics
 	if stats != nil {
+		// TODO: Add a histogram metric
 		opTime := stats.EndTime.Sub(stats.StartTime)
 		msg = fmt.Sprintf("Copy took %s (after %s waiting), %d MB Processed",
 			opTime.Round(100*time.Millisecond),
 			delay,
 			stats.TotalBytesProcessed/1000000)
-		log.Println(msg)
 	}
+	log.Println(j, msg)
 	return Success(j, msg)
 }
 
 // TODO improve test coverage?
 func deleteFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
 	// TODO pass in the JobWithTarget, and get the base from the target.
-	qp, err := bq.NewTableOps(ctx, j, os.Getenv("PROJECT"), "")
+	qp, err := tableOps(ctx, j)
 	if err != nil {
 		log.Println(err)
 		// This terminates this job.
