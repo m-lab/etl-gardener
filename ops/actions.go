@@ -21,7 +21,7 @@ import (
 )
 
 func newStateFunc(detail string) ActionFunc {
-	return func(ctx context.Context, j tracker.Job) *Outcome {
+	return func(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
 		return Success(j, detail)
 	}
 }
@@ -37,12 +37,11 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 		newStateFunc("-"),
 		tracker.Deduplicating,
 		"Changing to Deduplicating")
-	// Hack to handle old jobs from previous gardener implementations
-	m.AddAction(tracker.Stabilizing,
-		nil,
-		newStateFunc("-"),
-		tracker.Deduplicating,
-		"Changing to Deduplicating")
+	// NOTE: This does not actually work properly.  Because of streaming insert delays,
+	// it actually deduplicates the previously parsed data, not the latest parsed data.
+	// Future use of BQ Loads eliminates this problem.  If we want to continue
+	// using streaming inserts, we would have to figure out how to determine
+	// when the inserts have started showing up, and when they are completed.
 	m.AddAction(tracker.Deduplicating,
 		nil,
 		dedupFunc,
@@ -73,7 +72,7 @@ func waitAndCheck(ctx context.Context, bqJob bqiface.Job, j tracker.Job, label s
 			// We don't know the problem...
 		}
 		// Not googleapi.Error, OR not streaming buffer problem.
-		log.Println(label, err)
+		log.Println(j, label, err)
 		metrics.WarningCount.WithLabelValues(
 			j.Experiment, j.Datatype,
 			label+"UnknownError").Inc()
@@ -82,7 +81,10 @@ func waitAndCheck(ctx context.Context, bqJob bqiface.Job, j tracker.Job, label s
 	}
 	if status.Err() != nil {
 		err := status.Err()
-		log.Println(label, err)
+		log.Println(j, label, err)
+		for i := range status.Errors {
+			log.Println("---", j, label, status.Errors[i])
+		}
 		metrics.WarningCount.WithLabelValues(
 			j.Experiment, j.Datatype,
 			label+"UnknownStatusError").Inc()
@@ -93,23 +95,32 @@ func waitAndCheck(ctx context.Context, bqJob bqiface.Job, j tracker.Job, label s
 	return status, Success(j, "-")
 }
 
+// TODO - would be nice to persist this object, instead of creating it
+// repeatedly.  If we end up with separate state machine per job, that
+// would be a good place for the TableOps object.
+func tableOps(ctx context.Context, j tracker.Job) (*bq.TableOps, error) {
+	// TODO pass in the JobWithTarget, and get this info from Target.
+	project := os.Getenv("PROJECT")
+	loadSource := fmt.Sprintf("gs://etl-%s/%s/%s/%s",
+		project,
+		j.Experiment, j.Datatype, j.Date.Format("2006/01/02/*"))
+	return bq.NewTableOps(ctx, j, project, loadSource)
+}
+
 // TODO improve test coverage?
-func dedupFunc(ctx context.Context, j tracker.Job) *Outcome {
-	start := time.Now()
+func dedupFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
 	// This is the delay since entering the dedup state, due to monitor delay
 	// and retries.
-	// delay := time.Since(s.LastStateChangeTime()).Round(time.Minute)
+	delay := time.Since(stateChangeTime).Round(time.Minute)
 
-	var bqJob bqiface.Job
-	var msg string
 	// TODO pass in the JobWithTarget, and get the base from the target.
-	qp, err := bq.NewTableOps(ctx, j, os.Getenv("PROJECT"), "")
+	qp, err := tableOps(ctx, j)
 	if err != nil {
 		log.Println(err)
 		// This terminates this job.
 		return Failure(j, err, "-")
 	}
-	bqJob, err = qp.Dedup(ctx, false)
+	bqJob, err := qp.Dedup(ctx, false)
 	if err != nil {
 		log.Println(err)
 		// Try again soon.
@@ -125,12 +136,15 @@ func dedupFunc(ctx context.Context, j tracker.Job) *Outcome {
 	}
 
 	// Dedup job was successful.  Handle the statistics, metrics, tracker update.
-	switch details := status.Statistics.Details.(type) {
+	var msg string
+	stats := status.Statistics
+	switch details := stats.Details.(type) {
 	case *bigquery.QueryStatistics:
+		opTime := stats.EndTime.Sub(stats.StartTime)
 		metrics.QueryCostHistogram.WithLabelValues(j.Datatype, "dedup").Observe(float64(details.SlotMillis) / 1000.0)
-		msg = fmt.Sprintf("Dedup took %s (after xxx waiting), %5.2f Slot Minutes, %d Rows affected, %d MB Processed, %d MB Billed",
-			time.Since(start).Round(100*time.Millisecond).String(),
-			//delay,
+		msg = fmt.Sprintf("Dedup took %s (after %v waiting), %5.2f Slot Minutes, %d Rows affected, %d MB Processed, %d MB Billed",
+			opTime.Round(100*time.Millisecond),
+			delay,
 			float64(details.SlotMillis)/60000, details.NumDMLAffectedRows,
 			details.TotalBytesProcessed/1000000, details.TotalBytesBilled/1000000)
 		log.Println(msg)
@@ -141,4 +155,171 @@ func dedupFunc(ctx context.Context, j tracker.Job) *Outcome {
 	}
 
 	return Success(j, msg)
+}
+
+func handleLoadError(label string, j tracker.Job, status *bigquery.JobStatus) *Outcome {
+	err := status.Err()
+	log.Println(label, err)
+	msg := "unknown error"
+	for _, e := range status.Errors {
+		if strings.Contains(e.Message, "Please look into") {
+			metrics.WarningCount.WithLabelValues(
+				j.Experiment, j.Datatype,
+				label+"-PleaseLookInto").Inc()
+			continue
+		}
+		// When there is mismatch between row content and table schema,
+		// the bigquery Load may return "No such field:" errors.
+		if strings.Contains(e.Message, "No such field:") {
+			log.Printf("--- Field missing in bigquery: %s: %s -- %s", label, e.Message, e.Location)
+			metrics.WarningCount.WithLabelValues(
+				j.Experiment, j.Datatype,
+				label+"GCS load failed - missing field").Inc()
+			msg = e.Message
+			continue
+		}
+		log.Println("---", label, e)
+		metrics.WarningCount.WithLabelValues(
+			j.Experiment, j.Datatype,
+			label+"UnknownStatusError").Inc()
+	}
+
+	// This will terminate this job.
+	return Failure(j, err, msg)
+}
+
+func handleWaitError(label string, j tracker.Job, status *bigquery.JobStatus) *Outcome {
+	err := status.Err()
+	log.Println(label, err)
+	for i := range status.Errors {
+		log.Println("---", label, status.Errors[i])
+	}
+	metrics.WarningCount.WithLabelValues(
+		j.Experiment, j.Datatype,
+		label+"UnknownStatusError").Inc()
+
+	// This will terminate this job.
+	return Failure(j, err, "unknown error")
+}
+
+// Returns non-nil Outcome even if successful.
+func waitForLoad(ctx context.Context, bqJob bqiface.Job, j tracker.Job, label string) (*bigquery.JobStatus, *Outcome) {
+	status, err := bqJob.Wait(ctx)
+	if err != nil {
+		if status != nil {
+			outcome := handleWaitError(label, j, status)
+			return status, outcome
+		}
+		return status, Failure(j, err, "unknown error")
+	}
+	if status.Err() != nil {
+		outcome := handleLoadError(label, j, status)
+		return status, outcome
+	}
+	return status, Success(j, "-")
+}
+
+// TODO improve test coverage?
+func loadFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
+	// This is the delay since entering the dedup state, due to monitor delay
+	// and retries.
+	delay := time.Since(stateChangeTime).Round(time.Minute)
+
+	qp, err := tableOps(ctx, j)
+	if err != nil {
+		log.Println(err)
+		// This terminates this job.
+		return Failure(j, err, "-")
+	}
+	bqJob, err := qp.LoadToTmp(ctx, false)
+	if err != nil {
+		log.Println(err)
+		// Try again soon.
+		return Retry(j, err, "-")
+	}
+	status, outcome := waitAndCheck(ctx, bqJob, j, "Load")
+	if !outcome.IsDone() {
+		return outcome
+	}
+
+	msg := "nil stats" // In case stats are nil.
+	stats := status.Statistics
+	if stats != nil {
+		// TODO: Add a histogram metric
+		opTime := stats.EndTime.Sub(stats.StartTime)
+		details := stats.Details
+		switch td := details.(type) {
+		case *bigquery.LoadStatistics:
+			metrics.FilesPerDateHistogram.WithLabelValues(
+				j.Experiment+"-json", j.Datatype, j.Date.Format("2006-01")).Observe(float64(td.InputFiles))
+			metrics.BytesPerDateHistogram.WithLabelValues(
+				j.Experiment+"-json", j.Datatype, j.Date.Format("2006-01")).Observe(float64(td.InputFileBytes))
+			msg = fmt.Sprintf("Load took %s (after %s waiting), %d rows with %d bytes, from %d files with %d bytes",
+				opTime.Round(100*time.Millisecond),
+				delay,
+				td.OutputRows, td.OutputBytes,
+				td.InputFiles, td.InputFileBytes)
+		default:
+			msg = "Load statistics unknown type"
+		}
+	}
+	log.Println(j, msg)
+	return Success(j, msg)
+}
+
+// TODO improve test coverage?
+func copyFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
+	// This is the delay since entering the dedup state, due to monitor delay
+	// and retries.
+	delay := time.Since(stateChangeTime).Round(time.Minute)
+
+	qp, err := tableOps(ctx, j)
+	if err != nil {
+		log.Println(err)
+		// This terminates this job.
+		return Failure(j, err, "-")
+	}
+	bqJob, err := qp.CopyToRaw(ctx, false)
+	if err != nil {
+		log.Println(err)
+		// Try again soon.
+		return Retry(j, err, "-")
+	}
+	status, outcome := waitAndCheck(ctx, bqJob, j, "Copy")
+	if !outcome.IsDone() {
+		return outcome
+	}
+
+	msg := "nil stats"
+	stats := status.Statistics
+	if stats != nil {
+		// TODO: Add a histogram metric
+		opTime := stats.EndTime.Sub(stats.StartTime)
+		msg = fmt.Sprintf("Copy took %s (after %s waiting), %d MB Processed",
+			opTime.Round(100*time.Millisecond),
+			delay,
+			stats.TotalBytesProcessed/1000000)
+	}
+	log.Println(j, msg)
+	return Success(j, msg)
+}
+
+// TODO improve test coverage?
+func deleteFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
+	// TODO pass in the JobWithTarget, and get the base from the target.
+	qp, err := tableOps(ctx, j)
+	if err != nil {
+		log.Println(err)
+		// This terminates this job.
+		return Failure(j, err, "-")
+	}
+	err = qp.DeleteTmp(ctx)
+	if err != nil {
+		log.Println(err)
+		// Try again soon.
+		return Retry(j, err, "-")
+	}
+
+	// TODO - add elapsed time to message.
+	return Success(j, "Successfully deleted partition")
 }
