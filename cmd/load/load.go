@@ -53,7 +53,7 @@ func main() {
 	log.Println(j)
 
 	q, err := bq.NewTableOps(ctx, j, "mlab-sandbox",
-		fmt.Sprintf("gs://json-mlab-sandbox/%s/%s/%s",
+		fmt.Sprintf("gs://etl-mlab-sandbox/%s/%s/%s",
 			j.Experiment, j.Datatype, d.Format("2006/01/02/*")))
 	if err != nil {
 		log.Fatal(err)

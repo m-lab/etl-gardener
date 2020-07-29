@@ -64,7 +64,8 @@ type ConditionFunc = func(ctx context.Context, job tracker.Job) bool
 
 // An ActionFunc performs an operation on a job, and updates its state.
 // These functions may take a long time to complete, and may be resource intensive.
-type ActionFunc = func(ctx context.Context, job tracker.Job) *Outcome
+// Time parameter is the last state transition time.
+type ActionFunc = func(context.Context, tracker.Job, time.Time) *Outcome
 
 // An Action describes an operation to be applied to jobs that meet the
 // required condition.
@@ -174,7 +175,7 @@ func (m *Monitor) tryApplyAction(ctx context.Context, a Action, j tracker.Job, s
 			// These jobs may be deleted by other calls to GetAll, so tk.UpdateJob may fail.
 			if a.action != nil {
 				start := time.Now()
-				outcome := a.action(ctx, j)
+				outcome := a.action(ctx, j, s.StateChangeTime())
 				if outcome.ShouldRetry() {
 					time.Sleep(2 * time.Minute)
 				}

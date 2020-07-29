@@ -27,7 +27,7 @@ func TestStandardMonitor(t *testing.T) {
 	tk, err := tracker.InitTracker(ctx, nil, nil, 0, 0, 0)
 	rtx.Must(err, "tk init")
 	tk.AddJob(tracker.NewJob("bucket", "exp", "type", time.Now()))
-	// Bad experiment type
+	// Not yet supported.
 	tk.AddJob(tracker.NewJob("bucket", "exp2", "tcpinfo", time.Now()))
 	// Valid experiment and datatype
 	// This does an actual dedup, so we need to allow enough time.
