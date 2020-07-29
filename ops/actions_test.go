@@ -46,13 +46,19 @@ func TestStandardMonitor(t *testing.T) {
 		newStateFunc("-"),
 		tracker.ParseComplete,
 		"Parsing")
+	// Hack for testing - deliberately skip Load function.
+	m.AddAction(tracker.ParseComplete,
+		nil,
+		newStateFunc("-"),
+		tracker.Copying,
+		"Copying")
 
 	// The real dedup action should fail on unknown datatype.
 	go m.Watch(ctx, 50*time.Millisecond)
 
 	failTime := time.Now().Add(30 * time.Second)
 
-	for time.Now().Before(failTime) && (tk.NumJobs() > 2 || tk.NumFailed() < 2) {
+	for time.Now().Before(failTime) && (tk.NumJobs() > 2 || tk.NumFailed() < 1) {
 		time.Sleep(time.Millisecond)
 	}
 	if tk.NumFailed() != 2 {
