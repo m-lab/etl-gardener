@@ -35,18 +35,28 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 	m.AddAction(tracker.ParseComplete,
 		nil,
 		newStateFunc("-"),
+		tracker.Loading,
+		"Changing to Loading")
+	m.AddAction(tracker.Loading,
+		nil,
+		loadFunc,
 		tracker.Deduplicating,
-		"Changing to Deduplicating")
-	// NOTE: This does not actually work properly.  Because of streaming insert delays,
-	// it actually deduplicates the previously parsed data, not the latest parsed data.
-	// Future use of BQ Loads eliminates this problem.  If we want to continue
-	// using streaming inserts, we would have to figure out how to determine
-	// when the inserts have started showing up, and when they are completed.
+		"Loading")
 	m.AddAction(tracker.Deduplicating,
 		nil,
 		dedupFunc,
-		tracker.Complete,
+		tracker.Copying,
 		"Deduplicating")
+	m.AddAction(tracker.Copying,
+		nil,
+		copyFunc,
+		tracker.Deleting,
+		"Copying")
+	m.AddAction(tracker.Deleting,
+		nil,
+		deleteFunc,
+		tracker.Complete,
+		"Deleting")
 	return m, nil
 }
 

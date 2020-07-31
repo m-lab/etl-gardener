@@ -62,7 +62,7 @@ func InitTracker(
 		// Update the metrics for all jobs still in flight or failed.
 		if !s.isDone() {
 			metrics.StartedCount.WithLabelValues(j.Experiment, j.Datatype).Inc()
-			metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Inc()
+			metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype, s.Label()).Inc()
 		}
 	}
 	t := Tracker{
@@ -163,7 +163,7 @@ func (tr *Tracker) AddJob(job Job) error {
 			log.Println("Restarting completed job", job)
 		} else if s.State() == Failed {
 			// If job didn't complete, the InFlight metric needs to be updated.
-			metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype).Dec()
+			metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype, s.Label()).Dec()
 			log.Println("Restarting failed job", job)
 		} else {
 			return ErrJobAlreadyExists
@@ -173,8 +173,6 @@ func (tr *Tracker) AddJob(job Job) error {
 	tr.lastJob = job
 	tr.lastModified = time.Now()
 	metrics.StartedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
-	// TODO - should call this JobsInFlight, to avoid confusion with Tasks in parser.
-	metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype).Inc()
 	tr.jobs[job] = status
 	status.updateMetrics(job)
 	return nil
@@ -199,7 +197,6 @@ func (tr *Tracker) UpdateJob(job Job, new Status) error {
 	// When jobs are done, we update stats and may remove them from tracker.
 	if new.isDone() {
 		metrics.CompletedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
-		metrics.TasksInFlight.WithLabelValues(job.Experiment, job.Datatype).Dec()
 
 		// This could be done by GetStatus, but would change behaviors slightly.
 		if tr.cleanupDelay == 0 {
@@ -289,7 +286,7 @@ func (tr *Tracker) GetState() (JobMap, Job, time.Time) {
 			(s.isDone() && time.Since(updateTime) > tr.cleanupDelay) {
 			if !s.isDone() {
 				// If job didn't complete, the InFlight metric needs to be updated.
-				metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype).Dec()
+				metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype, s.Label()).Dec()
 				log.Println("Deleting stale job", j, time.Since(updateTime), tr.cleanupDelay)
 			}
 			tr.lastModified = time.Now()
