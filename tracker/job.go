@@ -209,7 +209,7 @@ func (s *Status) Prev() State {
 // If the final state is Failed, it composes the previous and final state, e.g. Loading-Failed
 func (s *Status) Label() string {
 	if s.State() == Failed {
-		return string(s.Prev()) + "-Failed"
+		return strings.Join([]string{string(s.Prev()), string(Failed)}, "-")
 	}
 	return string(s.State())
 }

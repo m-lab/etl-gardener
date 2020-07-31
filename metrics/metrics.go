@@ -70,7 +70,7 @@ var (
 	// Provides metrics:
 	//   gardener_tasks_in_flight
 	// Example usage:
-	// metrics.TasksInFlight.WithLabelValues(exp, dt).Inc
+	// metrics.TasksInFlight.WithLabelValues(exp, dt, state).Inc
 	TasksInFlight = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			// TODO - should call this JobsInFlight (gardener_jobs_in_flight), to avoid confusion with Tasks in parser.
