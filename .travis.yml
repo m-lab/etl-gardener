@@ -157,9 +157,8 @@ deploy:
 
 - provider: script
   script:
-    $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-oti data-processing-cluster ./apply-cluster.sh
+    $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-oti data-processing ./apply-cluster.sh
   on:
     repo: m-lab/etl-gardener
     all_branches: true
     condition: $TRAVIS_TAG == prod-* || $TRAVIS_TAG == u-prod-*
-    $TRAVIS_BUILD_DIR/travis/kubectl.sh mlab-oti data-processing ./apply-cluster.sh
