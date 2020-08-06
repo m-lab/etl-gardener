@@ -67,9 +67,16 @@ gcloud container node-pools create parser-pool \
 
 # TODO - narrow the cloud-platform scope? https://github.com/m-lab/etl-gardener/issues/308
 gcloud container node-pools create gardener-pool \
---cluster=data-processing --num-nodes=2 --machine-type=n1-standard-2 \
---enable-autorepair --enable-autoupgrade \
---scopes storage-ro,compute-rw,datastore,cloud-platform \
---node-labels=gardener-node=true \
+  --cluster=data-processing --num-nodes=2 --machine-type=n1-standard-2 \
+  --enable-autorepair --enable-autoupgrade \
+  --scopes storage-ro,compute-rw,datastore,cloud-platform \
+  --node-labels=gardener-node=true \
 # --service-account=etl-k8s-parser@mlab-staging.iam.gserviceaccount.com
+
+# Setup node-pool for prometheus
+gcloud container node-pools create prometheus-pool \
+  --num-nodes=1 --machine-type=n1-standard-4 \
+  --enable-autorepair --enable-autoupgrade \
+  --cluster=data-processing \
+  --node-labels=prometheus-node=true
 
