@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
 	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
@@ -117,8 +118,11 @@ type Service struct {
 
 	startDate time.Time // The date to restart at.
 
-	// Optional jobAdder to add jobs to.
+	// Optional jobAdder to add jobs to, e.g. a Tracker
 	jobAdder jobAdder
+
+	// Storage client used to get source lists.
+	sClient stiface.Client
 
 	// All fields above are const after initialization.
 	// All fields below are protected by *lock*
@@ -181,7 +185,28 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 	job := svc.NextJob(req.Context())
-	err := svc.jobAdder.AddJob(job.Job)
+
+	// Check whether there are any files
+	// TODO - perhaps actually make and cache a list of all the files?
+	var files []string
+	var err error
+	if svc.sClient != nil {
+		files, _, err = job.Job.PrefixStats(req.Context(), svc.sClient)
+		if err != nil {
+			log.Println(err)
+		}
+		if len(files) == 0 {
+			log.Println(job, "has no files", job.Bucket)
+			resp.WriteHeader(http.StatusInternalServerError)
+			_, err = resp.Write([]byte("Job has no files.  Try again."))
+			if err != nil {
+				log.Println(err)
+			}
+			return
+		}
+	}
+
+	err = svc.jobAdder.AddJob(job.Job)
 	if err != nil {
 		log.Println(err, job)
 		resp.WriteHeader(http.StatusInternalServerError)
@@ -192,7 +217,7 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.Println("Dispatching", job.Job)
+	log.Printf("Dispatching %s with %d files\n", job.Job, len(files))
 	_, err = resp.Write(job.Marshal())
 	if err != nil {
 		log.Println(err)
@@ -232,6 +257,7 @@ var ErrInvalidStartDate = errors.New("Invalid start date")
 func NewJobService(ctx context.Context, tk jobAdder, startDate time.Time,
 	targetBase string, sources []config.SourceConfig,
 	saver persistence.Saver,
+	statsClient stiface.Client, // May be nil
 ) (*Service, error) {
 	if startDate.Equal(time.Time{}) {
 		return nil, ErrInvalidStartDate
@@ -267,11 +293,13 @@ func NewJobService(ctx context.Context, tk jobAdder, startDate time.Time,
 	if err != nil {
 		return nil, err
 	}
+
 	svc := Service{
 		jobAdder:  tk,
 		saver:     saver,
 		jobSpecs:  specs,
 		startDate: startDate,
+		sClient:   statsClient,
 		lock:      &sync.Mutex{},
 		nextIndex: 0,
 		yesterday: yesterday,

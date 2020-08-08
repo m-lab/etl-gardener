@@ -19,7 +19,9 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
+	"cloud.google.com/go/storage"
 	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
+	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/m-lab/go/flagx"
@@ -317,10 +319,14 @@ func mustStandardTracker() *tracker.Tracker {
 }
 
 func mustCreateJobService(ctx context.Context, mux *http.ServeMux) {
+	storageClient, err := storage.NewClient(ctx)
+	rtx.Must(err, "Could not create storage client for job service")
+
 	saver, err := persistence.NewDatastoreSaver(context.Background(), os.Getenv("PROJECT"))
 	rtx.Must(err, "Could not initialize datastore saver")
 	svc, err := job.NewJobService(ctx, globalTracker, config.StartDate(),
-		os.Getenv("PROJECT"), config.Sources(), saver)
+		os.Getenv("PROJECT"), config.Sources(), saver,
+		stiface.AdaptClient(storageClient))
 	rtx.Must(err, "Could not initialize job service")
 	mux.HandleFunc("/job", svc.JobHandler)
 }
