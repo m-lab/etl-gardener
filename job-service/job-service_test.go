@@ -13,6 +13,7 @@ import (
 
 	"bou.ke/monkey"
 	"cloud.google.com/go/datastore"
+	"cloud.google.com/go/storage"
 	"github.com/go-test/deep"
 
 	"github.com/m-lab/go/rtx"
@@ -104,6 +105,11 @@ func TestService_NextJob(t *testing.T) {
 }
 
 func TestJobHandler(t *testing.T) {
+	fc := fakeClient{objects: []*storage.ObjectAttrs{
+		&storage.ObjectAttrs{Name: "obj1"},
+		&storage.ObjectAttrs{Name: "obj2"},
+		&storage.ObjectAttrs{Name: "ndt/ndt5/2011/02/03/foobar.tgz"},
+	}}
 	ctx := context.Background()
 
 	// Fake time will avoid yesterday trigger.
@@ -114,11 +120,11 @@ func TestJobHandler(t *testing.T) {
 	defer monkey.Unpatch(time.Now)
 
 	sources := []config.SourceConfig{
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 	}
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
-	svc, err := job.NewJobService(ctx, &NullTracker{}, start, "fakebucket", sources, &NullSaver{}, nil)
+	svc, err := job.NewJobService(ctx, &NullTracker{}, start, "fakebucket", sources, &NullSaver{}, &fc)
 	must(t, err)
 	req := httptest.NewRequest("", "/job", nil)
 	resp := httptest.NewRecorder()
@@ -127,11 +133,20 @@ func TestJobHandler(t *testing.T) {
 		t.Error("Should be MethodNotAllowed", http.StatusText(resp.Code))
 	}
 
+	// This one should fail because there are no objects with tcpinfo prefix.
+	req = httptest.NewRequest("POST", "/job", nil)
+	resp = httptest.NewRecorder()
+	svc.JobHandler(resp, req)
+	if resp.Code != http.StatusInternalServerError {
+		t.Error("Should be InternalServerError", http.StatusText(resp.Code), resp.Body.String())
+	}
+
+	// This should succeed, because the service advanced to ndt5/2011/02/03/
 	req = httptest.NewRequest("POST", "/job", nil)
 	resp = httptest.NewRecorder()
 	svc.JobHandler(resp, req)
 	if resp.Code != http.StatusOK {
-		t.Fatal(resp.Code)
+		t.Error("Should be StatusOK", http.StatusText(resp.Code), resp.Body.String())
 	}
 
 	want := `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`
