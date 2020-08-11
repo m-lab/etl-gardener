@@ -17,9 +17,9 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
 	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
-	"google.golang.org/api/iterator"
 
 	"github.com/m-lab/go/cloud/bqx"
+	"github.com/m-lab/go/cloud/gcs"
 
 	"github.com/m-lab/etl-gardener/metrics"
 )
@@ -113,11 +113,8 @@ func (j Job) String() string {
 	return fmt.Sprintf("%s:%s/%s", j.Date.Format("20060102"), j.Experiment, j.Datatype)
 }
 
-// Code for listing source files.
-// NOTE: Should be cached??
-
-// returns the path prefix for a job.
-func (j Job) prefix() (string, error) {
+// Prefix returns the path prefix for a job, not including the gs://bucket-name/.
+func (j Job) Prefix() (string, error) {
 	p := j.Path()
 	parts := strings.SplitN(p, "/", 4)
 	if len(parts) != 4 || parts[0] != "gs:" || len(parts[3]) == 0 {
@@ -126,69 +123,21 @@ func (j Job) prefix() (string, error) {
 	return parts[3], nil
 }
 
-// PostAll posts all normal file items in an ObjectIterator into the appropriate queue.
-// returns (fileCount, byteCount, error)
-func countFiles(it stiface.ObjectIterator) ([]string, int64, error) {
-	loopCount := -1
-	fileCount := 0
-	byteCount := int64(0)
-	gcsErrCount := 0
-	files := make([]string, 0, 1000)
-	for o, err := it.Next(); err != iterator.Done; o, err = it.Next() {
-		loopCount++
-		if err != nil {
-			// TODO - should this retry?
-			// log the underlying error, with added context
-			log.Println(err, "when attempting it.Next()")
-			gcsErrCount++
-			if gcsErrCount > 5 {
-				log.Printf("Failed after %d files.\n", fileCount)
-				return files, byteCount, err
-			}
-			continue
-		}
-
-		// TODO check that file is parseable?
-		files = append(files, o.Name)
-		byteCount += o.Size
-	}
-	return files, byteCount, nil
-}
-
-// PrefixStats queries storage and gets a list of all filenames.
-func (j Job) PrefixStats(ctx context.Context, sClient stiface.Client) ([]string, int64, error) {
-	bh, err := j.getBucket(ctx, sClient, false)
+// PrefixStats queries storage and gets a list of all file objects.
+func (j Job) PrefixStats(ctx context.Context, sClient stiface.Client) ([]*storage.ObjectAttrs, int64, error) {
+	bh, err := gcs.GetBucket(ctx, sClient, j.Bucket)
 	if err != nil {
-		return []string{}, 0, err
+		return []*storage.ObjectAttrs{}, 0, err
 	}
-	prefix, err := j.prefix()
+	prefix, err := j.Prefix()
+	log.Println(prefix)
 	if err != nil {
-		return []string{}, 0, err
+		return []*storage.ObjectAttrs{}, 0, err
 	}
-	qry := storage.Query{
-		Delimiter: "/",
-		Prefix:    prefix,
-	}
-	// TODO - handle timeout errors?
-	// TODO - should we add a deadline?
-	it := bh.Objects(ctx, &qry)
-	fileCount, byteCount, err := countFiles(it)
+	objects, byteCount, err := bh.GetFilesSince(ctx, prefix, nil, time.Time{})
 
 	// Should cache this info in the job status?
-	return fileCount, byteCount, err
-}
-
-func (j Job) getBucket(ctx context.Context, sClient stiface.Client, dryRun bool) (stiface.BucketHandle, error) {
-	bucket := sClient.Bucket(j.Bucket)
-	// Check that the bucket is valid, by fetching it's attributes.
-	// Bypass check if we are running travis tests.
-	if !dryRun {
-		_, err := bucket.Attrs(ctx)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return bucket, nil
+	return objects, byteCount, err
 }
 
 /////////////////////////////////////////////////////////////

@@ -10,7 +10,9 @@ import (
 	"sync"
 	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
+
 	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
@@ -188,7 +190,7 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 
 	// Check whether there are any files
 	// TODO - perhaps actually make and cache a list of all the files?
-	var files []string
+	var files []*storage.ObjectAttrs
 	var err error
 	if svc.sClient != nil {
 		start := time.Now()
@@ -197,7 +199,6 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 		if err != nil {
 			log.Println(err)
 		}
-		log.Println(len(files))
 		if len(files) == 0 {
 			log.Println(job, "has no files", job.Bucket)
 			resp.WriteHeader(http.StatusInternalServerError)

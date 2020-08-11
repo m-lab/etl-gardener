@@ -80,7 +80,7 @@ func TestService_NextJob(t *testing.T) {
 	// This is three days before "now".  The job service should restart
 	// when it reaches 36 hours before "now", which is 2011-02-05
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
-	svc, err := job.NewJobService(ctx, &NullTracker{}, start, "fakebucket", sources, &NullSaver{}, nil)
+	svc, err := job.NewJobService(ctx, &NullTracker{}, start, "fake-bucket", sources, &NullSaver{}, nil)
 	must(t, err)
 
 	expected := []struct {
@@ -108,12 +108,12 @@ func TestService_NextJob(t *testing.T) {
 
 func TestJobHandler(t *testing.T) {
 	fc := gcsfake.GCSClient{}
-	fc.AddTestBucket("fakebucket",
+	fc.AddTestBucket("fake-bucket",
 		gcsfake.BucketHandle{
 			ObjAttrs: []*storage.ObjectAttrs{
-				{Name: "obj1"},
-				{Name: "obj2"},
-				{Name: "ndt/ndt5/2011/02/03/foobar.tgz"},
+				{Name: "obj1", Updated: time.Now()},
+				{Name: "obj2", Updated: time.Now()},
+				{Name: "ndt/ndt5/2011/02/03/foobar.tgz", Size: 101, Updated: time.Now()},
 			}})
 
 	ctx := context.Background()
@@ -130,7 +130,7 @@ func TestJobHandler(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 	}
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
-	svc, err := job.NewJobService(ctx, &NullTracker{}, start, "fakebucket", sources, &NullSaver{}, &fc)
+	svc, err := job.NewJobService(ctx, &NullTracker{}, start, "fake-bucket", sources, &NullSaver{}, &fc)
 	must(t, err)
 	req := httptest.NewRequest("", "/job", nil)
 	resp := httptest.NewRecorder()
