@@ -191,7 +191,9 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 	var files []string
 	var err error
 	if svc.sClient != nil {
+		start := time.Now()
 		files, _, err = job.Job.PrefixStats(req.Context(), svc.sClient)
+		log.Println("PrefixStats took:", time.Since(start))
 		if err != nil {
 			log.Println(err)
 		}
