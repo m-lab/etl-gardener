@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"cloud.google.com/go/storage"
 	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
 
 	"github.com/m-lab/etl-gardener/config"
@@ -189,17 +188,12 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 	job := svc.NextJob(req.Context())
 
 	// Check whether there are any files
-	// TODO - perhaps actually make and cache a list of all the files?
-	var files []*storage.ObjectAttrs
-	var err error
 	if svc.sClient != nil {
-		start := time.Now()
-		files, _, err = job.Job.PrefixStats(req.Context(), svc.sClient)
-		log.Println("PrefixStats took:", time.Since(start))
+		ok, err := job.Job.HasFiles(req.Context(), svc.sClient)
 		if err != nil {
 			log.Println(err)
 		}
-		if len(files) == 0 {
+		if !ok {
 			log.Println(job, "has no files", job.Bucket)
 			resp.WriteHeader(http.StatusInternalServerError)
 			_, err = resp.Write([]byte("Job has no files.  Try again."))
@@ -210,7 +204,7 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	err = svc.jobAdder.AddJob(job.Job)
+	err := svc.jobAdder.AddJob(job.Job)
 	if err != nil {
 		log.Println(err, job)
 		resp.WriteHeader(http.StatusInternalServerError)
@@ -221,7 +215,7 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.Printf("Dispatching %s with %d files\n", job.Job, len(files))
+	log.Printf("Dispatching %s\n", job.Job)
 	_, err = resp.Write(job.Marshal())
 	if err != nil {
 		log.Println(err)

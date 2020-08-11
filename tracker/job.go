@@ -134,10 +134,21 @@ func (j Job) PrefixStats(ctx context.Context, sClient stiface.Client) ([]*storag
 	if err != nil {
 		return []*storage.ObjectAttrs{}, 0, err
 	}
-	objects, byteCount, err := bh.GetFilesSince(ctx, prefix, nil, time.Time{})
+	return bh.GetFilesSince(ctx, prefix, nil, time.Time{})
+}
 
-	// Should cache this info in the job status?
-	return objects, byteCount, err
+// HasFiles queries storage and gets a list of all file objects.
+func (j Job) HasFiles(ctx context.Context, sClient stiface.Client) (bool, error) {
+	bh, err := gcs.GetBucket(ctx, sClient, j.Bucket)
+	if err != nil {
+		return false, err
+	}
+	prefix, err := j.Prefix()
+	log.Println(prefix)
+	if err != nil {
+		return false, err
+	}
+	return bh.HasFiles(ctx, prefix)
 }
 
 /////////////////////////////////////////////////////////////
