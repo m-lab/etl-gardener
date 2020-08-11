@@ -32,6 +32,7 @@ type Job struct {
 	Datatype   string
 	Date       time.Time
 	// Filter is an optional regex to apply to ArchiveURL names
+	// Note that HasFiles does not use this, so ETL may process no files.
 	Filter string `json:",omitempty"`
 }
 
