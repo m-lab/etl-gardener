@@ -22,6 +22,8 @@ import (
 	"github.com/m-lab/etl-gardener/job-service"
 	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
+
+	"github.com/m-lab/go/cloudtest/gcsfake"
 )
 
 func init() {
@@ -105,11 +107,15 @@ func TestService_NextJob(t *testing.T) {
 }
 
 func TestJobHandler(t *testing.T) {
-	fc := fakeClient{objects: []*storage.ObjectAttrs{
-		&storage.ObjectAttrs{Name: "obj1"},
-		&storage.ObjectAttrs{Name: "obj2"},
-		&storage.ObjectAttrs{Name: "ndt/ndt5/2011/02/03/foobar.tgz"},
-	}}
+	fc := gcsfake.GCSClient{}
+	fc.AddTestBucket("fakebucket",
+		gcsfake.BucketHandle{
+			ObjAttrs: []*storage.ObjectAttrs{
+				{Name: "obj1"},
+				{Name: "obj2"},
+				{Name: "ndt/ndt5/2011/02/03/foobar.tgz"},
+			}})
+
 	ctx := context.Background()
 
 	// Fake time will avoid yesterday trigger.
