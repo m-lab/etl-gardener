@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
+
 	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
@@ -117,8 +119,11 @@ type Service struct {
 
 	startDate time.Time // The date to restart at.
 
-	// Optional jobAdder to add jobs to.
+	// Optional jobAdder to add jobs to, e.g. a Tracker
 	jobAdder jobAdder
+
+	// Storage client used to get source lists.
+	sClient stiface.Client
 
 	// All fields above are const after initialization.
 	// All fields below are protected by *lock*
@@ -181,6 +186,24 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 	job := svc.NextJob(req.Context())
+
+	// Check whether there are any files
+	if svc.sClient != nil {
+		ok, err := job.Job.HasFiles(req.Context(), svc.sClient)
+		if err != nil {
+			log.Println(err)
+		}
+		if !ok {
+			log.Println(job, "has no files", job.Bucket)
+			resp.WriteHeader(http.StatusInternalServerError)
+			_, err = resp.Write([]byte("Job has no files.  Try again."))
+			if err != nil {
+				log.Println(err)
+			}
+			return
+		}
+	}
+
 	err := svc.jobAdder.AddJob(job.Job)
 	if err != nil {
 		log.Println(err, job)
@@ -192,7 +215,7 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.Println("Dispatching", job.Job)
+	log.Printf("Dispatching %s\n", job.Job)
 	_, err = resp.Write(job.Marshal())
 	if err != nil {
 		log.Println(err)
@@ -232,6 +255,7 @@ var ErrInvalidStartDate = errors.New("Invalid start date")
 func NewJobService(ctx context.Context, tk jobAdder, startDate time.Time,
 	targetBase string, sources []config.SourceConfig,
 	saver persistence.Saver,
+	statsClient stiface.Client, // May be nil
 ) (*Service, error) {
 	if startDate.Equal(time.Time{}) {
 		return nil, ErrInvalidStartDate
@@ -267,11 +291,13 @@ func NewJobService(ctx context.Context, tk jobAdder, startDate time.Time,
 	if err != nil {
 		return nil, err
 	}
+
 	svc := Service{
 		jobAdder:  tk,
 		saver:     saver,
 		jobSpecs:  specs,
 		startDate: startDate,
+		sClient:   statsClient,
 		lock:      &sync.Mutex{},
 		nextIndex: 0,
 		yesterday: yesterday,

@@ -13,6 +13,7 @@ import (
 
 	"bou.ke/monkey"
 	"cloud.google.com/go/datastore"
+	"cloud.google.com/go/storage"
 	"github.com/go-test/deep"
 
 	"github.com/m-lab/go/rtx"
@@ -21,6 +22,8 @@ import (
 	"github.com/m-lab/etl-gardener/job-service"
 	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
+
+	"github.com/m-lab/go/cloudtest/gcsfake"
 )
 
 func init() {
@@ -77,7 +80,7 @@ func TestService_NextJob(t *testing.T) {
 	// This is three days before "now".  The job service should restart
 	// when it reaches 36 hours before "now", which is 2011-02-05
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
-	svc, err := job.NewJobService(ctx, &NullTracker{}, start, "fakebucket", sources, &NullSaver{})
+	svc, err := job.NewJobService(ctx, &NullTracker{}, start, "fake-bucket", sources, &NullSaver{}, nil)
 	must(t, err)
 
 	expected := []struct {
@@ -104,6 +107,15 @@ func TestService_NextJob(t *testing.T) {
 }
 
 func TestJobHandler(t *testing.T) {
+	fc := gcsfake.GCSClient{}
+	fc.AddTestBucket("fake-bucket",
+		gcsfake.BucketHandle{
+			ObjAttrs: []*storage.ObjectAttrs{
+				{Name: "obj1", Updated: time.Now()},
+				{Name: "obj2", Updated: time.Now()},
+				{Name: "ndt/ndt5/2011/02/03/foobar.tgz", Size: 101, Updated: time.Now()},
+			}})
+
 	ctx := context.Background()
 
 	// Fake time will avoid yesterday trigger.
@@ -114,11 +126,11 @@ func TestJobHandler(t *testing.T) {
 	defer monkey.Unpatch(time.Now)
 
 	sources := []config.SourceConfig{
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 	}
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
-	svc, err := job.NewJobService(ctx, &NullTracker{}, start, "fakebucket", sources, &NullSaver{})
+	svc, err := job.NewJobService(ctx, &NullTracker{}, start, "fake-bucket", sources, &NullSaver{}, &fc)
 	must(t, err)
 	req := httptest.NewRequest("", "/job", nil)
 	resp := httptest.NewRecorder()
@@ -127,11 +139,20 @@ func TestJobHandler(t *testing.T) {
 		t.Error("Should be MethodNotAllowed", http.StatusText(resp.Code))
 	}
 
+	// This one should fail because there are no objects with tcpinfo prefix.
+	req = httptest.NewRequest("POST", "/job", nil)
+	resp = httptest.NewRecorder()
+	svc.JobHandler(resp, req)
+	if resp.Code != http.StatusInternalServerError {
+		t.Error("Should be InternalServerError", http.StatusText(resp.Code), resp.Body.String())
+	}
+
+	// This should succeed, because the service advanced to ndt5/2011/02/03/
 	req = httptest.NewRequest("POST", "/job", nil)
 	resp = httptest.NewRecorder()
 	svc.JobHandler(resp, req)
 	if resp.Code != http.StatusOK {
-		t.Fatal(resp.Code)
+		t.Error("Should be StatusOK", http.StatusText(resp.Code), resp.Body.String())
 	}
 
 	want := `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`
@@ -163,7 +184,7 @@ func TestResume(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
-	svc, err := job.NewJobService(ctx, tk, start, "fake-bucket", sources, &NullSaver{})
+	svc, err := job.NewJobService(ctx, tk, start, "fake-bucket", sources, &NullSaver{}, nil)
 	must(t, err)
 	j := svc.NextJob(ctx)
 	if j.Date != last.Date {
@@ -226,7 +247,7 @@ func TestResumeFromSaver(t *testing.T) {
 	// yesterday is set to now, so it won't trigger.
 	yesterday := time.Now().UTC().Truncate(24 * time.Hour)
 	fs := FakeSaver{Current: resume, Yesterday: yesterday}
-	svc, err := job.NewJobService(ctx, &NullTracker{}, start, "fake-bucket", sources, &fs)
+	svc, err := job.NewJobService(ctx, &NullTracker{}, start, "fake-bucket", sources, &fs, nil)
 	must(t, err)
 	// NextJob should return a job with date provided by FakeSaver.
 	j := svc.NextJob(ctx)
@@ -263,7 +284,7 @@ func TestYesterdayFromSaver(t *testing.T) {
 	// Set up yesterday so that it triggers immediately.
 	yesterday := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2)
 	fs := FakeSaver{Current: resume, Yesterday: yesterday}
-	svc, err := job.NewJobService(ctx, &NullTracker{}, start, "fake-bucket", sources, &fs)
+	svc, err := job.NewJobService(ctx, &NullTracker{}, start, "fake-bucket", sources, &fs, nil)
 	must(t, err)
 
 	expected := []struct {
@@ -315,7 +336,7 @@ func TestEarlyWrapping(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 	}
-	svc, err := job.NewJobService(ctx, tk, start, "fake-bucket", sources, &NullSaver{})
+	svc, err := job.NewJobService(ctx, tk, start, "fake-bucket", sources, &NullSaver{}, nil)
 	must(t, err)
 
 	// If a job is still present in the tracker when it wraps, /job returns an error.

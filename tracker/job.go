@@ -14,9 +14,12 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
+	"cloud.google.com/go/storage"
 	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
+	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
 
 	"github.com/m-lab/go/cloud/bqx"
+	"github.com/m-lab/go/cloud/gcs"
 
 	"github.com/m-lab/etl-gardener/metrics"
 )
@@ -29,6 +32,7 @@ type Job struct {
 	Datatype   string
 	Date       time.Time
 	// Filter is an optional regex to apply to ArchiveURL names
+	// Note that HasFiles does not use this, so ETL may process no files.
 	Filter string `json:",omitempty"`
 }
 
@@ -109,6 +113,48 @@ func (j Job) Marshal() []byte {
 func (j Job) String() string {
 	return fmt.Sprintf("%s:%s/%s", j.Date.Format("20060102"), j.Experiment, j.Datatype)
 }
+
+// Prefix returns the path prefix for a job, not including the gs://bucket-name/.
+func (j Job) Prefix() (string, error) {
+	p := j.Path()
+	parts := strings.SplitN(p, "/", 4)
+	if len(parts) != 4 || parts[0] != "gs:" || len(parts[3]) == 0 {
+		return "", errors.New("Bad GCS path")
+	}
+	return parts[3], nil
+}
+
+// PrefixStats queries storage and gets a list of all file objects.
+func (j Job) PrefixStats(ctx context.Context, sClient stiface.Client) ([]*storage.ObjectAttrs, int64, error) {
+	bh, err := gcs.GetBucket(ctx, sClient, j.Bucket)
+	if err != nil {
+		return []*storage.ObjectAttrs{}, 0, err
+	}
+	prefix, err := j.Prefix()
+	log.Println(prefix)
+	if err != nil {
+		return []*storage.ObjectAttrs{}, 0, err
+	}
+	return bh.GetFilesSince(ctx, prefix, nil, time.Time{})
+}
+
+// HasFiles queries storage and gets a list of all file objects.
+func (j Job) HasFiles(ctx context.Context, sClient stiface.Client) (bool, error) {
+	bh, err := gcs.GetBucket(ctx, sClient, j.Bucket)
+	if err != nil {
+		return false, err
+	}
+	prefix, err := j.Prefix()
+	log.Println(prefix)
+	if err != nil {
+		return false, err
+	}
+	return bh.HasFiles(ctx, prefix)
+}
+
+/////////////////////////////////////////////////////////////
+//                      State                              //
+/////////////////////////////////////////////////////////////
 
 // Error declarations
 var (
