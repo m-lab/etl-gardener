@@ -11,6 +11,7 @@ REGION=${2:?Please provide the cluster region, e.g. us-central1: $USAGE}
 
 gcloud config set project $PROJECT
 gcloud config set compute/region $REGION
+gcloud config set container/cluster data-processing
 
 # The network for comms among the components has to be created first.
 if gcloud compute networks list | grep "^data-processing "; then
@@ -43,8 +44,13 @@ else
 fi
 
 # And define the static IP address that will be used by etl parsers to reach gardener.
-gcloud compute addresses create etl-gardener \
-  --subnet=dp-gardener --addresses=10.100.1.2
+if gcloud compute addresses list --filter=region=\"region:($REGION)\" | grep "^etl-gardener "; then
+  echo "subnet data-processing/dp-gardener already exists"
+else
+  gcloud compute addresses create etl-gardener \
+    --region=$REGION
+    --subnet=dp-gardener --addresses=10.100.1.2
+fi
 
 # Now we can create the cluster.
 # It includes a default node-pool, though it isn't actually needed?
@@ -59,24 +65,23 @@ gcloud container clusters create data-processing \
 # Parser needs write access to storage.  Gardener needs only read access.
 # TODO - narrow the cloud-platform scope? https://github.com/m-lab/etl-gardener/issues/308
 gcloud container node-pools create parser-pool \
-  --cluster=data-processing --num-nodes=3 --machine-type=n1-standard-8 \
+  --num-nodes=1 --machine-type=n1-standard-8 \
   --enable-autorepair --enable-autoupgrade \
   --scopes storage-rw,compute-rw,datastore,cloud-platform \
   --node-labels=parser-node=true \
- # --service-account=etl-k8s-parser@mlab-staging.iam.gserviceaccount.com
+  --service-account=etl-k8s-parser@{$PROJECT}.iam.gserviceaccount.com
 
 # TODO - narrow the cloud-platform scope? https://github.com/m-lab/etl-gardener/issues/308
 gcloud container node-pools create gardener-pool \
-  --cluster=data-processing --num-nodes=2 --machine-type=n1-standard-2 \
+  --num-nodes=1 --machine-type=n1-standard-2 \
   --enable-autorepair --enable-autoupgrade \
   --scopes storage-ro,compute-rw,datastore,cloud-platform \
   --node-labels=gardener-node=true \
-# --service-account=etl-k8s-parser@mlab-staging.iam.gserviceaccount.com
+  --service-account=etl-k8s-parser@{$PROJECT}.iam.gserviceaccount.com
 
 # Setup node-pool for prometheus
 gcloud container node-pools create prometheus-pool \
   --num-nodes=1 --machine-type=n1-standard-4 \
   --enable-autorepair --enable-autoupgrade \
-  --cluster=data-processing \
   --node-labels=prometheus-node=true
 
