@@ -62,7 +62,7 @@ spec:
         - name: QUEUE_BASE
           value: "etl-traceroute-batch-"
         - name: NUM_QUEUES
-          value: "16"
+          value: "4"
 
         ports:
         - name: prometheus-port
