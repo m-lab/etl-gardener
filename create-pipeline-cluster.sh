@@ -61,6 +61,14 @@ gcloud container clusters create data-processing \
   --num-nodes 2 --image-type=cos --machine-type=n1-standard-4 \
   --node-labels=gardener-node=true --labels=data-processing=true
 
+
+# Define or update the role for etl-parsers
+gcloud --project=$PROJECT iam roles update etl_parser --file=etl_parser_role.json
+# Update service-account with the appropriate ACLS.
+gcloud projects add-iam-policy-binding mlab-sandbox \
+  --member=serviceAccount:etl-k8s-parser@mlab-sandbox.iam.gserviceaccount.com \
+  --role=projects/mlab-sandbox/roles/parser_k8s
+
 # Set up node pools for parser and gardener pods.
 # Parser needs write access to storage.  Gardener needs only read access.
 # TODO - narrow the cloud-platform scope? https://github.com/m-lab/etl-gardener/issues/308
