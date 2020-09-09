@@ -251,11 +251,20 @@ func (to TableOps) Join(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 		return nil, dataset.ErrNilQuery
 	}
 	dest := to.client.Dataset(to.Job.Experiment).Table(
-		to.Job.Datatype + "_" + to.Job.Date.Format("20060102"))
+		to.Job.Datatype + "$" + to.Job.Date.Format("20060102"))
 	qc := bqiface.QueryConfig{
 		QueryConfig: bigquery.QueryConfig{
 			DryRun: dryRun,
 			Q:      qs,
+			// We want to replace the whole partition
+			WriteDisposition: bigquery.WriteTruncate,
+			// Create the able if it doesn't exist
+			CreateDisposition: bigquery.CreateIfNeeded,
+			// Partitioning spec, in event we have to create the table.
+			TimePartitioning: &bigquery.TimePartitioning{
+				Field:                  "date",
+				RequirePartitionFilter: true,
+			},
 		},
 		Dst: dest,
 	}
