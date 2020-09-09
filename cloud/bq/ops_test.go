@@ -39,7 +39,7 @@ func TestValidateQueries(t *testing.T) {
 	// TODO Add "preserve" query
 	// Test for each datatype
 	for _, dataType := range dataTypes {
-		job := tracker.NewJob("bucket", "ndt", dataType, time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
+		job := tracker.NewJob("bucket", "ndt", dataType, time.Date(2020, 6, 4, 0, 0, 0, 0, time.UTC))
 		qp, err := bq.NewTableOps(ctx, job, "mlab-testing", "")
 		if err != nil {
 			t.Fatal(dataType, err)
@@ -53,6 +53,17 @@ func TestValidateQueries(t *testing.T) {
 			status := j.LastStatus()
 			if status.Err() != nil {
 				t.Fatal(t.Name(), err, bq.DedupQuery(*qp))
+			}
+
+			if qp.Job.Datatype != "annotation" {
+				j, err := qp.Join(ctx, true)
+				if err != nil {
+					t.Fatal(t.Name(), err, bq.JoinQuery(*qp))
+				}
+				status := j.LastStatus()
+				if status.Err() != nil {
+					t.Fatal(t.Name(), err, bq.JoinQuery(*qp))
+				}
 			}
 		})
 	}
