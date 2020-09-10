@@ -27,17 +27,24 @@ func newStateFunc(detail string) ActionFunc {
 }
 
 // This returns a ConditionFunc that checks for completion of corresponding
-// annotation job in the tracker.
-func newCondFunc(tk *tracker.Tracker, detail string) ConditionFunc {
+// annotation job in the tracker.  Used to gate the join action.
+func newJoinConditionFunc(tk *tracker.Tracker, detail string) ConditionFunc {
 	return func(ctx context.Context, j tracker.Job) bool {
 		if j.Datatype == "annotation" {
+			// Annotation does not require joining, so the check is
+			// not needed.
 			return true
 		}
+		// All other types currently depend only on the annotation table.
+		// So, we check whether the annotation table is complete.
+		// (Technically, we only need to know whether the copy has completed.)
 		ann := j
 		ann.Datatype = "annotation"
-		status, err := tk.GetStatus(j)
+		status, err := tk.GetStatus(ann)
 		if err != nil {
-			return true // Hack
+			// For early dates, there is no annotation job, so if the job
+			// is absent, we proceed with the join.
+			return true
 		}
 		return status.State() == tracker.Complete
 	}
@@ -161,7 +168,6 @@ func dedupFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *O
 	// and retries.
 	delay := time.Since(stateChangeTime).Round(time.Minute)
 
-	// TODO pass in the JobWithTarget, and get the base from the target.
 	qp, err := tableOps(ctx, j)
 	if err != nil {
 		log.Println(err)
@@ -337,7 +343,6 @@ func copyFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 
 // TODO improve test coverage?
 func deleteFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
-	// TODO pass in the JobWithTarget, and get the base from the target.
 	qp, err := tableOps(ctx, j)
 	if err != nil {
 		log.Println(err)
@@ -360,7 +365,6 @@ func joinFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 		// annotation should not be annotated.
 		return Success(j, "Annotation does not require join")
 	}
-	// TODO pass in the JobWithTarget, and get the base from the target.
 	delay := time.Since(stateChangeTime).Round(time.Minute)
 	to, err := tableOps(ctx, j)
 	if err != nil {
@@ -377,6 +381,8 @@ func joinFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 	}
 	status, outcome := waitAndCheck(ctx, bqJob, j, "Join")
 	if !outcome.IsDone() {
+		// TODO - should we check for valid statistics and update query cost?
+		// https://github.com/m-lab/etl-gardener/issues/315
 		return outcome
 	}
 
