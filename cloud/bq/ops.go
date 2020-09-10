@@ -164,6 +164,7 @@ func (to TableOps) CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, err
 // TODO get the tmp_ and raw_ from the job Target?
 const tmpTable = "`{{.Project}}.tmp_{{.Job.Experiment}}.{{.Job.Datatype}}`"
 const rawTable = "`{{.Project}}.raw_{{.Job.Experiment}}.{{.Job.Datatype}}`"
+const joinedTable = "`{{.Project}}.{{.Job.Experiment}}.{{.Job.Datatype}}`"
 
 var dedupTemplate = template.Must(template.New("").Parse(`
 #standardSQL
@@ -211,4 +212,67 @@ func (to TableOps) DeleteTmp(ctx context.Context) error {
 		fmt.Sprintf("%s$%s", to.Job.Datatype, to.Job.Date.Format("20060102")))
 	log.Println("Deleting", tmp.FullyQualifiedName())
 	return tmp.Delete(ctx)
+}
+
+// joinTemplate is used to create join queries, based on Job details.
+// TODO - explore whether using query parameters would improve readability
+// instead of executing this template.  Query params cannot be used for
+// table names, but would work for most other variables.
+var joinTemplate = template.Must(template.New("").Parse(`
+#standardSQL
+# Join the ndt7 data with server and client annotation.
+WITH {{.Job.Datatype}} AS (
+SELECT *
+FROM ` + rawTable + `
+WHERE {{.Date}} = "{{.Job.Date.Format "2006-01-02"}}"
+),
+
+# Need to remove dups?
+ann AS (
+SELECT *
+FROM ` + "`{{.Project}}.raw_{{.Job.Experiment}}.annotation`" + `
+WHERE {{.Date}} BETWEEN DATE_SUB("{{.Job.Date.Format "2006-01-02"}}", INTERVAL 1 DAY) AND "{{.Job.Date.Format "2006-01-02"}}"
+)
+
+SELECT {{.Job.Datatype}}.id, {{.Job.Datatype}}.date, {{.Job.Datatype}}.parser,
+       ann.* EXCEPT(id, date, parser), {{.Job.Datatype}}.* EXCEPT(id, date, parser)
+FROM {{.Job.Datatype}} LEFT JOIN ann USING (id)
+`))
+
+// Join joins the raw tables into annotated tables.
+func (to TableOps) Join(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+	qs := to.makeQuery(joinTemplate)
+
+	if len(qs) == 0 {
+		return nil, dataset.ErrNilQuery
+	}
+	if to.client == nil {
+		return nil, dataset.ErrNilBqClient
+	}
+	q := to.client.Query(qs)
+	if q == nil {
+		return nil, dataset.ErrNilQuery
+	}
+	// The destintation is a partition in a table based on the job
+	// type and date.  Initially, this will only be ndt7.
+	dest := to.client.Dataset(to.Job.Experiment).Table(
+		to.Job.Datatype + "$" + to.Job.Date.Format("20060102"))
+	qc := bqiface.QueryConfig{
+		QueryConfig: bigquery.QueryConfig{
+			DryRun: dryRun,
+			Q:      qs,
+			// We want to replace the whole partition
+			WriteDisposition: bigquery.WriteTruncate,
+			// Create the table if it doesn't exist
+			CreateDisposition: bigquery.CreateIfNeeded,
+			// Partitioning spec, in event we have to create the table.
+			TimePartitioning: &bigquery.TimePartitioning{
+				Field:                  "date",
+				RequirePartitionFilter: true,
+			},
+		},
+		Dst: dest,
+	}
+	q.SetQueryConfig(qc)
+	return q.Run(ctx)
 }
