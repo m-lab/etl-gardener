@@ -33,6 +33,7 @@ func newJoinConditionFunc(tk *tracker.Tracker, detail string) ConditionFunc {
 		if j.Datatype == "annotation" {
 			// Annotation does not require joining, so the check is
 			// not needed.
+			log.Println(j, "condition met")
 			return true
 		}
 		// All other types currently depend only on the annotation table.
@@ -44,8 +45,10 @@ func newJoinConditionFunc(tk *tracker.Tracker, detail string) ConditionFunc {
 		if err != nil {
 			// For early dates, there is no annotation job, so if the job
 			// is absent, we proceed with the join.
+			log.Println(ann, "is absent")
 			return true
 		}
+		log.Println(ann, status.LastStateInfo())
 		return status.State() == tracker.Complete
 	}
 }
@@ -153,10 +156,10 @@ func interpretStatus(op string, j tracker.Job, status *bigquery.JobStatus, delay
 			delay,
 			float64(details.SlotMillis)/60000, details.NumDMLAffectedRows,
 			details.TotalBytesProcessed/1000000, details.TotalBytesBilled/1000000)
-		log.Println(msg)
-		log.Printf("%s %s: %+v\n", op, j, details)
+		log.Println(j, msg)
+		log.Printf("%s %s: %+v\n", j, op, details)
 	default:
-		log.Printf("Could not convert to QueryStatistics: %+v\n", status.Statistics.Details)
+		log.Printf("%v: Could not convert to QueryStatistics: %+v\n", j, status.Statistics.Details)
 		msg = "Could not convert Detail to QueryStatistics"
 	}
 	return msg
@@ -170,13 +173,13 @@ func dedupFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *O
 
 	qp, err := tableOps(ctx, j)
 	if err != nil {
-		log.Println(err)
+		log.Println(j, err)
 		// This terminates this job.
 		return Failure(j, err, "-")
 	}
 	bqJob, err := qp.Dedup(ctx, false)
 	if err != nil {
-		log.Println(err)
+		log.Println(j, err)
 		// Try again soon.
 		return Retry(j, err, "-")
 	}
@@ -208,14 +211,14 @@ func handleLoadError(label string, j tracker.Job, status *bigquery.JobStatus) *O
 		// When there is mismatch between row content and table schema,
 		// the bigquery Load may return "No such field:" errors.
 		if strings.Contains(e.Message, "No such field:") {
-			log.Printf("--- Field missing in bigquery: %s: %s -- %s", label, e.Message, e.Location)
+			log.Printf("--- Field missing in bigquery: %v %s: %s -- %s", j, label, e.Message, e.Location)
 			metrics.WarningCount.WithLabelValues(
 				j.Experiment, j.Datatype,
 				label+"GCS load failed - missing field").Inc()
 			msg = e.Message
 			continue
 		}
-		log.Println("---", label, e)
+		log.Println("---", j, label, e)
 		metrics.WarningCount.WithLabelValues(
 			j.Experiment, j.Datatype,
 			label+"UnknownStatusError").Inc()
@@ -229,7 +232,7 @@ func handleWaitError(label string, j tracker.Job, status *bigquery.JobStatus) *O
 	err := status.Err()
 	log.Println(label, err)
 	for i := range status.Errors {
-		log.Println("---", label, status.Errors[i])
+		log.Println("---", j, label, status.Errors[i])
 	}
 	metrics.WarningCount.WithLabelValues(
 		j.Experiment, j.Datatype,
@@ -264,13 +267,13 @@ func loadFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 
 	qp, err := tableOps(ctx, j)
 	if err != nil {
-		log.Println(err)
+		log.Println(j, err)
 		// This terminates this job.
 		return Failure(j, err, "-")
 	}
 	bqJob, err := qp.LoadToTmp(ctx, false)
 	if err != nil {
-		log.Println(err)
+		log.Println(j, err)
 		// Try again soon.
 		return Retry(j, err, "-")
 	}
@@ -312,13 +315,13 @@ func copyFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 
 	qp, err := tableOps(ctx, j)
 	if err != nil {
-		log.Println(err)
+		log.Println(j, err)
 		// This terminates this job.
 		return Failure(j, err, "-")
 	}
 	bqJob, err := qp.CopyToRaw(ctx, false)
 	if err != nil {
-		log.Println(err)
+		log.Println(j, err)
 		// Try again soon.
 		return Retry(j, err, "-")
 	}
@@ -345,13 +348,13 @@ func copyFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 func deleteFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
 	qp, err := tableOps(ctx, j)
 	if err != nil {
-		log.Println(err)
+		log.Println(j, err)
 		// This terminates this job.
 		return Failure(j, err, "-")
 	}
 	err = qp.DeleteTmp(ctx)
 	if err != nil {
-		log.Println(err)
+		log.Println(j, err)
 		// Try again soon.
 		return Retry(j, err, "-")
 	}
@@ -368,14 +371,14 @@ func joinFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 	delay := time.Since(stateChangeTime).Round(time.Minute)
 	to, err := tableOps(ctx, j)
 	if err != nil {
-		log.Println(err)
+		log.Println(j, err)
 		// This terminates this job.
 		return Failure(j, err, "-")
 	}
 
 	bqJob, err := to.Join(ctx, false)
 	if err != nil {
-		log.Println(err)
+		log.Println(j, err)
 		// Try again soon.
 		return Retry(j, err, "-")
 	}
