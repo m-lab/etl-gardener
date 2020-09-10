@@ -214,6 +214,10 @@ func (to TableOps) DeleteTmp(ctx context.Context) error {
 	return tmp.Delete(ctx)
 }
 
+// joinTemplate is used to create join queries, based on Job details.
+// TODO - explore whether using query parameters would improve readability
+// instead of executing this template.  Query params cannot be used for
+// table names, but would work for most other variables.
 var joinTemplate = template.Must(template.New("").Parse(`
 #standardSQL
 # Join the ndt7 data with server and client annotation.
@@ -236,7 +240,6 @@ FROM {{.Job.Datatype}} LEFT JOIN ann USING (id)
 `))
 
 // Join joins the raw tables into annotated tables.
-// TODO - use query params instead of some of the templating.
 func (to TableOps) Join(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	qs := to.makeQuery(joinTemplate)
 
@@ -250,6 +253,8 @@ func (to TableOps) Join(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	if q == nil {
 		return nil, dataset.ErrNilQuery
 	}
+	// The destintation is a partition in a table based on the job
+	// type and date.  Initially, this will only be ndt7.
 	dest := to.client.Dataset(to.Job.Experiment).Table(
 		to.Job.Datatype + "$" + to.Job.Date.Format("20060102"))
 	qc := bqiface.QueryConfig{
@@ -258,7 +263,7 @@ func (to TableOps) Join(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 			Q:      qs,
 			// We want to replace the whole partition
 			WriteDisposition: bigquery.WriteTruncate,
-			// Create the able if it doesn't exist
+			// Create the table if it doesn't exist
 			CreateDisposition: bigquery.CreateIfNeeded,
 			// Partitioning spec, in event we have to create the table.
 			TimePartitioning: &bigquery.TimePartitioning{
