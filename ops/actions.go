@@ -77,7 +77,7 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 		deleteFunc,
 		tracker.Joining)
 	m.AddAction(tracker.Joining,
-		newCondFunc(tk, "Join condition"),
+		newJoinConditionFunc(tk, "Join condition"),
 		joinFunc,
 		tracker.Complete)
 	return m, nil
