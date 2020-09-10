@@ -31,6 +31,8 @@ func TestStandardMonitor(t *testing.T) {
 	tk.AddJob(tracker.NewJob("bucket", "exp2", "tcpinfo", time.Now()))
 	// Valid experiment and datatype
 	// This does an actual dedup, so we need to allow enough time.
+	tk.AddJob(tracker.NewJob("bucket", "ndt", "ndt7", time.Now()))
+
 	tk.AddJob(tracker.NewJob("bucket", "ndt", "annotation", time.Now()))
 
 	m, err := ops.NewStandardMonitor(context.Background(), cloud.BQConfig{}, tk)
@@ -39,21 +41,20 @@ func TestStandardMonitor(t *testing.T) {
 	m.AddAction(tracker.Init,
 		nil,
 		newStateFunc("-"),
-		tracker.Parsing,
-		"Init")
+		tracker.Parsing)
 	m.AddAction(tracker.Parsing,
 		nil,
 		newStateFunc("-"),
-		tracker.ParseComplete,
-		"Parsing")
-	// Hack for testing - deliberately skip Load function.
+		tracker.ParseComplete)
+	// Hack for testing - deliberately skip Load and Dedup functions.
 	m.AddAction(tracker.ParseComplete,
 		nil,
 		newStateFunc("-"),
-		tracker.Copying,
-		"Copying")
+		tracker.Copying)
 
-	// The real dedup action should fail on unknown datatype.
+	// The rest of the standard state machine picks up from here,
+	// with Copying, Joining, ...
+
 	go m.Watch(ctx, 50*time.Millisecond)
 
 	failTime := time.Now().Add(30 * time.Second)

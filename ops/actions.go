@@ -26,6 +26,33 @@ func newStateFunc(detail string) ActionFunc {
 	}
 }
 
+// This returns a ConditionFunc that checks for completion of corresponding
+// annotation job in the tracker.  Used to gate the join action.
+func newJoinConditionFunc(tk *tracker.Tracker, detail string) ConditionFunc {
+	return func(ctx context.Context, j tracker.Job) bool {
+		if j.Datatype == "annotation" {
+			// Annotation does not require joining, so the check is
+			// not needed.
+			log.Println(j, "condition met")
+			return true
+		}
+		// All other types currently depend only on the annotation table.
+		// So, we check whether the annotation table is complete.
+		// (Technically, we only need to know whether the copy has completed.)
+		ann := j
+		ann.Datatype = "annotation"
+		status, err := tk.GetStatus(ann)
+		if err != nil {
+			// For early dates, there is no annotation job, so if the job
+			// is absent, we proceed with the join.
+			log.Println(ann, "is absent")
+			return true
+		}
+		log.Println(ann, status.LastStateInfo())
+		return status.State() == tracker.Complete
+	}
+}
+
 // NewStandardMonitor creates the standard monitor that handles several state transitions.
 func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.Tracker) (*Monitor, error) {
 	m, err := NewMonitor(ctx, config, tk)
@@ -35,28 +62,27 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 	m.AddAction(tracker.ParseComplete,
 		nil,
 		newStateFunc("-"),
-		tracker.Loading,
-		"Changing to Loading")
+		tracker.Loading)
 	m.AddAction(tracker.Loading,
 		nil,
 		loadFunc,
-		tracker.Deduplicating,
-		"Loading")
+		tracker.Deduplicating)
 	m.AddAction(tracker.Deduplicating,
 		nil,
 		dedupFunc,
-		tracker.Copying,
-		"Deduplicating")
+		tracker.Copying)
 	m.AddAction(tracker.Copying,
 		nil,
 		copyFunc,
-		tracker.Deleting,
-		"Copying")
+		tracker.Deleting)
 	m.AddAction(tracker.Deleting,
 		nil,
 		deleteFunc,
-		tracker.Complete,
-		"Deleting")
+		tracker.Joining)
+	m.AddAction(tracker.Joining,
+		newJoinConditionFunc(tk, "Join condition"),
+		joinFunc,
+		tracker.Complete)
 	return m, nil
 }
 
@@ -117,22 +143,43 @@ func tableOps(ctx context.Context, j tracker.Job) (*bq.TableOps, error) {
 	return bq.NewTableOps(ctx, j, project, loadSource)
 }
 
+func interpretStatus(op string, j tracker.Job, status *bigquery.JobStatus, delay time.Duration) string {
+	var msg string
+	stats := status.Statistics
+	switch details := stats.Details.(type) {
+	case *bigquery.QueryStatistics:
+		opTime := stats.EndTime.Sub(stats.StartTime)
+		metrics.QueryCostHistogram.WithLabelValues(j.Datatype, op).Observe(float64(details.SlotMillis) / 1000.0)
+		msg = fmt.Sprintf("%s took %s (after %v waiting), %5.2f Slot Minutes, %d Rows affected, %d MB Processed, %d MB Billed",
+			op,
+			opTime.Round(100*time.Millisecond),
+			delay,
+			float64(details.SlotMillis)/60000, details.NumDMLAffectedRows,
+			details.TotalBytesProcessed/1000000, details.TotalBytesBilled/1000000)
+		log.Println(j, msg)
+		log.Printf("%s %s: %+v\n", j, op, details)
+	default:
+		log.Printf("%v: Could not convert to QueryStatistics: %+v\n", j, status.Statistics.Details)
+		msg = "Could not convert Detail to QueryStatistics"
+	}
+	return msg
+}
+
 // TODO improve test coverage?
 func dedupFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
 	// This is the delay since entering the dedup state, due to monitor delay
 	// and retries.
 	delay := time.Since(stateChangeTime).Round(time.Minute)
 
-	// TODO pass in the JobWithTarget, and get the base from the target.
 	qp, err := tableOps(ctx, j)
 	if err != nil {
-		log.Println(err)
+		log.Println(j, err)
 		// This terminates this job.
 		return Failure(j, err, "-")
 	}
 	bqJob, err := qp.Dedup(ctx, false)
 	if err != nil {
-		log.Println(err)
+		log.Println(j, err)
 		// Try again soon.
 		return Retry(j, err, "-")
 	}
@@ -146,24 +193,7 @@ func dedupFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *O
 	}
 
 	// Dedup job was successful.  Handle the statistics, metrics, tracker update.
-	var msg string
-	stats := status.Statistics
-	switch details := stats.Details.(type) {
-	case *bigquery.QueryStatistics:
-		opTime := stats.EndTime.Sub(stats.StartTime)
-		metrics.QueryCostHistogram.WithLabelValues(j.Datatype, "dedup").Observe(float64(details.SlotMillis) / 1000.0)
-		msg = fmt.Sprintf("Dedup took %s (after %v waiting), %5.2f Slot Minutes, %d Rows affected, %d MB Processed, %d MB Billed",
-			opTime.Round(100*time.Millisecond),
-			delay,
-			float64(details.SlotMillis)/60000, details.NumDMLAffectedRows,
-			details.TotalBytesProcessed/1000000, details.TotalBytesBilled/1000000)
-		log.Println(msg)
-		log.Printf("Dedup %s: %+v\n", j, details)
-	default:
-		log.Printf("Could not convert to QueryStatistics: %+v\n", status.Statistics.Details)
-		msg = "Could not convert Detail to QueryStatistics"
-	}
-
+	msg := interpretStatus("Dedup", j, status, delay)
 	return Success(j, msg)
 }
 
@@ -181,14 +211,14 @@ func handleLoadError(label string, j tracker.Job, status *bigquery.JobStatus) *O
 		// When there is mismatch between row content and table schema,
 		// the bigquery Load may return "No such field:" errors.
 		if strings.Contains(e.Message, "No such field:") {
-			log.Printf("--- Field missing in bigquery: %s: %s -- %s", label, e.Message, e.Location)
+			log.Printf("--- Field missing in bigquery: %v %s: %s -- %s", j, label, e.Message, e.Location)
 			metrics.WarningCount.WithLabelValues(
 				j.Experiment, j.Datatype,
 				label+"GCS load failed - missing field").Inc()
 			msg = e.Message
 			continue
 		}
-		log.Println("---", label, e)
+		log.Println("---", j, label, e)
 		metrics.WarningCount.WithLabelValues(
 			j.Experiment, j.Datatype,
 			label+"UnknownStatusError").Inc()
@@ -202,7 +232,7 @@ func handleWaitError(label string, j tracker.Job, status *bigquery.JobStatus) *O
 	err := status.Err()
 	log.Println(label, err)
 	for i := range status.Errors {
-		log.Println("---", label, status.Errors[i])
+		log.Println("---", j, label, status.Errors[i])
 	}
 	metrics.WarningCount.WithLabelValues(
 		j.Experiment, j.Datatype,
@@ -237,13 +267,13 @@ func loadFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 
 	qp, err := tableOps(ctx, j)
 	if err != nil {
-		log.Println(err)
+		log.Println(j, err)
 		// This terminates this job.
 		return Failure(j, err, "-")
 	}
 	bqJob, err := qp.LoadToTmp(ctx, false)
 	if err != nil {
-		log.Println(err)
+		log.Println(j, err)
 		// Try again soon.
 		return Retry(j, err, "-")
 	}
@@ -285,13 +315,13 @@ func copyFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 
 	qp, err := tableOps(ctx, j)
 	if err != nil {
-		log.Println(err)
+		log.Println(j, err)
 		// This terminates this job.
 		return Failure(j, err, "-")
 	}
 	bqJob, err := qp.CopyToRaw(ctx, false)
 	if err != nil {
-		log.Println(err)
+		log.Println(j, err)
 		// Try again soon.
 		return Retry(j, err, "-")
 	}
@@ -316,20 +346,50 @@ func copyFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 
 // TODO improve test coverage?
 func deleteFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
-	// TODO pass in the JobWithTarget, and get the base from the target.
 	qp, err := tableOps(ctx, j)
 	if err != nil {
-		log.Println(err)
+		log.Println(j, err)
 		// This terminates this job.
 		return Failure(j, err, "-")
 	}
 	err = qp.DeleteTmp(ctx)
 	if err != nil {
-		log.Println(err)
+		log.Println(j, err)
 		// Try again soon.
 		return Retry(j, err, "-")
 	}
 
 	// TODO - add elapsed time to message.
 	return Success(j, "Successfully deleted partition")
+}
+
+func joinFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
+	if j.Datatype == "annotation" {
+		// annotation should not be annotated.
+		return Success(j, "Annotation does not require join")
+	}
+	delay := time.Since(stateChangeTime).Round(time.Minute)
+	to, err := tableOps(ctx, j)
+	if err != nil {
+		log.Println(j, err)
+		// This terminates this job.
+		return Failure(j, err, "-")
+	}
+
+	bqJob, err := to.Join(ctx, false)
+	if err != nil {
+		log.Println(j, err)
+		// Try again soon.
+		return Retry(j, err, "-")
+	}
+	status, outcome := waitAndCheck(ctx, bqJob, j, "Join")
+	if !outcome.IsDone() {
+		// TODO - should we check for valid statistics and update query cost?
+		// https://github.com/m-lab/etl-gardener/issues/315
+		return outcome
+	}
+
+	// Join job was successful.  Handle the statistics, metrics, tracker update.
+	msg := interpretStatus("Join", j, status, delay)
+	return Success(j, msg)
 }

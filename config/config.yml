@@ -5,14 +5,15 @@ tracker:
 monitor:
   polling_interval: 1m
 sources:
-- bucket: archive-measurement-lab
-  experiment: ndt
-  datatype: ndt7
-  target: tmp_ndt.ndt7
+# NOTE: It now matters what order these are in.
 - bucket: archive-measurement-lab
   experiment: ndt
   datatype: annotation
   target: tmp_ndt.annotation
+- bucket: archive-measurement-lab
+  experiment: ndt
+  datatype: ndt7
+  target: tmp_ndt.ndt7
 #- bucket: archive-measurement-lab
 #  experiment: ndt
 #  datatype: tcpinfo
