@@ -39,19 +39,16 @@ func TestStandardMonitor(t *testing.T) {
 	m.AddAction(tracker.Init,
 		nil,
 		newStateFunc("-"),
-		tracker.Parsing,
-		"Init")
+		tracker.Parsing)
 	m.AddAction(tracker.Parsing,
 		nil,
 		newStateFunc("-"),
-		tracker.ParseComplete,
-		"Parsing")
+		tracker.ParseComplete)
 	// Hack for testing - deliberately skip Load function.
 	m.AddAction(tracker.ParseComplete,
 		nil,
 		newStateFunc("-"),
-		tracker.Copying,
-		"Copying")
+		tracker.Copying)
 
 	// The real dedup action should fail on unknown datatype.
 	go m.Watch(ctx, 50*time.Millisecond)

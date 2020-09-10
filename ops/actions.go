@@ -26,6 +26,23 @@ func newStateFunc(detail string) ActionFunc {
 	}
 }
 
+// This returns a ConditionFunc that checks for completion of corresponding
+// annotation job in the tracker.
+func newCondFunc(tk *tracker.Tracker, detail string) ConditionFunc {
+	return func(ctx context.Context, j tracker.Job) bool {
+		if j.Datatype == "annotation" {
+			return true
+		}
+		ann := j
+		ann.Datatype = "annotation"
+		status, err := tk.GetStatus(j)
+		if err != nil {
+			return true // Hack
+		}
+		return status.State() == tracker.Complete
+	}
+}
+
 // NewStandardMonitor creates the standard monitor that handles several state transitions.
 func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.Tracker) (*Monitor, error) {
 	m, err := NewMonitor(ctx, config, tk)
@@ -35,28 +52,27 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 	m.AddAction(tracker.ParseComplete,
 		nil,
 		newStateFunc("-"),
-		tracker.Loading,
-		"Changing to Loading")
+		tracker.Loading)
 	m.AddAction(tracker.Loading,
 		nil,
 		loadFunc,
-		tracker.Deduplicating,
-		"Loading")
+		tracker.Deduplicating)
 	m.AddAction(tracker.Deduplicating,
 		nil,
 		dedupFunc,
-		tracker.Copying,
-		"Deduplicating")
+		tracker.Copying)
 	m.AddAction(tracker.Copying,
 		nil,
 		copyFunc,
-		tracker.Deleting,
-		"Copying")
+		tracker.Deleting)
 	m.AddAction(tracker.Deleting,
 		nil,
 		deleteFunc,
-		tracker.Complete,
-		"Deleting")
+		tracker.Joining)
+	m.AddAction(tracker.Joining,
+		newCondFunc(tk, "Join condition"),
+		joinFunc,
+		tracker.Complete)
 	return m, nil
 }
 
@@ -117,6 +133,28 @@ func tableOps(ctx context.Context, j tracker.Job) (*bq.TableOps, error) {
 	return bq.NewTableOps(ctx, j, project, loadSource)
 }
 
+func interpretStatus(op string, j tracker.Job, status *bigquery.JobStatus, delay time.Duration) string {
+	var msg string
+	stats := status.Statistics
+	switch details := stats.Details.(type) {
+	case *bigquery.QueryStatistics:
+		opTime := stats.EndTime.Sub(stats.StartTime)
+		metrics.QueryCostHistogram.WithLabelValues(j.Datatype, op).Observe(float64(details.SlotMillis) / 1000.0)
+		msg = fmt.Sprintf("%s took %s (after %v waiting), %5.2f Slot Minutes, %d Rows affected, %d MB Processed, %d MB Billed",
+			op,
+			opTime.Round(100*time.Millisecond),
+			delay,
+			float64(details.SlotMillis)/60000, details.NumDMLAffectedRows,
+			details.TotalBytesProcessed/1000000, details.TotalBytesBilled/1000000)
+		log.Println(msg)
+		log.Printf("%s %s: %+v\n", op, j, details)
+	default:
+		log.Printf("Could not convert to QueryStatistics: %+v\n", status.Statistics.Details)
+		msg = "Could not convert Detail to QueryStatistics"
+	}
+	return msg
+}
+
 // TODO improve test coverage?
 func dedupFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
 	// This is the delay since entering the dedup state, due to monitor delay
@@ -146,24 +184,7 @@ func dedupFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *O
 	}
 
 	// Dedup job was successful.  Handle the statistics, metrics, tracker update.
-	var msg string
-	stats := status.Statistics
-	switch details := stats.Details.(type) {
-	case *bigquery.QueryStatistics:
-		opTime := stats.EndTime.Sub(stats.StartTime)
-		metrics.QueryCostHistogram.WithLabelValues(j.Datatype, "dedup").Observe(float64(details.SlotMillis) / 1000.0)
-		msg = fmt.Sprintf("Dedup took %s (after %v waiting), %5.2f Slot Minutes, %d Rows affected, %d MB Processed, %d MB Billed",
-			opTime.Round(100*time.Millisecond),
-			delay,
-			float64(details.SlotMillis)/60000, details.NumDMLAffectedRows,
-			details.TotalBytesProcessed/1000000, details.TotalBytesBilled/1000000)
-		log.Println(msg)
-		log.Printf("Dedup %s: %+v\n", j, details)
-	default:
-		log.Printf("Could not convert to QueryStatistics: %+v\n", status.Statistics.Details)
-		msg = "Could not convert Detail to QueryStatistics"
-	}
-
+	msg := interpretStatus("Dedup", j, status, delay)
 	return Success(j, msg)
 }
 
@@ -332,4 +353,34 @@ func deleteFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *
 
 	// TODO - add elapsed time to message.
 	return Success(j, "Successfully deleted partition")
+}
+
+func joinFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
+	if j.Datatype == "annotation" {
+		// annotation should not be annotated.
+		return Success(j, "Annotation does not require join")
+	}
+	// TODO pass in the JobWithTarget, and get the base from the target.
+	delay := time.Since(stateChangeTime).Round(time.Minute)
+	to, err := tableOps(ctx, j)
+	if err != nil {
+		log.Println(err)
+		// This terminates this job.
+		return Failure(j, err, "-")
+	}
+
+	bqJob, err := to.Join(ctx, false)
+	if err != nil {
+		log.Println(err)
+		// Try again soon.
+		return Retry(j, err, "-")
+	}
+	status, outcome := waitAndCheck(ctx, bqJob, j, "Join")
+	if !outcome.IsDone() {
+		return outcome
+	}
+
+	// Join job was successful.  Handle the statistics, metrics, tracker update.
+	msg := interpretStatus("Join", j, status, delay)
+	return Success(j, msg)
 }

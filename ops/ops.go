@@ -81,8 +81,6 @@ type Action struct {
 	// action performs an action on the job, and
 	// updates the state when complete.  It may place the job into an error state.
 	action ActionFunc
-
-	annotation string // Annotation to be used for UpdateDetail while applying Op
 }
 
 // Name returns the name of the state that the action applies to.
@@ -126,13 +124,13 @@ func (m *Monitor) tryClaimJob(j tracker.Job) func() {
 
 // AddAction adds a specific action to the Monitor.
 func (m *Monitor) AddAction(state tracker.State, cond ConditionFunc, op ActionFunc,
-	successState tracker.State, annotation string) {
+	successState tracker.State) {
 	m.actions[state] = Action{
-		fromState:  state,
-		nextState:  successState,
-		condition:  cond,
-		action:     op,
-		annotation: annotation}
+		fromState: state,
+		nextState: successState,
+		condition: cond,
+		action:    op,
+	}
 }
 
 // UpdateJob updates the tracker state with the outcome.
