@@ -109,7 +109,7 @@ func TestService_NextJob(t *testing.T) {
 func TestJobHandler(t *testing.T) {
 	fc := gcsfake.GCSClient{}
 	fc.AddTestBucket("fake-bucket",
-		gcsfake.BucketHandle{
+		&gcsfake.BucketHandle{
 			ObjAttrs: []*storage.ObjectAttrs{
 				{Name: "obj1", Updated: time.Now()},
 				{Name: "obj2", Updated: time.Now()},

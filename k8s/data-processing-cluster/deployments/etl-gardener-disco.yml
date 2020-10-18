@@ -1,4 +1,4 @@
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: etl-gardener-disco
@@ -62,7 +62,7 @@ spec:
         - name: QUEUE_BASE
           value: "etl-disco-batch-"
         - name: NUM_QUEUES
-          value: "4"
+          value: "2"
         ports:
         - name: prometheus-port
           containerPort: 9090
