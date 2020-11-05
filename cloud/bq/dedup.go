@@ -180,8 +180,11 @@ var dedupTemplateTraceroute = `
 	#standardSQL
 	# Select single row based on TestTime, client_ip, server_ip
 	SELECT * EXCEPT (row_number)
-    FROM ( SELECT *, ROW_NUMBER() OVER (
-        PARTITION BY CONCAT(STRING(TestTime), Source.IP, DESTINATION.IP)
+    FROM ( 
+		SELECT *, ROW_NUMBER() OVER (
+			PARTITION BY CONCAT(STRING(TestTime), Source.IP, DESTINATION.IP)
+			# Prefer later parse time
+			ORDER BY ParseInfo.ParseTime DESC
 		) row_number
 	    FROM ` + "`%s`" + `)
 	WHERE row_number = 1`
@@ -191,9 +194,10 @@ var dedupTemplateTCPInfo = `
 	# Delete all duplicate rows based on uuid, preferring "later" task filename, later parse_time
 	SELECT * EXCEPT (row_number)
     FROM (
-		SELECT *,
-		# Prefer more snapshots, earlier task names, later parse time
-		ROW_NUMBER() OVER (PARTITION BY uuid ORDER BY ARRAY_LENGTH(Snapshots) DESC, ParseInfo.TaskFileName, ParseInfo.ParseTime DESC) row_number
+		SELECT *, ROW_NUMBER() OVER (
+			# Prefer more snapshots, earlier task names, later parse time
+			PARTITION BY uuid ORDER BY ARRAY_LENGTH(Snapshots) DESC, ParseInfo.TaskFileName, ParseInfo.ParseTime DESC
+		) row_number
         FROM (
 			SELECT *
     		FROM ` + "`%s`" + `
