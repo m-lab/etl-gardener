@@ -15,6 +15,7 @@ gcloud config set container/cluster data-processing
 
 # The network for comms among the components has to be created first.
 if gcloud compute networks list | grep "^data-processing "; then
+  # TODO - networks can be updated!!
   echo "Network already exists"
 else
   gcloud compute networks create data-processing --subnet-mode=custom \
@@ -23,6 +24,7 @@ fi
 
 # This allows internal connections between components.
 if gcloud compute firewall-rules list | grep "^dp-allow-internal "; then
+  # TODO - firewall rules can be updated!!
   echo "Firewall rule dp-allow-internal already exists"
 else
   gcloud compute firewall-rules create \
@@ -32,9 +34,10 @@ else
     --description='Allow internal traffic from anywhere'
 fi
 
-# Then add the subnet 
+# Then add the subnet
 # Subnet has the same name and address range across projects, but each is in a distinct (data-processing) VPC network."
 if gcloud compute networks subnets list --network=data-processing | grep "^dp-gardener "; then
+  # TODO - subnets can be updated!!
   echo "subnet data-processing/dp-gardener already exists"
 else
   gcloud compute networks subnets create dp-gardener \
@@ -72,12 +75,21 @@ gcloud projects add-iam-policy-binding mlab-sandbox \
 # Set up node pools for parser and gardener pods.
 # Parser needs write access to storage.  Gardener needs only read access.
 # TODO - narrow the cloud-platform scope? https://github.com/m-lab/etl-gardener/issues/308
-gcloud container node-pools create parser-pool \
-  --num-nodes=1 --machine-type=n1-standard-8 \
-  --enable-autorepair --enable-autoupgrade \
-  --scopes storage-rw,compute-rw,datastore,cloud-platform \
-  --node-labels=parser-node=true \
-  --service-account=etl-k8s-parser@{$PROJECT}.iam.gserviceaccount.com
+if gcloud container node-pools describe parser-pool; then
+  gcloud container node-pools update parser-pool \
+    --num-nodes=1 --machine-type=n1-standard-8 \
+    --enable-autorepair --enable-autoupgrade \
+    --scopes storage-rw,compute-rw,datastore,cloud-platform \
+    --node-labels=parser-node=true \
+    --service-account=etl-k8s-parser@{$PROJECT}.iam.gserviceaccount.com
+else
+  gcloud container node-pools create parser-pool \
+    --num-nodes=1 --machine-type=n1-standard-8 \
+    --enable-autorepair --enable-autoupgrade \
+    --scopes storage-rw,compute-rw,datastore,cloud-platform \
+    --node-labels=parser-node=true \
+    --service-account=etl-k8s-parser@{$PROJECT}.iam.gserviceaccount.com
+fi
 
 # TODO - narrow the cloud-platform scope? https://github.com/m-lab/etl-gardener/issues/308
 gcloud container node-pools create gardener-pool \
