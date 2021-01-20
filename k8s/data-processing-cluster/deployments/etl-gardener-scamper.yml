@@ -62,7 +62,7 @@ spec:
         - name: QUEUE_BASE
           value: "etl-scamper-batch-"
         - name: NUM_QUEUES
-          value: "2"
+          value: "1"
 
         ports:
         - name: prometheus-port
