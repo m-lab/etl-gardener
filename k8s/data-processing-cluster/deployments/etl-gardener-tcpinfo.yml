@@ -40,8 +40,6 @@ spec:
         env:
         - name: GARDENER_SERVICE
           value: "true"
-        - name: GIT_COMMIT
-          value: "{{GIT_COMMIT}}"
         - name: PROJECT
           value: "{{GCLOUD_PROJECT}}"
         # NOTE: We read archives from the public archive for all projects.

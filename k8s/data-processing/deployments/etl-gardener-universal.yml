@@ -40,8 +40,6 @@ spec:
         env:
         - name: SERVICE_MODE # Whether to use task-queues or run as manager.
           value: "manager"
-        - name: GIT_COMMIT
-          value: "{{GIT_COMMIT}}"
         - name: PROJECT
           value: "{{GCLOUD_PROJECT}}"
         - name: STATUS_PORT
