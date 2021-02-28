@@ -27,6 +27,7 @@ kubectl create configmap gardener-config --dry-run \
 CFG=/tmp/${CLUSTER}-${PROJECT}.yml
 kexpand expand --ignore-missing-keys k8s/${CLUSTER}/*/*.yml \
     --value GCLOUD_PROJECT=${PROJECT} \
+    --value GIT_COMMIT=${TRAVIS_COMMIT} \
     --value DATE_SKIP=${DATE_SKIP} \
     --value TASK_FILE_SKIP=${TASK_FILE_SKIP} \
     > ${CFG}
