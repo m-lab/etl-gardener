@@ -44,6 +44,18 @@ import (
 )
 
 var (
+	// GitCommit and Version hold the git commit id and git tags of this build.
+	// It is recommended that the strings be set as part of the build/link
+	// process, using commands like:
+	//
+	//   version="-X main.Version=$(git describe --tags)"
+	//   commit="-X main.GitCommit=$(git log -1 --format=%H)"
+	//   go build -ldflags "$version $commit" ./cmd/gardener
+	GitCommit = "nocommit"
+	Version   = "noversion"
+)
+
+var (
 	jobExpirationTime = flag.Duration("job_expiration_time", 24*time.Hour, "Time after which stale jobs will be purged")
 	jobCleanupDelay   = flag.Duration("job_cleanup_delay", 3*time.Hour, "Time after which completed jobs will be removed from tracker")
 	shutdownTimeout   = flag.Duration("shutdown_timeout", 1*time.Minute, "Graceful shutdown time allowance")
@@ -66,7 +78,7 @@ type environment struct {
 
 	// Vars for Status()
 	Commit  string
-	Release string
+	Version string
 
 	// Determines what kind of service to run.
 	// "manager" will cause loading of config, and passive management.
@@ -156,8 +168,8 @@ func loadEnvVarsForTaskQueue() {
 // LoadEnv loads any required environment variables.
 func LoadEnv() {
 	var ok bool
-	env.Commit = os.Getenv("GIT_COMMIT")
-	env.Release = os.Getenv("RELEASE_TAG")
+	env.Commit = GitCommit
+	env.Version = Version
 	env.BatchDataset = os.Getenv("DATASET")
 	env.FinalDataset = os.Getenv("FINAL_DATASET")
 
@@ -243,10 +255,10 @@ var globalTracker *tracker.Tracker
 func Status(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "<html><body>\n")
 	if len(env.Commit) >= 8 {
-		fmt.Fprintf(w, "Release: %s <br>  Commit: <a href=\"https://github.com/m-lab/etl-gardener/tree/%s\">%s</a><br>\n",
-			env.Release, env.Commit, env.Commit[0:7])
+		fmt.Fprintf(w, "Version: %s <br>  Commit: <a href=\"https://github.com/m-lab/etl-gardener/tree/%s\">%s</a><br>\n",
+			env.Version, env.Commit, env.Commit[0:7])
 	} else {
-		fmt.Fprintf(w, "Release: %s <br>  Commit: unknown\n", env.Release)
+		fmt.Fprintf(w, "Version: %s <br>  Commit: unknown\n", env.Version)
 	}
 
 	fmt.Fprintf(w, "</br></br>\n")
