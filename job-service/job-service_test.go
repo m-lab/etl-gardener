@@ -1,3 +1,5 @@
+// +build integration
+
 // Package job provides an http handler to serve up jobs to ETL parsers.
 package job_test
 
