@@ -1,3 +1,5 @@
+// +build integration
+
 package ops_test
 
 import (

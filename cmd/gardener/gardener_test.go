@@ -1,3 +1,5 @@
+// +build integration
+
 // Package main defines a service for handling various post-processing
 // and house-keeping tasks associated with the pipelines.
 // Most tasks will be run periodically, but some may be triggered
