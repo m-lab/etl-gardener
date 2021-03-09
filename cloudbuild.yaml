@@ -1,0 +1,6 @@
+# NOTE: this is a place holder for a complete cloudbuild.yaml.
+steps:
+# Make all git tags available.
+- name: gcr.io/cloud-builders/git
+  id: "Unshallow git clone"
+  args: ["fetch", "--unshallow"]
