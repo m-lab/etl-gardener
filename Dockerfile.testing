@@ -1,5 +1,3 @@
-############################################################################
-# FINAL IMAGE: based on upstream gcloud builder.
 FROM gcr.io/cloud-builders/gcloud
 
 # Fetch recent go version.
