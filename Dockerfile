@@ -1,20 +1,29 @@
-FROM golang:1.13 as builder
+FROM golang:1.15 as builder
 
-ENV CGO_ENABLED 0
+ARG VERSION
 
+# Copy sources into correct working directory.
 WORKDIR /go/src/github.com/m-lab/etl-gardener
 COPY . .
+
+# Build fully static binary.
+ENV CGO_ENABLED 0
 
 # Get the requirements and put the produced binaries in /go/bin
 RUN go get -v ./...
 WORKDIR /go/src/github.com/m-lab/etl-gardener
-RUN go install \
-      -v \
-      -ldflags "-X github.com/m-lab/go/prometheusx.GitShortCommit=$(git log -1 --format=%h) -X main.Version=$(git describe --tags) -X main.GitCommit=$(git log -1 --format=%H)" \
+
+# NOTE: the version is either a branch, a specific tag, or a short git commit.
+RUN go install -v \
+      -ldflags "-X github.com/m-lab/go/prometheusx.GitShortCommit=$(git log -1 --format=%h) \
+                -X main.Version=$VERSION \
+                -X main.GitCommit=$(git log -1 --format=%H)" \
       ./cmd/gardener
 
 FROM alpine:3.12
-RUN apk update && apk add ca-certificates && rm -rf /var/cache/apk/*
+RUN apk update && \
+    apk add ca-certificates && \
+    rm -rf /var/cache/apk/*
 
 COPY --from=builder /go/bin/gardener /bin/gardener
 

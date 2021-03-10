@@ -6,15 +6,15 @@
 #
 # Example:
 #
-#   PROJECT=mlab-sandbox CLUSTER=scraper-cluster ./apply-cluster.sh
+#   PROJECT_ID=mlab-sandbox CLOUDSDK_CONTAINER_CLUSTER=scraper-cluster ./apply-cluster.sh
 
 set -x
 set -e
 set -u
 
-USAGE="PROJECT=<projectid> CLUSTER=<cluster> $0"
-PROJECT=${PROJECT:?Please provide project id: $USAGE}
-CLUSTER=${CLUSTER:?Please provide cluster name: $USAGE}
+USAGE="PROJECT_ID=<projectid> CLOUDSDK_CONTAINER_CLUSTER=<cluster> $0"
+PROJECT_ID=${PROJECT_ID:?Please provide project id: $USAGE}
+CLUSTER=${CLOUDSDK_CONTAINER_CLUSTER:?Please provide cluster name: $USAGE}
 DATE_SKIP=${DATE_SKIP:-"0"}  # Number of dates to skip between each processed date (for sandbox).
 TASK_FILE_SKIP=${TASK_FILE_SKIP:-"0"}  # Number of files to skip between each processed file (for sandbox).
 
@@ -24,14 +24,13 @@ kubectl create configmap gardener-config --dry-run \
     -o yaml > k8s/data-processing/deployments/config.yml
 
 # Apply templates
-CFG=/tmp/${CLUSTER}-${PROJECT}.yml
-kexpand expand --ignore-missing-keys k8s/${CLUSTER}/*/*.yml \
-    --value GCLOUD_PROJECT=${PROJECT} \
-    --value GIT_COMMIT=${TRAVIS_COMMIT} \
-    --value DATE_SKIP=${DATE_SKIP} \
-    --value TASK_FILE_SKIP=${TASK_FILE_SKIP} \
-    > ${CFG}
-cat ${CFG}
+find k8s/${CLUSTER}/ -type f -exec \
+    sed -i \
+      -e 's/{{GIT_COMMIT}}/'${GIT_COMMIT}'/g' \
+      -e 's/{{GCLOUD_PROJECT}}/'${PROJECT_ID}'/g' \
+      -e 's/{{DATE_SKIP}}/'${DATE_SKIP}'/g' \
+      -e 's/{{TASK_FILE_SKIP}}/'${TASK_FILE_SKIP}'/g' \
+      {} \;
 
 # This triggers deployment of the pod.
-kubectl apply -f ${CFG}
+kubectl apply --recursive -f k8s/${CLUSTER}
