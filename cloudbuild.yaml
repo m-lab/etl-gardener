@@ -41,6 +41,13 @@ steps:
   id: "Update travis submodule"
   args: ["submodule", "update", "--init", "--recursive"]
 
+- name: gcr.io/cloud-builders/git
+  id: "Lookup symbolic name"
+  args: ["symbolic-ref", "--short", "-q", "HEAD"]
+
+- name: gcr.io/cloud-builders/git
+  args: ["branch"]
+
 # TODO: while local docker builds cache intermediate layers, CB does not.
 # Combine the Dockerfile.testing with the Dockerfile using --target and
 # --from-cache to speed up builds: See also:
