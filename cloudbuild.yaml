@@ -41,13 +41,6 @@ steps:
   id: "Update travis submodule"
   args: ["submodule", "update", "--init", "--recursive"]
 
-- name: gcr.io/cloud-builders/git
-  id: "Lookup symbolic name"
-  args: ["symbolic-ref", "--short", "-q", "HEAD"]
-
-- name: gcr.io/cloud-builders/git
-  args: ["branch"]
-
 # TODO: while local docker builds cache intermediate layers, CB does not.
 # Combine the Dockerfile.testing with the Dockerfile using --target and
 # --from-cache to speed up builds: See also:
@@ -75,7 +68,9 @@ steps:
 - name: gcr.io/cloud-builders/docker
   id: "Build the etl-gardener docker container"
   args: [
-    "build", "-t", "gcr.io/$PROJECT_ID/etl-gardener:$_DOCKER_TAG", "."
+    "build",
+      "--build-arg", "VERSION=${TAG_NAME}${BRANCH_NAME}",
+      "-t", "gcr.io/$PROJECT_ID/etl-gardener:$_DOCKER_TAG", "."
   ]
 
 - name: gcr.io/cloud-builders/docker
