@@ -17,7 +17,7 @@ gcloud container node-pools delete parser-pool
 
 gcloud container node-pools create parser-pool \
     --machine-type=n1-standard-16 \
-    --enable-autoscaling --min-nodes=0 --max-nodes=2
+    --enable-autoscaling --min-nodes=0 --max-nodes=2 \
     --enable-autorepair --enable-autoupgrade \
     --scopes storage-rw,compute-rw,datastore,cloud-platform \
     --node-labels=parser-node=true,storage-rw=true
