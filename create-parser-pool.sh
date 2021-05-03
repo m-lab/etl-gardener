@@ -9,6 +9,7 @@ USAGE="$0 <project> <region>"
 PROJECT=${1:?Please provide the GCP project id, e.g. mlab-sandbox: $USAGE}
 REGION=${2:?Please provide the cluster region, e.g. us-central1: $USAGE}
 
+gcloud config unset compute/zone
 gcloud config set project $PROJECT
 gcloud config set compute/region $REGION
 gcloud config set container/cluster data-processing
