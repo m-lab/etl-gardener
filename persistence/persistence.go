@@ -2,7 +2,10 @@ package persistence
 
 import (
 	"context"
+	"encoding/json"
+	"io/ioutil"
 	"log"
+	"os"
 	"reflect"
 	"time"
 
@@ -120,4 +123,47 @@ func (ds *DatastoreSaver) FetchAll(ctx context.Context, o StateObject) ([]*datas
 		return nil, nil, err
 	}
 	return keys, objs, err
+}
+
+// LocalSaver implements a Saver that stores state objects in local files.
+type LocalSaver struct {
+	Namespace string
+}
+
+// NewLocalSaver creates and returns a new local saver.
+func NewLocalSaver() *LocalSaver {
+	return &LocalSaver{Namespace: "gardener"}
+}
+
+func (ls *LocalSaver) fname(o StateObject) string {
+	k := ls.Namespace + "-" + o.GetKind() + "-" + o.GetName()
+	return k
+}
+
+// Save implements Saver.Save using Datastore.
+func (ls *LocalSaver) Save(ctx context.Context, o StateObject) error {
+	f, err := os.OpenFile(ls.fname(o), os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	b, err := json.Marshal(o)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(b)
+	return err
+}
+
+// Delete implements Saver.Delete using Datastore.
+func (ls *LocalSaver) Delete(ctx context.Context, o StateObject) error {
+	return os.Remove(ls.fname(o))
+}
+
+// Fetch implements Saver.Fetch to fetch state of requested StateObject from Datastore.
+func (ls *LocalSaver) Fetch(ctx context.Context, o StateObject) error {
+	b, err := ioutil.ReadFile(ls.fname(o))
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, o)
 }
