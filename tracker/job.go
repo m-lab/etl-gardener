@@ -508,18 +508,23 @@ func loadFromDatastore(ctx context.Context, client dsiface.Client, key *datastor
 	return state, err
 }
 
-// loadJobMap loads the persisted map of jobs in flight.
+// loadJobMap loads the persisted map of jobs in flight from datastore.
 func loadJobMap(ctx context.Context, client dsiface.Client, key *datastore.Key) (JobMap, Job, error) {
 	state, err := loadFromDatastore(ctx, client, key)
 	if err != nil {
 		return nil, Job{}, err
 	}
+	return loadJobMapFromState(state)
+}
+
+// loadJobMapFromState completes unmarshalling a saverStruct.
+func loadJobMapFromState(state saverStruct) (JobMap, Job, error) {
 	log.Println("Last save:", state.SaveTime.Format("01/02T15:04"))
 	log.Println(string(state.Jobs))
 
 	jobMap := make(JobMap, 100)
 	log.Println("Unmarshalling", len(state.Jobs))
-	err = json.Unmarshal(state.Jobs, &jobMap)
+	err := json.Unmarshal(state.Jobs, &jobMap)
 	if err != nil {
 		log.Fatal("loadJobMap failed", err)
 	}

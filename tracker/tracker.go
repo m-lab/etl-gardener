@@ -12,9 +12,12 @@ package tracker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -28,8 +31,9 @@ import (
 // Tracker keeps track of all the jobs in flight.
 // Only tracker functions should access any of the fields.
 type Tracker struct {
-	client dsiface.Client
-	dsKey  *datastore.Key
+	// client dsiface.Client
+	// dsKey  *datastore.Key
+	saver  Saver
 	ticker *time.Ticker
 
 	// The lock should be held whenever accessing the jobs JobMap
@@ -46,16 +50,83 @@ type Tracker struct {
 	cleanupDelay time.Duration
 }
 
+type Saver interface {
+	Save(ctx context.Context, src interface{}) error
+	Load(ctx context.Context) (JobMap, Job, error)
+}
+
+type DatastoreSaver struct {
+	client dsiface.Client
+	key    *datastore.Key
+}
+
+func NewDatastoreSaver(client dsiface.Client, key *datastore.Key) *DatastoreSaver {
+	return &DatastoreSaver{
+		client: client,
+		key:    key,
+	}
+}
+
+func (ds *DatastoreSaver) Save(ctx context.Context, state interface{}) error {
+	_, err := ds.client.Put(ctx, ds.key, state)
+	return err
+}
+
+func (ds *DatastoreSaver) Load(ctx context.Context) (JobMap, Job, error) {
+	return loadJobMap(ctx, ds.client, ds.key)
+}
+
+type LocalSaver struct {
+	key *datastore.Key
+}
+
+func NewLocalSaver(dsKey *datastore.Key) *LocalSaver {
+	return &LocalSaver{
+		key: dsKey,
+	}
+}
+
+func (ls *LocalSaver) fname() string {
+	return ls.key.Kind + "-" + ls.key.Name // NOTE: this is not generic for all key types.
+}
+
+func (ls *LocalSaver) Save(ctx context.Context, state interface{}) error {
+	f, err := os.OpenFile(ls.fname(), os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	b, err := json.Marshal(state)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(b)
+	return err
+}
+
+func (ls *LocalSaver) Load(ctx context.Context) (JobMap, Job, error) {
+	b, err := ioutil.ReadFile(ls.fname())
+	if err != nil {
+		return nil, Job{}, err
+	}
+
+	state := saverStruct{Jobs: make([]byte, 0)}
+	err = json.Unmarshal(b, &state)
+	if err != nil {
+		return nil, Job{}, err
+	}
+	return loadJobMapFromState(state)
+}
+
 // InitTracker recovers the Tracker state from a Client object.
 // May return error if recovery fails.
 func InitTracker(
 	ctx context.Context,
-	client dsiface.Client, key *datastore.Key,
+	saver Saver,
 	saveInterval time.Duration, expirationTime time.Duration, cleanupDelay time.Duration) (*Tracker, error) {
 
-	jobMap, lastJob, err := loadJobMap(ctx, client, key)
+	jobMap, lastJob, err := saver.Load(ctx)
 	if err != nil {
-		log.Println(err, key)
+		log.Println(err)
 		jobMap = make(JobMap, 100)
 	}
 	for j, s := range jobMap {
@@ -66,10 +137,10 @@ func InitTracker(
 		}
 	}
 	t := Tracker{
-		client: client, dsKey: key, lastModified: time.Now(),
+		saver: saver, lastModified: time.Now(),
 		lastJob: lastJob, jobs: jobMap,
 		expirationTime: expirationTime, cleanupDelay: cleanupDelay}
-	if client != nil && saveInterval > 0 {
+	if saver != nil && saveInterval > 0 {
 		t.saveEvery(saveInterval)
 	}
 	return &t, nil
@@ -113,7 +184,7 @@ func (tr *Tracker) Sync(ctx context.Context, lastSave time.Time) (time.Time, err
 	state := saverStruct{time.Now(), lastInit, jsonJobs}
 	ctx, cf := context.WithTimeout(ctx, 10*time.Second)
 	defer cf()
-	_, err = tr.client.Put(ctx, tr.dsKey, &state)
+	err = tr.saver.Save(ctx, &state)
 
 	if err != nil {
 		return lastSave, err
