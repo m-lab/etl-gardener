@@ -61,7 +61,8 @@ spec:
         - name: QUEUE_BASE
           value: "etl-tcpinfo-batch-"
         - name: NUM_QUEUES
-          value: "1"
+          # NOTE: low,high capacity: 1,4
+          value: "4"
 
         ports:
         - name: prometheus-port
