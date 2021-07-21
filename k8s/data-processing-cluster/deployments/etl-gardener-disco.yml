@@ -60,8 +60,7 @@ spec:
         - name: QUEUE_BASE
           value: "etl-disco-batch-"
         - name: NUM_QUEUES
-          # NOTE: low,high capacity: 1,2
-          value: "2"
+          value: "1"
         ports:
         - name: prometheus-port
           containerPort: 9090
