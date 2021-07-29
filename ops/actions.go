@@ -364,9 +364,9 @@ func deleteFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *
 }
 
 func joinFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
-	if j.Datatype == "annotation" {
-		// annotation should not be annotated.
-		return Success(j, "Annotation does not require join")
+	if j.Datatype == "annotation" || j.Datatype == "pcap" {
+		// These should not be annotated.
+		return Success(j, fmt.Sprintf("%s does not require join", j.Datatype))
 	}
 	delay := time.Since(stateChangeTime).Round(time.Minute)
 	to, err := tableOps(ctx, j)

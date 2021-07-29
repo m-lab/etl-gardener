@@ -47,16 +47,9 @@ func NewTableOps(ctx context.Context, job tracker.Job, project string, loadSourc
 func NewTableOpsWithClient(client bqiface.Client, job tracker.Job, project string, loadSource string) (*TableOps, error) {
 	switch job.Datatype {
 	case "annotation":
-		return &TableOps{
-			client:        client,
-			LoadSource:    loadSource,
-			Project:       project,
-			Date:          "date",
-			Job:           job,
-			PartitionKeys: map[string]string{"id": "id"},
-			OrderKeys:     "",
-		}, nil
-
+		fallthrough
+	case "pcap":
+		fallthrough
 	case "ndt7":
 		return &TableOps{
 			client:        client,
