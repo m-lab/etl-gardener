@@ -57,15 +57,17 @@ func TestValidateQueries(t *testing.T) {
 				t.Fatal(t.Name(), err, bq.DedupQuery(*qp))
 			}
 
-			if qp.Job.Datatype != "annotation" && qp.Job.Datatype != "pcap" {
-				j, err := qp.Join(ctx, true)
-				if err != nil {
-					t.Fatal(t.Name(), err, bq.JoinQuery(*qp))
-				}
-				status := j.LastStatus()
-				if status.Err() != nil {
-					t.Fatal(t.Name(), err, bq.JoinQuery(*qp))
-				}
+			if qp.Job.Datatype != "ndt7" {
+				return
+			}
+
+			j, err = qp.Join(ctx, true)
+			if err != nil {
+				t.Fatal(t.Name(), err, bq.JoinQuery(*qp))
+			}
+			status = j.LastStatus()
+			if status.Err() != nil {
+				t.Fatal(t.Name(), err, bq.JoinQuery(*qp))
 			}
 		})
 	}
