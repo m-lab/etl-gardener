@@ -70,13 +70,13 @@ steps:
   args: [
     "build",
       "--build-arg", "VERSION=${TAG_NAME}${BRANCH_NAME}",
-      "-t", "gcr.io/$PROJECT_ID/etl-gardener:$_DOCKER_TAG", "."
+      "-t", "gcr.io/$PROJECT_ID/etl-gardener:${COMMIT_SHA}", "."
   ]
 
 - name: gcr.io/cloud-builders/docker
   id: "Push the docker container to gcr.io"
   args: [
-    "push", "gcr.io/$PROJECT_ID/etl-gardener:$_DOCKER_TAG"
+    "push", "gcr.io/$PROJECT_ID/etl-gardener:${COMMIT_SHA}"
   ]
 
 # UNIVERSAL CLUSTER: Run apply-cluster.sh
