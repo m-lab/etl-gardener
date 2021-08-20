@@ -39,6 +39,8 @@ func TestStandardMonitor(t *testing.T) {
 
 	tk.AddJob(tracker.NewJob("bucket", "ndt", "pcap", time.Now()))
 
+	tk.AddJob(tracker.NewJob("bucket", "ndt", "hopannotation1", time.Now()))
+
 	m, err := ops.NewStandardMonitor(context.Background(), cloud.BQConfig{}, tk)
 	rtx.Must(err, "NewMonitor failure")
 	// We add some new actions in place of the Parser activity.

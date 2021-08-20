@@ -364,7 +364,7 @@ func deleteFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *
 }
 
 func joinFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
-	if j.Datatype == "annotation" || j.Datatype == "pcap" {
+	if j.Datatype != "ndt7" {
 		// These should not be annotated.
 		return Success(j, fmt.Sprintf("%s does not require join", j.Datatype))
 	}
