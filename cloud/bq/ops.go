@@ -48,6 +48,8 @@ func NewTableOpsWithClient(client bqiface.Client, job tracker.Job, project strin
 	switch job.Datatype {
 	case "annotation":
 		fallthrough
+	case "hopannotation1":
+		fallthrough
 	case "pcap":
 		fallthrough
 	case "ndt7":
