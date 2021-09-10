@@ -18,11 +18,10 @@ sources:
   experiment: ndt
   datatype: pcap
   target: tmp_ndt.pcap
-# TODO(cristinaleon): Uncomment once the traceroute with hopannotation1 deployment is in production
-#- bucket: archive-measurement-lab
-#  experiment: ndt
-#  datatype: hopannotation1
-#  target: tmp_ndt.hopannotation1
+- bucket: archive-measurement-lab
+  experiment: ndt
+  datatype: hopannotation1
+  target: tmp_ndt.hopannotation1
 #- bucket: archive-measurement-lab
 #  experiment: ndt
 #  datatype: tcpinfo
