@@ -52,6 +52,8 @@ func NewTableOpsWithClient(client bqiface.Client, job tracker.Job, project strin
 		fallthrough
 	case "pcap":
 		fallthrough
+	case "scamper1":
+		fallthrough
 	case "ndt7":
 		return &TableOps{
 			client:        client,

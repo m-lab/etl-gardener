@@ -22,6 +22,10 @@ sources:
   experiment: ndt
   datatype: hopannotation1
   target: tmp_ndt.hopannotation1
+- bucket: archive-measurement-lab
+  experiment: ndt
+  datatype: scamper1
+  target: tmp_ndt.scamper1
 #- bucket: archive-measurement-lab
 #  experiment: ndt
 #  datatype: tcpinfo
