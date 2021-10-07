@@ -21,7 +21,8 @@ import (
 )
 
 var (
-	JoinableDatatypes = map[string]bool{"ndt7": true, "scamper1": true}
+	JoinableAnnotationDatatypes    = map[string]bool{"ndt7": true, "scamper1": true}
+	JoinableHopAnnotationDatatypes = map[string]bool{"scamper1": true}
 )
 
 func newStateFunc(detail string) ActionFunc {
@@ -31,23 +32,23 @@ func newStateFunc(detail string) ActionFunc {
 }
 
 // This returns a ConditionFunc that checks for completion of corresponding
-// annotation job in the tracker.  Used to gate the join action.
-func newJoinConditionFunc(tk *tracker.Tracker, detail string) ConditionFunc {
+// dependent job (e.g., annotation, hopannotation1) in the tracker.  Used to gate the join action.
+func newJoinConditionFunc(tk *tracker.Tracker, detail string, comparisonJob string) ConditionFunc {
 	return func(ctx context.Context, j tracker.Job) bool {
-		if j.Datatype == "annotation" {
-			// Annotation does not require joining, so the check is
-			// not needed.
+		if j.Datatype == comparisonJob {
+			// Job does not require joining with itself,
+			// so the check is not needed
 			log.Println(j, "condition met")
 			return true
 		}
-		// All other types currently depend only on the annotation table.
-		// So, we check whether the annotation table is complete.
+		// All other types currently depend only on the comparison table.
+		// So, we check whether said table table is complete.
 		// (Technically, we only need to know whether the copy has completed.)
 		ann := j
-		ann.Datatype = "annotation"
+		ann.Datatype = comparisonJob
 		status, err := tk.GetStatus(ann)
 		if err != nil {
-			// For early dates, there is no annotation job, so if the job
+			// For early dates, there is no comparison job, so if the job
 			// is absent, we proceed with the join.
 			log.Println(ann, "is absent")
 			return true
@@ -84,8 +85,12 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 		deleteFunc,
 		tracker.Joining)
 	m.AddAction(tracker.Joining,
-		newJoinConditionFunc(tk, "Join condition"),
-		joinFunc,
+		newJoinConditionFunc(tk, "Join condition", "annotation"),
+		joinFunc(JoinableAnnotationDatatypes, "annotation"),
+		tracker.Complete)
+	m.AddAction(tracker.Joining,
+		newJoinConditionFunc(tk, "Join condition", "hopannotation1"),
+		joinFunc(JoinableHopAnnotationDatatypes, "hopannotation1"),
 		tracker.Complete)
 	return m, nil
 }
@@ -367,33 +372,46 @@ func deleteFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *
 	return Success(j, "Successfully deleted partition")
 }
 
-func joinFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
-	if !JoinableDatatypes[j.Datatype] {
-		// These should not be annotated.
-		return Success(j, fmt.Sprintf("%s does not require join", j.Datatype))
-	}
-	delay := time.Since(stateChangeTime).Round(time.Minute)
-	to, err := tableOps(ctx, j)
-	if err != nil {
-		log.Println(j, err)
-		// This terminates this job.
-		return Failure(j, err, "-")
-	}
+func joinFunc(joinableDatatypes map[string]bool, dtToJoin string) ActionFunc {
+	return func(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
+		if !joinableDatatypes[j.Datatype] {
+			// These should not be annotated.
+			return Success(j, fmt.Sprintf("%s does not require join", j.Datatype))
+		}
+		delay := time.Since(stateChangeTime).Round(time.Minute)
+		to, err := tableOps(ctx, j)
+		if err != nil {
+			log.Println(j, err)
+			// This terminates this job.
+			return Failure(j, err, "-")
+		}
 
-	bqJob, err := to.Join(ctx, false)
-	if err != nil {
-		log.Println(j, err)
-		// Try again soon.
-		return Retry(j, err, "-")
-	}
-	status, outcome := waitAndCheck(ctx, bqJob, j, "Join")
-	if !outcome.IsDone() {
-		// TODO - should we check for valid statistics and update query cost?
-		// https://github.com/m-lab/etl-gardener/issues/315
-		return outcome
-	}
+		bqJob, err := joinJobForDatatype(ctx, to, dtToJoin)
+		if err != nil {
+			log.Println(j, err)
+			// Try again soon.
+			return Retry(j, err, "-")
+		}
+		status, outcome := waitAndCheck(ctx, bqJob, j, "Join")
+		if !outcome.IsDone() {
+			// TODO - should we check for valid statistics and update query cost?
+			// https://github.com/m-lab/etl-gardener/issues/315
+			return outcome
+		}
 
-	// Join job was successful.  Handle the statistics, metrics, tracker update.
-	msg := interpretStatus("Join", j, status, delay)
-	return Success(j, msg)
+		// Join job was successful.  Handle the statistics, metrics, tracker update.
+		msg := interpretStatus("Join", j, status, delay)
+		return Success(j, msg)
+	}
+}
+
+func joinJobForDatatype(ctx context.Context, to *bq.TableOps, dtToJoin string) (bqiface.Job, error) {
+	switch dtToJoin {
+	case "annotation":
+		return to.JoinAnnotation(ctx, false)
+	case "hopannotation1":
+		return to.JoinHops(ctx, false)
+	default:
+		return nil, fmt.Errorf("join with %s datatype not supported", dtToJoin)
+	}
 }

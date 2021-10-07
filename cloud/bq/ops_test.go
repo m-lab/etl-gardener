@@ -58,17 +58,18 @@ func TestValidateQueries(t *testing.T) {
 				t.Fatal(t.Name(), err, bq.DedupQuery(*qp))
 			}
 
-			if !ops.JoinableDatatypes[qp.Job.Datatype] {
-				return
+			if ops.JoinableAnnotationDatatypes[qp.Job.Datatype] {
+				j, err = qp.JoinAnnotation(ctx, true)
+				if err != nil || j.LastStatus().Err() != nil {
+					t.Fatal(t.Name(), err, bq.JoinQuery(*qp, "annotation"))
+				}
 			}
 
-			j, err = qp.Join(ctx, true)
-			if err != nil {
-				t.Fatal(t.Name(), err, bq.JoinQuery(*qp))
-			}
-			status = j.LastStatus()
-			if status.Err() != nil {
-				t.Fatal(t.Name(), err, bq.JoinQuery(*qp))
+			if ops.JoinableHopAnnotationDatatypes[qp.Job.Datatype] {
+				j, err = qp.JoinHops(ctx, true)
+				if err != nil || j.LastStatus().Err() != nil {
+					t.Fatal(t.Name(), err, bq.JoinQuery(*qp, "hopannotation1"))
+				}
 			}
 		})
 	}
