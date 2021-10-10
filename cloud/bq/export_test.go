@@ -5,6 +5,7 @@ import "html/template"
 var DedupQuery = dedupQuery
 
 // JoinQuery returns the appropriate query in string form.
+// This is used for testing.
 func JoinQuery(to TableOps, dt string) string {
 	switch dt {
 	case "annotation":

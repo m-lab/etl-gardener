@@ -280,6 +280,9 @@ func (to TableOps) JoinAnnotation(ctx context.Context, dryRun bool) (bqiface.Job
 
 // joinHopsTemplate is used to create join queries for hops, based on Job details.
 var joinHopsTemplate = template.Must(template.New("").Parse(`
+# Perform a second join of joined tables (e.g., client and server data) with hop annotations.
+# 15 slot hours to annotate 18 million rows of trace data,
+# with 110 bytes processed.
 WITH {{.Job.Datatype}} AS (
     SELECT * FROM ` + joinedTable + `
     WHERE {{.Date}} = "{{.Job.Date.Format "2006-01-02"}}"
@@ -295,7 +298,7 @@ hops AS (
 annotated AS (
     SELECT hops.id,
 	STRUCT(hops.Hop.hop_id, hops.Hop.addr, hops.Hop.name, hops.Hop.q_ttl, hops.Hop.linkc, hops.Hop.links, ann.raw.Annotations AS annotations) as hop
-    FROM hops JOIN ` + "`{{.Project}}.raw_{{.Job.Experiment}}.hopannotation1`" + ` as ann ON (hops.hop.hop_id = ann.id)
+    FROM hops LEFT JOIN ` + "`{{.Project}}.raw_{{.Job.Experiment}}.hopannotation1`" + ` as ann ON (hops.hop.hop_id = ann.id)
 ),
 
 # Now reassemble the Hop arrays
