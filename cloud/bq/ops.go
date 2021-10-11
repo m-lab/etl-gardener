@@ -211,48 +211,11 @@ func (to TableOps) DeleteTmp(ctx context.Context) error {
 	return tmp.Delete(ctx)
 }
 
-func join(ctx context.Context, dryRun bool, t *template.Template, to TableOps, tableName string) (bqiface.Job, error) {
-	qs := to.makeQuery(t)
-
-	if len(qs) == 0 {
-		return nil, dataset.ErrNilQuery
-	}
-	if to.client == nil {
-		return nil, dataset.ErrNilBqClient
-	}
-	q := to.client.Query(qs)
-	if q == nil {
-		return nil, dataset.ErrNilQuery
-	}
-	// The destintation is a partition in a table based on the job
-	// type and date.
-	dest := to.client.Dataset(to.Job.Experiment).Table(
-		tableName + "$" + to.Job.Date.Format("20060102"))
-	qc := bqiface.QueryConfig{
-		QueryConfig: bigquery.QueryConfig{
-			DryRun: dryRun,
-			Q:      qs,
-			// We want to replace the whole partition
-			WriteDisposition: bigquery.WriteTruncate,
-			// Create the table if it doesn't exist
-			CreateDisposition: bigquery.CreateIfNeeded,
-			// Partitioning spec, in event we have to create the table.
-			TimePartitioning: &bigquery.TimePartitioning{
-				Field:                  "date",
-				RequirePartitionFilter: true,
-			},
-		},
-		Dst: dest,
-	}
-	q.SetQueryConfig(qc)
-	return q.Run(ctx)
-}
-
-// joinTemplate is used to create join queries with annotation, based on Job details.
+// joinTemplate is used to create join queries, based on Job details.
 // TODO - explore whether using query parameters would improve readability
 // instead of executing this template.  Query params cannot be used for
 // table names, but would work for most other variables.
-var joinAnnotationTemplate = template.Must(template.New("").Parse(`
+var joinTemplate = template.Must(template.New("").Parse(`
 #standardSQL
 # Join the ndt7 data with server and client annotation.
 WITH {{.Job.Datatype}} AS (
@@ -273,55 +236,40 @@ SELECT {{.Job.Datatype}}.id, {{.Job.Datatype}}.date, {{.Job.Datatype}}.parser,
 FROM {{.Job.Datatype}} LEFT JOIN ann USING (id)
 `))
 
-// JoinAnnotation joins the raw tables into annotated tables.
-func (to TableOps) JoinAnnotation(ctx context.Context, dryRun bool) (bqiface.Job, error) {
-	return join(ctx, dryRun, joinAnnotationTemplate, to, to.Job.Datatype)
-}
+// Join joins the raw tables into annotated tables.
+func (to TableOps) Join(ctx context.Context, dryRun bool) (bqiface.Job, error) {
+	qs := to.makeQuery(joinTemplate)
 
-// joinHopsTemplate is used to create join queries for hops, based on Job details.
-var joinHopsTemplate = template.Must(template.New("").Parse(`
-# Perform a second join of joined tables (e.g., client and server data) with hop annotations.
-# 15 slot hours to annotate 18 million rows of trace data, with 110 bytes processed.
-WITH {{.Job.Datatype}} AS (
-    SELECT * FROM ` + joinedTable + `
-    WHERE {{.Date}} = "{{.Job.Date.Format "2006-01-02"}}"
-),
-
-hops AS (
-    SELECT {{.Job.Datatype}}.id, fh AS hop
-    FROM {{.Job.Datatype}} CROSS JOIN UNNEST({{.Job.Datatype}}.raw.Tracelb.nodes) as fh
-	WHERE {{.Date}} = "{{.Job.Date.Format "2006-01-02"}}"
-),
-
-# Annotate
-annotated AS (
-    SELECT hops.id,
-	STRUCT(hops.Hop.hop_id, hops.Hop.addr, hops.Hop.name, hops.Hop.q_ttl, hops.Hop.linkc, hops.Hop.links, ann.raw.Annotations AS annotations) as hop
-    FROM hops LEFT JOIN ` + "`{{.Project}}.raw_{{.Job.Experiment}}.hopannotation1`" + ` as ann ON (hops.hop.hop_id = ann.id)
-),
-
-# Now reassemble the Hop arrays
-mash AS (
-    SELECT id, ARRAY_AGG(hop) as hop
-    FROM annotated
-    GROUP BY id
-),
-
-# Recombine the hop arrays with top level fields
-{{.Job.Datatype}}_hopannotation1 AS (
-    SELECT {{.Job.Datatype}}.* REPLACE (
-        (SELECT AS STRUCT {{.Job.Datatype}}.raw.* REPLACE (
-            (SELECT AS STRUCT raw.Tracelb.* EXCEPT (nodes), mash.hop AS nodes
-            ) AS Tracelb)
-        ) AS raw
-    )
-    FROM {{.Job.Datatype}} JOIN mash ON ({{.Job.Datatype}}.id = mash.id)
-)
-
-SELECT * FROM {{.Job.Datatype}}_hopannotation1
-`))
-
-// JoinHops joins the joined tables with hop annotations.
-func (to TableOps) JoinHops(ctx context.Context, dryRun bool) (bqiface.Job, error) {
-	return join(ctx, dryRun, joinHopsTemplate, to, fmt.Sprintf("%s_hopannotation1", to.Job.Datatype))
+	if len(qs) == 0 {
+		return nil, dataset.ErrNilQuery
+	}
+	if to.client == nil {
+		return nil, dataset.ErrNilBqClient
+	}
+	q := to.client.Query(qs)
+	if q == nil {
+		return nil, dataset.ErrNilQuery
+	}
+	// The destintation is a partition in a table based on the job
+	// type and date.  Initially, this will only be ndt7.
+	dest := to.client.Dataset(to.Job.Experiment).Table(
+		to.Job.Datatype + "$" + to.Job.Date.Format("20060102"))
+	qc := bqiface.QueryConfig{
+		QueryConfig: bigquery.QueryConfig{
+			DryRun: dryRun,
+			Q:      qs,
+			// We want to replace the whole partition
+			WriteDisposition: bigquery.WriteTruncate,
+			// Create the table if it doesn't exist
+			CreateDisposition: bigquery.CreateIfNeeded,
+			// Partitioning spec, in event we have to create the table.
+			TimePartitioning: &bigquery.TimePartitioning{
+				Field:                  "date",
+				RequirePartitionFilter: true,
+			},
+		},
+		Dst: dest,
+	}
+	q.SetQueryConfig(qc)
+	return q.Run(ctx)
 }
