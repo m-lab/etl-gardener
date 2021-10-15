@@ -18,6 +18,7 @@ WORKDIR $GOPATH
 # Install binaries needed for builds and testing.
 RUN apt-get update
 RUN apt-get install -y jq gcc netcat
+RUN apt install ca-certificates libgnutls30 -y
 RUN go get -v github.com/m-lab/gcp-config/cmd/cbif
 
 ENTRYPOINT ["/go/bin/cbif"]
