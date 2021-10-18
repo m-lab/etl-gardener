@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/m-lab/etl-gardener/cloud/bq"
+	"github.com/m-lab/etl-gardener/ops"
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/go/rtx"
 )
@@ -37,7 +38,7 @@ func TestValidateQueries(t *testing.T) {
 		t.Log("Skipping test for --short")
 	}
 	ctx := context.Background()
-	dataTypes := []string{"annotation", "ndt7", "pcap", "hopannotation1"}
+	dataTypes := []string{"annotation", "ndt7", "pcap", "hopannotation1", "scamper1"}
 	// TODO Add "preserve" query
 	// Test for each datatype
 	for _, dataType := range dataTypes {
@@ -57,7 +58,7 @@ func TestValidateQueries(t *testing.T) {
 				t.Fatal(t.Name(), err, bq.DedupQuery(*qp))
 			}
 
-			if qp.Job.Datatype != "ndt7" {
+			if !ops.JoinableDatatypes[qp.Job.Datatype] {
 				return
 			}
 

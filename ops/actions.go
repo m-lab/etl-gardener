@@ -20,6 +20,10 @@ import (
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
+var (
+	JoinableDatatypes = map[string]bool{"ndt7": true, "scamper1": true}
+)
+
 func newStateFunc(detail string) ActionFunc {
 	return func(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
 		return Success(j, detail)
@@ -364,7 +368,7 @@ func deleteFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *
 }
 
 func joinFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
-	if j.Datatype != "ndt7" {
+	if !JoinableDatatypes[j.Datatype] {
 		// These should not be annotated.
 		return Success(j, fmt.Sprintf("%s does not require join", j.Datatype))
 	}
