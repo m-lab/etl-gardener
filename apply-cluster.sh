@@ -18,6 +18,12 @@ CLUSTER=${CLOUDSDK_CONTAINER_CLUSTER:?Please provide cluster name: $USAGE}
 DATE_SKIP=${DATE_SKIP:-"0"}  # Number of dates to skip between each processed date (for sandbox).
 TASK_FILE_SKIP=${TASK_FILE_SKIP:-"0"}  # Number of files to skip between each processed file (for sandbox).
 
+# Use sandbox in sandbox, staging in staging, and use measurement-lab in oti.
+SOURCE_PROJECT=${PROJECT_ID/mlab-oti/measurement-lab}
+sed -i \
+    -e 's/{{ANNOTATION_SOURCE_PROJECT}}/'${SOURCE_PROJECT}'/g' \
+    config/config.yml
+
 # Create the configmap
 kubectl create configmap gardener-config --dry-run \
     --from-file config/config.yml \
