@@ -6,7 +6,7 @@ monitor:
   polling_interval: 1m
 sources:
 # NOTE: It now matters what order these are in.
-- bucket: archive-measurement-lab
+- bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
   experiment: ndt
   datatype: annotation
   target: tmp_ndt.annotation
