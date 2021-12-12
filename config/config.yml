@@ -9,25 +9,25 @@ sources:
 - bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
   experiment: ndt
   datatype: annotation
-  target: tmp_ndt.annotation
 - bucket: archive-measurement-lab
   experiment: ndt
   datatype: ndt7
-  target: tmp_ndt.ndt7
+  target_datasets:
+    join: ndt
 # TODO(soltesz): re-enable after annotation export is completed in production.
 #- bucket: archive-measurement-lab
 #  experiment: ndt
 #  datatype: pcap
-#  target: tmp_ndt.pcap
 - bucket: archive-measurement-lab
   experiment: ndt
   datatype: hopannotation1
-  target: tmp_ndt.hopannotation1
 - bucket: archive-measurement-lab
   experiment: ndt
   datatype: scamper1
-  target: tmp_ndt.scamper1
+  target_datasets:
+    join: ndt
 #- bucket: archive-measurement-lab
 #  experiment: ndt
 #  datatype: tcpinfo
-#  target: tmp_ndt.tcpinfo
+#  target_datasets:
+#    join: ndt
