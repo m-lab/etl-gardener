@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/m-lab/etl-gardener/cloud/bq"
-	"github.com/m-lab/etl-gardener/ops"
+	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/go/rtx"
 )
@@ -38,16 +38,52 @@ func TestValidateQueries(t *testing.T) {
 		t.Log("Skipping test for --short")
 	}
 	ctx := context.Background()
-	dataTypes := []string{"annotation", "ndt7", "pcap", "hopannotation1", "scamper1"}
+	d := time.Date(2020, 9, 5, 0, 0, 0, 0, time.UTC).UTC().Truncate(24 * time.Hour)
+	jobs := []tracker.Job{
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "annotation",
+			Date:       d,
+			Datasets:   config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt"},
+		},
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "ndt7",
+			Date:       d,
+			Datasets:   config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"},
+		},
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "pcap",
+			Date:       d,
+			Datasets:   config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt"},
+		},
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "hopannotation1",
+			Date:       d,
+			Datasets:   config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt"},
+		},
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "scamper1",
+			Date:       d,
+			Datasets:   config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"},
+		},
+	}
 	// TODO Add "preserve" query
 	// Test for each datatype
-	for _, dataType := range dataTypes {
-		job := tracker.NewJob("bucket", "ndt", dataType, time.Date(2020, 9, 5, 0, 0, 0, 0, time.UTC))
+	for _, job := range jobs {
 		qp, err := bq.NewTableOps(ctx, job, "mlab-testing", "")
 		if err != nil {
-			t.Fatal(dataType, err)
+			t.Fatal(job.Datatype, err)
 		}
-		t.Run(dataType+":dedup", func(t *testing.T) {
+		t.Run(job.Datatype+":dedup", func(t *testing.T) {
 			t.Log(t.Name())
 			j, err := qp.Dedup(ctx, true)
 			if err != nil {
@@ -58,7 +94,7 @@ func TestValidateQueries(t *testing.T) {
 				t.Fatal(t.Name(), err, bq.DedupQuery(*qp))
 			}
 
-			if !ops.JoinableDatatypes[qp.Job.Datatype] {
+			if qp.Job.Datasets.Join == "" {
 				return
 			}
 

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"html/template"
 	"log"
 
@@ -109,7 +108,7 @@ func (to TableOps) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) 
 	return q.Run(ctx)
 }
 
-// LoadToTmp loads the tmp_ exp table from GCS files.
+// LoadToTmp loads the "tmp" experiment table from files previously written to GCS by the parsers (or other source).
 func (to TableOps) LoadToTmp(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	if dryRun {
 		return nil, errors.New("dryrun not implemented")
@@ -122,7 +121,7 @@ func (to TableOps) LoadToTmp(ctx context.Context, dryRun bool) (bqiface.Job, err
 	gcsRef.SourceFormat = bigquery.JSON
 
 	dest := to.client.
-		Dataset("tmp_" + to.Job.Experiment).
+		Dataset(to.Job.Datasets.Temp).
 		Table(to.Job.Datatype)
 	if dest == nil {
 		return nil, ErrTableNotFound
@@ -137,7 +136,7 @@ func (to TableOps) LoadToTmp(ctx context.Context, dryRun bool) (bqiface.Job, err
 	return loader.Run(ctx)
 }
 
-// CopyToRaw copies the tmp_ job partition to the raw_ job partition.
+// CopyToRaw copies the job "temp" table partition to the "raw" table partition.
 func (to TableOps) CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	if dryRun {
 		return nil, errors.New("dryrun not implemented")
@@ -145,9 +144,9 @@ func (to TableOps) CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, err
 	if to.client == nil {
 		return nil, dataset.ErrNilBqClient
 	}
-	tableName := to.Job.Datatype + "$" + to.Job.Date.Format("20060102")
-	src := to.client.Dataset("tmp_" + to.Job.Experiment).Table(tableName)
-	dest := to.client.Dataset("raw_" + to.Job.Experiment).Table(tableName)
+	tableName := to.Job.TablePartition()
+	src := to.client.Dataset(to.Job.Datasets.Temp).Table(tableName)
+	dest := to.client.Dataset(to.Job.Datasets.Raw).Table(tableName)
 
 	copier := dest.CopierFrom(src)
 	config := bqiface.CopyConfig{}
@@ -158,10 +157,11 @@ func (to TableOps) CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, err
 	return copier.Run(ctx)
 }
 
-// TODO get the tmp_ and raw_ from the job Target?
-const tmpTable = "`{{.Project}}.tmp_{{.Job.Experiment}}.{{.Job.Datatype}}`"
-const rawTable = "`{{.Project}}.raw_{{.Job.Experiment}}.{{.Job.Datatype}}`"
-const joinedTable = "`{{.Project}}.{{.Job.Experiment}}.{{.Job.Datatype}}`"
+const tmpTable = "`{{.Project}}.{{.Job.Datasets.Temp}}.{{.Job.Datatype}}`"
+const rawTable = "`{{.Project}}.{{.Job.Datasets.Raw}}.{{.Job.Datatype}}`"
+
+// NOTE: experiment annotations must come from the same raw experiment dataset.
+const annoTable = "`{{.Project}}.{{.Job.Datasets.Raw}}.annotation`"
 
 var dedupTemplate = template.Must(template.New("").Parse(`
 #standardSQL
@@ -205,8 +205,7 @@ func (to TableOps) DeleteTmp(ctx context.Context) error {
 		return dataset.ErrNilBqClient
 	}
 	// TODO - name should be field in queryer.
-	tmp := to.client.Dataset("tmp_" + to.Job.Experiment).Table(
-		fmt.Sprintf("%s$%s", to.Job.Datatype, to.Job.Date.Format("20060102")))
+	tmp := to.client.Dataset(to.Job.Datasets.Temp).Table(to.Job.TablePartition())
 	log.Println("Deleting", tmp.FullyQualifiedName())
 	return tmp.Delete(ctx)
 }
@@ -227,7 +226,7 @@ WHERE {{.Date}} = "{{.Job.Date.Format "2006-01-02"}}"
 # Need to remove dups?
 ann AS (
 SELECT *
-FROM ` + "`{{.Project}}.raw_{{.Job.Experiment}}.annotation`" + `
+FROM ` + annoTable + `
 WHERE {{.Date}} BETWEEN DATE_SUB("{{.Job.Date.Format "2006-01-02"}}", INTERVAL 1 DAY) AND "{{.Job.Date.Format "2006-01-02"}}"
 )
 
@@ -252,8 +251,7 @@ func (to TableOps) Join(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	}
 	// The destintation is a partition in a table based on the job
 	// type and date.  Initially, this will only be ndt7.
-	dest := to.client.Dataset(to.Job.Experiment).Table(
-		to.Job.Datatype + "$" + to.Job.Date.Format("20060102"))
+	dest := to.client.Dataset(to.Job.Datasets.Join).Table(to.Job.TablePartition())
 	qc := bqiface.QueryConfig{
 		QueryConfig: bigquery.QueryConfig{
 			DryRun: dryRun,
