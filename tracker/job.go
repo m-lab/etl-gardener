@@ -21,6 +21,7 @@ import (
 	"github.com/m-lab/go/cloud/bqx"
 	"github.com/m-lab/go/cloud/gcs"
 
+	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/metrics"
 )
 
@@ -33,11 +34,17 @@ type Job struct {
 	Date       time.Time
 	// Filter is an optional regex to apply to ArchiveURL names
 	// Note that HasFiles does not use this, so ETL may process no files.
-	Filter string `json:",omitempty"`
+	Filter   string          `json:",omitempty"`
+	Datasets config.Datasets `json:",omitempty"`
+}
+
+// TablePartition returns the job's bigquery table partition for the job date.
+func (j *Job) TablePartition() string {
+	return j.Datatype + "$" + j.Date.Format("20060102")
 }
 
 // JobWithTarget specifies a type/date job, and a destination
-// table or GCS prefix
+// table or GCS prefix.
 type JobWithTarget struct {
 	Job
 	// One of these two fields indicates the destination,
