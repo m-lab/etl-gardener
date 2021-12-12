@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/m-lab/etl-gardener/cloud"
+	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/ops"
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/go/logx"
@@ -25,17 +26,69 @@ func TestStandardMonitor(t *testing.T) {
 	cleanup := osx.MustSetenv("PROJECT", "mlab-testing")
 	defer cleanup()
 
+	d := time.Now()
+	// Statically define jobs with full configurations specified.
+	jobs := []tracker.Job{
+		{
+			Bucket:     "bucket",
+			Experiment: "exp",
+			Datatype:   "type",
+			Date:       d,
+			Datasets:   config.Datasets{Temp: "tmp_exp", Raw: "raw_exp"},
+		},
+		// Not yet supported.
+		{
+			Bucket:     "bucket",
+			Experiment: "exp2",
+			Datatype:   "tcpinfo",
+			Date:       d,
+			Datasets:   config.Datasets{Temp: "tmp_exp2", Raw: "raw_exp2"},
+		},
+		// Valid experiment and datatype
+		// This does an actual dedup, so we need to allow enough time.
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "ndt7",
+			Date:       d,
+			Datasets:   config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"},
+		},
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "annotation",
+			Date:       d,
+			Datasets:   config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt"},
+		},
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "pcap",
+			Date:       d,
+			Datasets:   config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt"},
+		},
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "hopannotation1",
+			Date:       d,
+			Datasets:   config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt"},
+		},
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "scamper1",
+			Date:       d,
+			Datasets:   config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"},
+		},
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	tk, err := tracker.InitTracker(ctx, nil, nil, 0, 0, 0)
 	rtx.Must(err, "tk init")
-	tk.AddJob(tracker.NewJob("bucket", "exp", "type", time.Now()))
-	// Not yet supported.
-	tk.AddJob(tracker.NewJob("bucket", "exp2", "tcpinfo", time.Now()))
-	// Valid experiment and datatype
-	// This does an actual dedup, so we need to allow enough time.
-	datatypes := []string{"ndt7", "annotation", "pcap", "hopannotation1", "scamper1"}
-	for _, datatype := range datatypes {
-		tk.AddJob(tracker.NewJob("bucket", "ndt", datatype, time.Now()))
+
+	// Add jobs to the tracker.
+	for i := 0; i < len(jobs); i++ {
+		tk.AddJob(jobs[i])
 	}
 
 	m, err := ops.NewStandardMonitor(context.Background(), cloud.BQConfig{}, tk)
