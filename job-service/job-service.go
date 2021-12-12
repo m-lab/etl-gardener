@@ -253,7 +253,7 @@ var ErrInvalidStartDate = errors.New("Invalid start date")
 // NewJobService creates the default job service.
 // Context is used for retrieving state from datastore.
 func NewJobService(ctx context.Context, tk jobAdder, startDate time.Time,
-	targetBase string, sources []config.SourceConfig,
+	project string, sources []config.SourceConfig,
 	saver persistence.Saver,
 	statsClient stiface.Client, // May be nil
 ) (*Service, error) {
@@ -274,11 +274,13 @@ func NewJobService(ctx context.Context, tk jobAdder, startDate time.Time,
 			Datatype:   s.Datatype,
 			Filter:     s.Filter,
 			Date:       time.Time{}, // This is not used.
+			Datasets:   s.Datasets,
 		}
 		// TODO - handle gs:// targets
-		jt, err := job.Target(targetBase + "." + s.Target)
+		target := project + "." + job.Datasets.Temp + "." + s.Datatype
+		jt, err := job.Target(target)
 		if err != nil {
-			log.Println(err, targetBase+s.Target)
+			log.Println(err, target)
 			continue
 		}
 		specs = append(specs, jt)

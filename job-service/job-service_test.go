@@ -76,8 +76,8 @@ func TestService_NextJob(t *testing.T) {
 	ctx := context.Background()
 
 	sources := []config.SourceConfig{
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Datasets: config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"}},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Datasets: config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"}},
 	}
 	// This is three days before "now".  The job service should restart
 	// when it reaches 36 hours before "now", which is 2011-02-05
@@ -88,12 +88,12 @@ func TestService_NextJob(t *testing.T) {
 	expected := []struct {
 		body string
 	}{
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-03T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-04T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-04T00:00:00Z"}`},
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z","Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`},
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-03T00:00:00Z","Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`},
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-04T00:00:00Z","Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`},
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-04T00:00:00Z","Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`},
 		// Wrap
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`},
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z","Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`},
 	}
 
 	for i, e := range expected {
@@ -101,6 +101,7 @@ func TestService_NextJob(t *testing.T) {
 		json.Unmarshal([]byte(e.body), &want)
 		got := svc.NextJob(ctx)
 		log.Println(got)
+		rtx.Must(err, "foo")
 		diff := deep.Equal(want, got.Job)
 		if diff != nil {
 			t.Error(i, diff)
@@ -128,8 +129,8 @@ func TestJobHandler(t *testing.T) {
 	defer monkey.Unpatch(time.Now)
 
 	sources := []config.SourceConfig{
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Datasets: config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"}},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Datasets: config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"}},
 	}
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
 	svc, err := job.NewJobService(ctx, &NullTracker{}, start, "fake-bucket", sources, &NullSaver{}, &fc)
@@ -157,7 +158,7 @@ func TestJobHandler(t *testing.T) {
 		t.Error("Should be StatusOK", http.StatusText(resp.Code), resp.Body.String())
 	}
 
-	want := `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`
+	want := `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z","Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`
 	if want != resp.Body.String() {
 		t.Fatal(resp.Body.String())
 	}
@@ -183,8 +184,8 @@ func TestResume(t *testing.T) {
 	tk.AddJob(last)
 
 	sources := []config.SourceConfig{
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Datasets: config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"}},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Datasets: config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"}},
 	}
 	svc, err := job.NewJobService(ctx, tk, start, "fake-bucket", sources, &NullSaver{}, nil)
 	must(t, err)
@@ -240,8 +241,8 @@ func TestResumeFromSaver(t *testing.T) {
 
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
 	sources := []config.SourceConfig{
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Datasets: config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"}},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Datasets: config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"}},
 	}
 
 	// Set up fake saver.
@@ -277,8 +278,8 @@ func TestYesterdayFromSaver(t *testing.T) {
 
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
 	sources := []config.SourceConfig{
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Datasets: config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"}},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Datasets: config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"}},
 	}
 
 	// Set up fake saver.
@@ -293,15 +294,15 @@ func TestYesterdayFromSaver(t *testing.T) {
 		body string
 	}{
 		// Yesterday (twice to catch up)
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-14T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-14T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-15T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-15T00:00:00Z"}`},
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-14T00:00:00Z","Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`},
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-14T00:00:00Z","Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`},
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-15T00:00:00Z","Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`},
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-15T00:00:00Z","Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`},
 		// Resume
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-10T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-10T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-11T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-11T00:00:00Z"}`},
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-10T00:00:00Z","Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`},
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-10T00:00:00Z","Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`},
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-11T00:00:00Z","Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`},
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-11T00:00:00Z","Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`},
 	}
 
 	for i, e := range expected {
@@ -335,8 +336,8 @@ func TestEarlyWrapping(t *testing.T) {
 	}
 
 	sources := []config.SourceConfig{
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Datasets: config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"}},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Datasets: config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"}},
 	}
 	svc, err := job.NewJobService(ctx, tk, start, "fake-bucket", sources, &NullSaver{}, nil)
 	must(t, err)
@@ -345,13 +346,13 @@ func TestEarlyWrapping(t *testing.T) {
 	expected := []struct {
 		code int
 		body string
-	}{
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`},
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-03T00:00:00Z"}`},
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-04T00:00:00Z"}`},
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-04T00:00:00Z"}`},
+	}{ // ,"Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z","Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-03T00:00:00Z","Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-04T00:00:00Z","Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-04T00:00:00Z","Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`},
 		// This one should work, because we complete it in the loop.
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`},
+		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z","Datasets":{"Temp":"tmp_ndt","Raw":"raw_ndt","Join":"ndt"}}`},
 		{code: 500, body: `Job already exists.  Try again.`},
 	}
 
