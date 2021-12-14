@@ -72,6 +72,7 @@ steps:
       "--build-arg", "VERSION=${TAG_NAME}${BRANCH_NAME}",
       "-t", "gcr.io/$PROJECT_ID/etl-gardener:${COMMIT_SHA}", "."
   ]
+  waitFor: ['-']
 
 - name: gcr.io/cloud-builders/docker
   id: "Push the docker container to gcr.io"
