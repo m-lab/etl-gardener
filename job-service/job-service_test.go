@@ -78,6 +78,7 @@ func TestService_NextJob(t *testing.T) {
 	sources := []config.SourceConfig{
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "dailyonly", Target: "tmp_ndt.dailyonly", DailyOnly: true},
 	}
 	// This is three days before "now".  The job service should restart
 	// when it reaches 36 hours before "now", which is 2011-02-05
@@ -100,7 +101,7 @@ func TestService_NextJob(t *testing.T) {
 		want := tracker.Job{}
 		json.Unmarshal([]byte(e.body), &want)
 		got := svc.NextJob(ctx)
-		log.Println(got)
+		t.Log(got)
 		diff := deep.Equal(want, got.Job)
 		if diff != nil {
 			t.Error(i, diff)
@@ -279,6 +280,7 @@ func TestYesterdayFromSaver(t *testing.T) {
 	sources := []config.SourceConfig{
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "dailyonly", Target: "tmp_ndt.dailyonly", DailyOnly: true},
 	}
 
 	// Set up fake saver.
@@ -295,8 +297,11 @@ func TestYesterdayFromSaver(t *testing.T) {
 		// Yesterday (twice to catch up)
 		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-14T00:00:00Z"}`},
 		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-14T00:00:00Z"}`},
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"dailyonly","Date":"2011-02-14T00:00:00Z"}`},
+
 		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-15T00:00:00Z"}`},
 		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-15T00:00:00Z"}`},
+		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"dailyonly","Date":"2011-02-15T00:00:00Z"}`},
 		// Resume
 		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-10T00:00:00Z"}`},
 		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-10T00:00:00Z"}`},
@@ -308,6 +313,7 @@ func TestYesterdayFromSaver(t *testing.T) {
 		want := tracker.Job{}
 		json.Unmarshal([]byte(e.body), &want)
 		got := svc.NextJob(ctx)
+		t.Log(got)
 		diff := deep.Equal(want, got.Job)
 		if diff != nil {
 			t.Error(i, diff)

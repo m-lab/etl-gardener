@@ -32,6 +32,7 @@ type SourceConfig struct {
 	Datatype   string `yaml:"datatype"`
 	Filter     string `yaml:"filter"`
 	Target     string `yaml:"target"`
+	DailyOnly  bool   `yaml:"dailyOnly"`
 }
 
 // Gardener is the full config for a Gardener instance.
