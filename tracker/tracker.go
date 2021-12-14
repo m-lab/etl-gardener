@@ -199,7 +199,7 @@ func (tr *Tracker) UpdateJob(job Job, new Status) error {
 	// When jobs are done, we update stats and may remove them from tracker.
 	if new.isDone() {
 		metrics.CompletedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
-		metrics.UpToDate.WithLabelValues(job.Experiment, job.Datatype).Set(1)
+		metrics.UpToDate.WithLabelValues(job.Datatype, job.Date.String()).Set(1)
 
 		// This could be done by GetStatus, but would change behaviors slightly.
 		if tr.cleanupDelay == 0 {
