@@ -34,6 +34,19 @@ type Job struct {
 	// Filter is an optional regex to apply to ArchiveURL names
 	// Note that HasFiles does not use this, so ETL may process no files.
 	Filter string `json:",omitempty"`
+
+	// Alternatively, export and use a json tag?
+	dailyOnly bool // Not included in json interface.
+}
+
+// SetDailyOnly disables reprocessing of old data
+// Only yesterday jobs will be dispatched.
+func (j *Job) SetDailyOnly() {
+	j.dailyOnly = true
+}
+
+func (j *Job) DailyOnly() bool {
+	return j.dailyOnly
 }
 
 // JobWithTarget specifies a type/date job, and a destination

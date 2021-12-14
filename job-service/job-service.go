@@ -159,22 +159,29 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 		return *j
 	}
 
-	job := svc.jobSpecs[svc.nextIndex]
-	job.Date = svc.Date
-	svc.nextIndex++
+	for i := 0; i < 3; i++ {
+		job := svc.jobSpecs[svc.nextIndex]
+		job.Date = svc.Date
+		svc.nextIndex++
 
-	if svc.nextIndex >= len(svc.jobSpecs) {
-		svc.advanceDate()
-		// Note that this will block other calls to NextJob
-		ctx, cf := context.WithTimeout(ctx, 5*time.Second)
-		defer cf()
-		log.Println("Saving", svc.GetName(), svc.GetKind(), svc.Date.Format("2006-01-02"))
-		err := svc.saver.Save(ctx, svc)
-		if err != nil {
-			log.Println(err)
+		if svc.nextIndex >= len(svc.jobSpecs) {
+			svc.advanceDate()
+			// Note that this will block other calls to NextJob
+			ctx, cf := context.WithTimeout(ctx, 5*time.Second)
+			defer cf()
+			log.Println("Saving", svc.GetName(), svc.GetKind(), svc.Date.Format("2006-01-02"))
+			err := svc.saver.Save(ctx, svc)
+			if err != nil {
+				log.Println(err)
+			}
+		}
+		if !job.DailyOnly() {
+			return job
 		}
 	}
-	return job
+
+	// Return an empty job.  Client will try again later.
+	return tracker.JobWithTarget{}
 }
 
 // JobHandler handle requests for new jobs.
@@ -274,6 +281,9 @@ func NewJobService(ctx context.Context, tk jobAdder, startDate time.Time,
 			Datatype:   s.Datatype,
 			Filter:     s.Filter,
 			Date:       time.Time{}, // This is not used.
+		}
+		if s.DailyOnly {
+			job.SetDailyOnly()
 		}
 		// TODO - handle gs:// targets
 		jt, err := job.Target(targetBase + "." + s.Target)
