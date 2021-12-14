@@ -94,6 +94,14 @@ var (
 		[]string{"experiment", "datatype", "state"},
 	)
 
+	UpToDate = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "gardener_up_to_date",
+			Help: "Processing date for each archived date per datatype.",
+		},
+		[]string{"datatype", "date"},
+	)
+
 	// StateTimeHistogram tracks the time spent in each state.  Not necessary to label data type, as
 	// we currently have separate gardener deployments for each type.
 	// Usage example:

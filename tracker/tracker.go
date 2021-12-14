@@ -63,6 +63,7 @@ func InitTracker(
 		if !s.isDone() {
 			metrics.StartedCount.WithLabelValues(j.Experiment, j.Datatype).Inc()
 			metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype, s.Label()).Inc()
+			metrics.UpToDate.WithLabelValues(j.Datatype, j.Date.String()).Set(0)
 		}
 	}
 	t := Tracker{
@@ -173,6 +174,7 @@ func (tr *Tracker) AddJob(job Job) error {
 	tr.lastJob = job
 	tr.lastModified = time.Now()
 	metrics.StartedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
+	metrics.UpToDate.WithLabelValues(job.Datatype, job.Date.String()).Set(0)
 	tr.jobs[job] = status
 	status.updateMetrics(job)
 	return nil
@@ -197,6 +199,7 @@ func (tr *Tracker) UpdateJob(job Job, new Status) error {
 	// When jobs are done, we update stats and may remove them from tracker.
 	if new.isDone() {
 		metrics.CompletedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
+		metrics.UpToDate.WithLabelValues(job.Experiment, job.Datatype).Set(1)
 
 		// This could be done by GetStatus, but would change behaviors slightly.
 		if tr.cleanupDelay == 0 {
