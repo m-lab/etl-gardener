@@ -26,6 +26,7 @@
 timeout: 1800s
 
 options:
+  machineType: 'N1_HIGHCPU_8'
   env:
   - PROJECT_ID=$PROJECT_ID
   - GIT_COMMIT=$COMMIT_SHA
@@ -72,6 +73,7 @@ steps:
       "--build-arg", "VERSION=${TAG_NAME}${BRANCH_NAME}",
       "-t", "gcr.io/$PROJECT_ID/etl-gardener:${COMMIT_SHA}", "."
   ]
+  waitFor: ['-']
 
 - name: gcr.io/cloud-builders/docker
   id: "Push the docker container to gcr.io"
