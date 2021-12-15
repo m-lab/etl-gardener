@@ -26,6 +26,7 @@
 timeout: 1800s
 
 options:
+  machineType: 'N1_HIGHCPU_8'
   env:
   - PROJECT_ID=$PROJECT_ID
   - GIT_COMMIT=$COMMIT_SHA
