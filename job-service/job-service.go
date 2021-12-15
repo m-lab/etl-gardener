@@ -159,6 +159,7 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 		return *j
 	}
 
+	// We now check up to three jobs, since some jobs may be configured as dailyOnly.
 	for i := 0; i < 3; i++ {
 		job := svc.jobSpecs[svc.nextIndex]
 		job.Date = svc.Date
@@ -175,6 +176,7 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 				log.Println(err)
 			}
 		}
+		// Return a job only if it isn't configured as daily only.
 		if !job.DailyOnly() {
 			return job
 		}
