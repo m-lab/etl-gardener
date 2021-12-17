@@ -149,6 +149,8 @@ func (svc *Service) advanceDate() {
 }
 
 // NextJob returns a tracker.Job to dispatch.
+// It should generally return a valid job that has files on the storage client.
+// In the event that no job is available, it should return an empty job.
 func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 	svc.lock.Lock()
 	defer svc.lock.Unlock()
@@ -159,8 +161,10 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 		return *j
 	}
 
-	// Check up to three jobs, since some jobs may be configured as dailyOnly.
-	for i := 0; i < 3; i++ {
+	// Since some jobs may be configured as dailyOnly, or have no files
+	// for a given date, we check for these conditions, and skip the job if appropriate.
+	// If first job isn't suitable, we check up to len(jobSpecs) to try to find one.
+	for i := 0; i < len(svc.jobSpecs); i++ {
 		job := svc.jobSpecs[svc.nextIndex]
 		job.Date = svc.Date
 		svc.nextIndex++
@@ -179,10 +183,25 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 				log.Println(err)
 			}
 		}
-		// Return a job only if it isn't configured as daily only.
-		if !job.DailyOnly() {
-			return job
+
+		// Skip the job if it is a dailyOnly job.
+		if job.DailyOnly() {
+			continue
 		}
+
+		// Skip the job if there are no files for it.
+		if svc.sClient != nil {
+			ok, err := job.Job.HasFiles(ctx, svc.sClient)
+			if err != nil {
+				log.Println(err)
+			}
+			if !ok {
+				continue
+			}
+		}
+
+		// Checks pass, so return this job.
+		return job
 	}
 
 	// Return an empty job.  Client will try again later.
@@ -199,21 +218,15 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 	}
 	job := svc.NextJob(req.Context())
 
-	// Check whether there are any files
-	if svc.sClient != nil {
-		ok, err := job.Job.HasFiles(req.Context(), svc.sClient)
+	// Check for empty job (no job found with files and !dailyOnly)
+	if job.Date.Equal(time.Time{}) {
+		log.Println("no job found")
+		resp.WriteHeader(http.StatusInternalServerError)
+		_, err := resp.Write([]byte("No job found.  Try again."))
 		if err != nil {
 			log.Println(err)
 		}
-		if !ok {
-			log.Println(job, "has no files", job.Bucket)
-			resp.WriteHeader(http.StatusInternalServerError)
-			_, err = resp.Write([]byte("Job has no files.  Try again."))
-			if err != nil {
-				log.Println(err)
-			}
-			return
-		}
+		return
 	}
 
 	err := svc.jobAdder.AddJob(job.Job)

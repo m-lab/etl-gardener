@@ -420,8 +420,8 @@ func (jobs JobMap) MarshalJSON() ([]byte, error) {
 // jobs and data should be non-nil.
 func (jobs *JobMap) UnmarshalJSON(data []byte) error {
 	type Pair struct {
-		Job   Job
-		State Status
+		JobKey JobKey
+		State  Status
 	}
 	pairs := make([]Pair, 0, 100)
 	err := json.Unmarshal(data, &pairs)
@@ -431,7 +431,7 @@ func (jobs *JobMap) UnmarshalJSON(data []byte) error {
 
 	log.Printf("Unmarshalling %d job/status pairs.\n", len(pairs))
 	for i := range pairs {
-		(*jobs)[pairs[i].Job] = pairs[i].State
+		(*jobs)[pairs[i].JobKey] = pairs[i].State
 	}
 	return nil
 }
@@ -446,7 +446,7 @@ var jobsTemplate = template.Must(template.New("").Parse(
 	</style>
 	<table style="width:100%%">
 		<tr>
-			<th> Job </th>
+			<th> JobKey </th>
 			<th> Elapsed </th>
 			<th> Update Time </th>
 			<th> State </th>
@@ -456,7 +456,7 @@ var jobsTemplate = template.Must(template.New("").Parse(
 		</tr>
 	    {{range .Jobs}}
 		<tr>
-			<td> {{.Job}} </td>
+			<td> {{.JobKey}} </td>
 			<td> {{.Status.Elapsed}} </td>
 			<td> {{.Status.DetailTime.Format "01/02~15:04:05"}} </td>
 			<td {{ if or (eq .Status.State "%s") (eq .Status.State "%s")}}
@@ -473,7 +473,7 @@ var jobsTemplate = template.Must(template.New("").Parse(
 // WriteHTML writes a table containing the jobs and status.
 func (jobs JobMap) WriteHTML(w io.Writer) error {
 	type Pair struct {
-		Job    Job
+		JobKey JobKey
 		Status Status
 	}
 	type JobRep struct {
@@ -482,7 +482,7 @@ func (jobs JobMap) WriteHTML(w io.Writer) error {
 	}
 	pairs := make([]Pair, 0, len(jobs))
 	for j := range jobs {
-		pairs = append(pairs, Pair{Job: j, Status: jobs[j]})
+		pairs = append(pairs, Pair{JobKey: j, Status: jobs[j]})
 	}
 	// Order by age.
 	// TODO - color code by how recently there has been an update.  We generally
