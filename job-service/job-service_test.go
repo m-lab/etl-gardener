@@ -117,6 +117,8 @@ func TestJobHandler(t *testing.T) {
 				{Name: "obj1", Updated: time.Now()},
 				{Name: "obj2", Updated: time.Now()},
 				{Name: "ndt/ndt5/2011/02/03/foobar.tgz", Size: 101, Updated: time.Now()},
+				{Name: "ndt/ndt5/2011/02/04/foobar.tgz", Size: 101, Updated: time.Now()},
+				{Name: "ndt/tcpinfo/2011/02/04/foobar.tgz", Size: 101, Updated: time.Now()},
 			}})
 
 	ctx := context.Background()
@@ -132,36 +134,39 @@ func TestJobHandler(t *testing.T) {
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 	}
+
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
 	svc, err := job.NewJobService(ctx, &NullTracker{}, start, "fake-bucket", sources, &NullSaver{}, &fc)
 	must(t, err)
-	req := httptest.NewRequest("", "/job", nil)
-	resp := httptest.NewRecorder()
-	svc.JobHandler(resp, req)
-	if resp.Code != http.StatusMethodNotAllowed {
-		t.Error("Should be MethodNotAllowed", http.StatusText(resp.Code))
+
+	type test struct {
+		name       string
+		req1, req2 string
+		code       int
+		body       string
 	}
 
-	// This one should fail because there are no objects with tcpinfo prefix.
-	req = httptest.NewRequest("POST", "/job", nil)
-	resp = httptest.NewRecorder()
-	svc.JobHandler(resp, req)
-	if resp.Code != http.StatusInternalServerError {
-		t.Error("Should be InternalServerError", http.StatusText(resp.Code), resp.Body.String())
+	tests := []test{
+		{"first", "", "/job", http.StatusMethodNotAllowed, ""},
+		// Service should skip empty tcpinfo, and return ndt5/2011/02/03/
+		{"second", "POST", "/job", http.StatusOK,
+			`{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`},
+		// Service should advance date, and return tcpinfo/2011/02/04/
+		{"second", "POST", "/job", http.StatusOK,
+			`{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-04T00:00:00Z"}`},
 	}
 
-	// This should succeed, because the service advanced to ndt5/2011/02/03/
-	req = httptest.NewRequest("POST", "/job", nil)
-	resp = httptest.NewRecorder()
-	svc.JobHandler(resp, req)
-	if resp.Code != http.StatusOK {
-		t.Error("Should be StatusOK", http.StatusText(resp.Code), resp.Body.String())
+	for _, tt := range tests {
+		req := httptest.NewRequest(tt.req1, tt.req2, nil)
+		resp := httptest.NewRecorder()
+		svc.JobHandler(resp, req)
+		if resp.Code != tt.code {
+			t.Errorf("%s: got %s, want %s", tt.name, http.StatusText(resp.Code), http.StatusText(tt.code))
+		} else if tt.body != "" && resp.Body.String() != tt.body {
+			t.Errorf("%s: got %q, want %q", tt.name, resp.Body.String(), tt.body)
+		}
 	}
 
-	want := `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`
-	if want != resp.Body.String() {
-		t.Fatal(resp.Body.String())
-	}
 }
 
 func TestResume(t *testing.T) {
