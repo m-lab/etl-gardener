@@ -39,6 +39,15 @@ type Job struct {
 	dailyOnly bool // Not included in json interface.
 }
 
+type JobKey Job
+
+// Key clears any fields that should not be used as part of the map key.
+// Since this is pass by value, a new copy is returned.
+func (j Job) Key() JobKey {
+	j.dailyOnly = false
+	return JobKey(j)
+}
+
 // SetDailyOnly disables reprocessing of old data
 // Only yesterday jobs will be dispatched.
 func (j *Job) SetDailyOnly() {
@@ -389,18 +398,18 @@ func NewStatus() Status {
 // JobMap is defined to allow custom json marshal/unmarshal.
 // It defines the map from Job to Status.
 // TODO implement datastore.PropertyLoadSaver
-type JobMap map[Job]Status
+type JobMap map[JobKey]Status
 
 // MarshalJSON implements json.Marshal
 func (jobs JobMap) MarshalJSON() ([]byte, error) {
 	type Pair struct {
-		Job   Job
-		State Status
+		JobKey JobKey
+		State  Status
 	}
 	pairs := make([]Pair, len(jobs))
 	i := 0
 	for k, v := range jobs {
-		pairs[i].Job = k
+		pairs[i].JobKey = k
 		pairs[i].State = v
 		i++
 	}

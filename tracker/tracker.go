@@ -141,10 +141,9 @@ func (tr *Tracker) saveEvery(interval time.Duration) {
 // Note that the returned object is a shallow copy, and the History
 // field shares the slice objects with the JobMap.
 func (tr *Tracker) GetStatus(job Job) (Status, error) {
-	job.dailyOnly = false // For the status, we always clear this field.
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	status, ok := tr.jobs[job]
+	status, ok := tr.jobs[job.Key()]
 	if !ok {
 		return Status{}, ErrJobNotFound
 	}
@@ -155,11 +154,10 @@ func (tr *Tracker) GetStatus(job Job) (Status, error) {
 // May return ErrJobAlreadyExists if job already exists and is still in flight.
 func (tr *Tracker) AddJob(job Job) error {
 	status := NewStatus()
-	job.dailyOnly = false // For the status, we always clear this field.
 
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	s, ok := tr.jobs[job]
+	s, ok := tr.jobs[job.Key()]
 	if ok {
 		if s.isDone() {
 			log.Println("Restarting completed job", job)
@@ -175,7 +173,7 @@ func (tr *Tracker) AddJob(job Job) error {
 	tr.lastJob = job
 	tr.lastModified = time.Now()
 	metrics.StartedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
-	tr.jobs[job] = status
+	tr.jobs[job.Key()] = status
 	status.updateMetrics(job)
 	return nil
 }
@@ -183,11 +181,9 @@ func (tr *Tracker) AddJob(job Job) error {
 // UpdateJob updates an existing job.
 // May return ErrJobNotFound if job no longer exists.
 func (tr *Tracker) UpdateJob(job Job, new Status) error {
-	job.dailyOnly = false // For the status, we always clear this field.
-
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	old, ok := tr.jobs[job]
+	old, ok := tr.jobs[job.Key()]
 	if !ok {
 		return ErrJobNotFound
 	}
@@ -205,11 +201,11 @@ func (tr *Tracker) UpdateJob(job Job, new Status) error {
 
 		// This could be done by GetStatus, but would change behaviors slightly.
 		if tr.cleanupDelay == 0 {
-			delete(tr.jobs, job)
+			delete(tr.jobs, job.Key())
 			return nil
 		}
 	}
-	tr.jobs[job] = new
+	tr.jobs[job.Key()] = new
 	return nil
 }
 

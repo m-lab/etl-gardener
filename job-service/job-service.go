@@ -159,7 +159,7 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 		return *j
 	}
 
-	// We now check up to three jobs, since some jobs may be configured as dailyOnly.
+	// Check up to three jobs, since some jobs may be configured as dailyOnly.
 	for i := 0; i < 3; i++ {
 		job := svc.jobSpecs[svc.nextIndex]
 		job.Date = svc.Date
@@ -167,10 +167,13 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 
 		if svc.nextIndex >= len(svc.jobSpecs) {
 			svc.advanceDate()
-			// Note that this will block other calls to NextJob
+
+			// Save the state, since we advanced the date.
+			log.Println("Saving", svc.GetName(), svc.GetKind(), svc.Date.Format("2006-01-02"))
+			// This will block other calls to NextJob, so configure
+			// a timeout to prevent it blocking too long.
 			ctx, cf := context.WithTimeout(ctx, 5*time.Second)
 			defer cf()
-			log.Println("Saving", svc.GetName(), svc.GetKind(), svc.Date.Format("2006-01-02"))
 			err := svc.saver.Save(ctx, svc)
 			if err != nil {
 				log.Println(err)
