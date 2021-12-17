@@ -208,7 +208,7 @@ func (m *Monitor) Watch(ctx context.Context, period time.Duration) {
 			for j, s := range jobs {
 				// If job is in a state that has an associated action...
 				if a, ok := m.actions[s.LastStateInfo().State]; ok {
-					m.tryApplyAction(ctx, a, j, s)
+					m.tryApplyAction(ctx, a, tracker.Job(j), s)
 				}
 			}
 		}
