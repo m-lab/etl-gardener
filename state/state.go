@@ -15,11 +15,20 @@ import (
 	"cloud.google.com/go/datastore"
 	"github.com/googleapis/google-cloud-go-testing/bigquery/bqiface"
 
-	"github.com/m-lab/etl/etl"
 	"github.com/m-lab/go/dataset"
 
 	"github.com/m-lab/etl-gardener/metrics"
 )
+
+// Table names are all identical to experiment name, except for paris-traceroute.
+// This function allows independence from etl repo.
+// See etl/etl/globals.go for etl mappings.
+func tableName(dir string) string {
+	if dir == "paris-traceroute" {
+		return "traceroute"
+	}
+	return dir
+}
 
 // State indicates the state of a single Task in flight.
 type State int
@@ -227,7 +236,7 @@ func (t *Task) SourceAndDest(ds *dataset.Dataset) (bqiface.Table, bqiface.Table,
 		return nil, nil, err
 	}
 
-	tableName := etl.DirToTablename(prefix.DataType)
+	tableName := tableName(prefix.DataType)
 
 	src := ds.Table(tableName + "_" + strings.Join(strings.Split(prefix.DatePath, "/"), ""))
 	dest := ds.Table(tableName + "$" + strings.Join(strings.Split(prefix.DatePath, "/"), ""))
