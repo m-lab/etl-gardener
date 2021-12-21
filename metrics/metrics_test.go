@@ -11,6 +11,7 @@ func TestLintMetrics(t *testing.T) {
 	CompletedCount.WithLabelValues("exp", "type")
 	FailCount.WithLabelValues("exp", "type", "status")
 	WarningCount.WithLabelValues("exp", "type", "status")
+	JobsCount.WithLabelValues("type", "status")
 	StateDate.WithLabelValues("exp", "type", "x")
 	StateTimeHistogram.WithLabelValues("exp", "type", "x")
 	FilesPerDateHistogram.WithLabelValues("exp", "type", "x")
