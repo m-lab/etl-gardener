@@ -64,7 +64,7 @@ var (
 		[]string{"experiment", "datatype", "status"}, // TODO change to warning
 	)
 
-	// JobsCount counts all the jobs (successful or otherwise) for each datatype.
+	// JobsCount counts all the jobs (successful or otherwise) for each v2 datatype.
 	//
 	// Provides metrics:
 	//  gardener_jobs_total{datatype, status}
