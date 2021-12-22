@@ -64,18 +64,18 @@ var (
 		[]string{"experiment", "datatype", "status"}, // TODO change to warning
 	)
 
-	// JobsCount counts all the jobs (successful or otherwise) for each v2 datatype.
+	// JobsTotal counts all the jobs (successful or otherwise) for each v2 datatype.
 	//
 	// Provides metrics:
 	//  gardener_jobs_total{datatype, status}
 	// Example usage:
-	// metrics.JobsCount.WithLabelValues(dt, "success").Inc()
-	JobsCount = promauto.NewCounterVec(
+	// metrics.JobsTotal.WithLabelValues(dt, "success").Inc()
+	JobsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "gardener_jobs_total",
 			Help: "Number of finished jobs",
 		},
-		[]string{"datatype", "status"},
+		[]string{"experiment", "datatype", "status"},
 	)
 
 	// TasksInFlight maintains a count of the number of tasks in flight.
