@@ -74,11 +74,14 @@ func (j Job) failureMetric(state State, errString string) {
 	defer errStringLock.Unlock()
 	if _, ok := errStrings[errString]; ok {
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
+		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
 	} else if len(errStrings) < maxUniqueErrStrings {
 		errStrings[errString] = struct{}{}
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
+		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
 	} else {
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, "generic").Inc()
+		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, "generic").Inc()
 	}
 }
 
