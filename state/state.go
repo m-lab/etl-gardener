@@ -25,7 +25,7 @@ import (
 // This function allows independence from etl repo.  It is used only by the legacy
 // gardener configs.
 // See etl/etl/globals.go for etl mappings.
-// DEPRECATED - table names are now identical to path experiment names.
+// Deprecated: - table names are now identical to path experiment names.
 func tableName(dir string) string {
 	if dir == "paris-traceroute" {
 		return "traceroute"
