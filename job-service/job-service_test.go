@@ -297,29 +297,28 @@ func TestYesterdayFromSaver(t *testing.T) {
 	must(t, err)
 
 	expected := []struct {
-		body string
+		json string
 	}{
 		// Yesterday (twice to catch up)
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-14T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-14T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"dailyonly","Date":"2011-02-14T00:00:00Z"}`},
+		{json: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-14T00:00:00Z"}`},
+		{json: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-14T00:00:00Z"}`},
+		{json: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"dailyonly","Date":"2011-02-14T00:00:00Z"}`},
 
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-15T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-15T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"dailyonly","Date":"2011-02-15T00:00:00Z"}`},
+		{json: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-15T00:00:00Z"}`},
+		{json: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-15T00:00:00Z"}`},
+		{json: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"dailyonly","Date":"2011-02-15T00:00:00Z"}`},
 		// Resume
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-10T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-10T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-11T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-11T00:00:00Z"}`},
+		{json: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-10T00:00:00Z"}`},
+		{json: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-10T00:00:00Z"}`},
+		{json: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-11T00:00:00Z"}`},
+		{json: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-11T00:00:00Z"}`},
 	}
 
 	for i, e := range expected {
-		want := tracker.Job{}
-		json.Unmarshal([]byte(e.body), &want)
-		got := svc.NextJob(ctx)
-		t.Log(got)
-		diff := deep.Equal(want, got.Job)
+		j := svc.NextJob(ctx)
+		actual := string(j.Marshal())
+		t.Log(j)
+		diff := deep.Equal(e.json, actual)
 		if diff != nil {
 			t.Error(i, diff)
 		}
