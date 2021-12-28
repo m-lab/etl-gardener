@@ -20,9 +20,12 @@ import (
 	"github.com/m-lab/etl-gardener/metrics"
 )
 
+// TODO - eliminate this function.
 // Table names are all identical to experiment name, except for paris-traceroute.
-// This function allows independence from etl repo.
+// This function allows independence from etl repo.  It is used only by the legacy
+// gardener configs.
 // See etl/etl/globals.go for etl mappings.
+// DEPRECATED - table names are now identical to path experiment names.
 func tableName(dir string) string {
 	if dir == "paris-traceroute" {
 		return "traceroute"

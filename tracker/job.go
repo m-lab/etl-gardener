@@ -35,27 +35,15 @@ type Job struct {
 	// Note that HasFiles does not use this, so ETL may process no files.
 	Filter string `json:",omitempty"`
 
-	// Alternatively, export and use a json tag?
-	dailyOnly bool // Not included in json interface.
+	DailyOnly bool `json:"-"` // Omit from JSON (which is used for the job-service API)
 }
 
+// JobKey is used for map keys, and should have DailyOnly = false
 type JobKey Job
 
-// Key clears any fields that should not be used as part of the map key.
-// Since this is pass by value, a new copy is returned.
+// Key returns a map or datastore key for the job.
 func (j Job) Key() JobKey {
-	j.dailyOnly = false
-	return JobKey(j)
-}
-
-// SetDailyOnly disables reprocessing of old data
-// Only yesterday jobs will be dispatched.
-func (j *Job) SetDailyOnly() {
-	j.dailyOnly = true
-}
-
-func (j *Job) DailyOnly() bool {
-	return j.dailyOnly
+	return JobKey{Bucket: j.Bucket, Experiment: j.Experiment, Datatype: j.Datatype, Date: j.Date}
 }
 
 // JobWithTarget specifies a type/date job, and a destination
@@ -127,6 +115,10 @@ func (j Job) Path() string {
 	}
 	return fmt.Sprintf("gs://%s/%s/%s",
 		j.Bucket, j.Experiment, j.Date.Format("2006/01/02/"))
+}
+
+func (j Job) IsEmpty() bool {
+	return j.Date.Equal(time.Time{})
 }
 
 // Marshal marshals the job to json.

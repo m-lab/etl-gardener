@@ -164,7 +164,7 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 	// Since some jobs may be configured as dailyOnly, or have no files
 	// for a given date, we check for these conditions, and skip the job if appropriate.
 	// If first job isn't suitable, we check up to len(jobSpecs) to try to find one.
-	for i := 0; i < len(svc.jobSpecs); i++ {
+	for attempts := 0; attempts < len(svc.jobSpecs); attempts++ {
 		job := svc.jobSpecs[svc.nextIndex]
 		job.Date = svc.Date
 		svc.nextIndex++
@@ -185,17 +185,18 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 		}
 
 		// Skip the job if it is a dailyOnly job.
-		if job.DailyOnly() {
+		if job.DailyOnly {
 			continue
 		}
 
 		// Skip the job if there are no files for it.
 		if svc.sClient != nil {
-			ok, err := job.Job.HasFiles(ctx, svc.sClient)
+			hasFiles, err := job.Job.HasFiles(ctx, svc.sClient)
 			if err != nil {
 				log.Println(err)
+				// The job will be returned, and the client will handle any further errors.
 			}
-			if !ok {
+			if !hasFiles {
 				continue
 			}
 		}
@@ -209,6 +210,8 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 }
 
 // JobHandler handle requests for new jobs.
+// The interface used by the ETL worker and the "/job" and "/update" handlers
+// is the JSON marshaled Job object.
 // TODO - should update tracker instance.
 func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 	// Must be a post because it changes state.
@@ -219,7 +222,7 @@ func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
 	job := svc.NextJob(req.Context())
 
 	// Check for empty job (no job found with files and !dailyOnly)
-	if job.Date.Equal(time.Time{}) {
+	if job.IsEmpty() {
 		log.Println("no job found")
 		resp.WriteHeader(http.StatusInternalServerError)
 		_, err := resp.Write([]byte("No job found.  Try again."))
@@ -298,11 +301,10 @@ func NewJobService(ctx context.Context, tk jobAdder, startDate time.Time,
 			Experiment: s.Experiment,
 			Datatype:   s.Datatype,
 			Filter:     s.Filter,
+			DailyOnly:  s.DailyOnly,
 			Date:       time.Time{}, // This is not used.
 		}
-		if s.DailyOnly {
-			job.SetDailyOnly()
-		}
+
 		// TODO - handle gs:// targets
 		jt, err := job.Target(targetBase + "." + s.Target)
 		if err != nil {
