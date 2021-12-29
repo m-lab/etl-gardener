@@ -14,9 +14,9 @@ sources:
   experiment: ndt
   datatype: ndt7
   target: tmp_ndt.ndt7
-- bucket: archive-measurement-lab
-  experiment: ndt
-  datatype: pcap
+#- bucket: archive-measurement-lab
+#  experiment: ndt
+#  datatype: pcap
 #  target: tmp_ndt.pcap
 - bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
   experiment: ndt
