@@ -17,7 +17,7 @@ sources:
 - bucket: archive-measurement-lab
   experiment: ndt
   datatype: pcap
-  target: tmp_ndt.pcap
+#  target: tmp_ndt.pcap
 - bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
   experiment: ndt
   datatype: hopannotation1
