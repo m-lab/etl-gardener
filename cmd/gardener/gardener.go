@@ -34,8 +34,6 @@ import (
 	job "github.com/m-lab/etl-gardener/job-service"
 	"github.com/m-lab/etl-gardener/ops"
 	"github.com/m-lab/etl-gardener/persistence"
-	"github.com/m-lab/etl-gardener/reproc"
-	"github.com/m-lab/etl-gardener/rex"
 	"github.com/m-lab/etl-gardener/state"
 	"github.com/m-lab/etl-gardener/tracker"
 
@@ -205,34 +203,6 @@ func NewBQConfig(config cloud.Config) cloud.BQConfig {
 		BQBatchDataset: env.BatchDataset,
 		BQFinalDataset: env.FinalDataset,
 	}
-}
-
-// dispatcherFromEnv creates a Dispatcher struct initialized from environment variables.
-// It uses PROJECT, QUEUE_BASE, and NUM_QUEUES.
-// NOTE: ctx should only be used within the function scope, and not reused later.
-// Not currently clear if that is true.
-func taskHandlerFromEnv(ctx context.Context, client *http.Client) (*reproc.TaskHandler, error) {
-	config := cloud.Config{
-		Project: env.Project,
-		Client:  client}
-
-	bqConfig := NewBQConfig(config)
-	exec, err := rex.NewReprocessingExecutor(ctx, bqConfig)
-	if err != nil {
-		return nil, err
-	}
-	// TODO - exec.StorageClient should be closed.
-	queues := make([]string, env.NumQueues)
-	for i := 0; i < env.NumQueues; i++ {
-		queues[i] = fmt.Sprintf("%s%d", env.QueueBase, i)
-	}
-
-	// TODO move DatastoreSaver to another package?
-	saver, err := state.NewDatastoreSaver(ctx, env.Project)
-	if err != nil {
-		return nil, err
-	}
-	return reproc.NewTaskHandler(env.Experiment, exec, queues, saver), nil
 }
 
 // StartDateRFC3339 is the date at which reprocessing will start when it catches
@@ -412,26 +382,6 @@ func main() {
 
 		healthy = true
 		log.Println("Running as manager service")
-	case "legacy":
-		// This is the "legacy" mode, that manages work through task queues.
-		// TODO - this creates a storage client, which should be closed on termination.
-		th, err := taskHandlerFromEnv(mainCtx, http.DefaultClient)
-
-		if err != nil {
-			log.Println(err)
-			os.Exit(1)
-		}
-
-		// If RunDispatchLoop() returns an err instead of nil, healthy will be
-		// set as false and eventually it will cause kubernetes to roll back.
-		err = reproc.RunDispatchLoop(mainCtx, th, env.Project, env.Bucket, env.Experiment, env.StartDate, env.DateSkip)
-		if err != nil {
-			healthy = false
-			log.Println("Running as unhealthy service")
-		} else {
-			healthy = true
-			log.Println("Running as task-queue dispatcher service")
-		}
 	default:
 		log.Println("Unrecognized SERVICE_MODE.  Expected manager or legacy")
 		os.Exit(1)
