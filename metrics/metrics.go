@@ -127,7 +127,7 @@ var (
 	// Provides metrics:
 	//  gardener_yesterday_job_date
 	// Example usage:
-	// metrics.YesterdayJobDate.WithLabelValues("20200506")
+	// metrics.YesterdayJobDate.WithLabelValues("20200506").Set(1)
 	YesterdayJobDate = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "gardener_yesterday_job_date",
