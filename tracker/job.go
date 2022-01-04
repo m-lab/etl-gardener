@@ -68,20 +68,22 @@ var errStringLock sync.Mutex
 var errStrings = make(map[string]struct{})
 var maxUniqueErrStrings = 10
 
+const DateFormat = "20060102"
+
 func (j Job) failureMetric(state State, errString string) {
 	log.Printf("Job failed in state: %s -- %s\n", state, errString)
 	errStringLock.Lock()
 	defer errStringLock.Unlock()
 	if _, ok := errStrings[errString]; ok {
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
-		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
+		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, j.Date.Format(DateFormat), errString).Inc()
 	} else if len(errStrings) < maxUniqueErrStrings {
 		errStrings[errString] = struct{}{}
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
-		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
+		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, j.Date.Format(DateFormat), errString).Inc()
 	} else {
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, "generic").Inc()
-		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, "generic").Inc()
+		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, j.Date.Format(DateFormat), "generic").Inc()
 	}
 }
 
