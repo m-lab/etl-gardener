@@ -32,7 +32,6 @@ import (
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/config"
 	job "github.com/m-lab/etl-gardener/job-service"
-	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/etl-gardener/ops"
 	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/reproc"
@@ -392,10 +391,6 @@ func main() {
 		// for parsers to get work and report progress.
 		// TODO Once the legacy deployments are turned down, this should move to head of main().
 		config.ParseConfig()
-
-		for _, src := range config.Sources() {
-			metrics.ConfigDatatypes.WithLabelValues(src.Experiment, src.Datatype)
-		}
 
 		globalTracker = mustStandardTracker()
 
