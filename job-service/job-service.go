@@ -13,7 +13,6 @@ import (
 	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
 
 	"github.com/m-lab/etl-gardener/config"
-	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
 )
@@ -156,9 +155,6 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 
 	// Check whether there is yesterday work to do.
 	if j := svc.yesterday.nextJob(ctx); j != nil {
-		// Set last yesterday date to 0 and set new one to 1.
-		metrics.YesterdayJobDate.WithLabelValues(j.Date.AddDate(0, 0, -1).Format(tracker.DateFormat)).Set(0)
-		metrics.YesterdayJobDate.WithLabelValues(j.Date.Format(tracker.DateFormat)).Set(1)
 		log.Println("Yesterday job:", j.Job)
 		return *j
 	}

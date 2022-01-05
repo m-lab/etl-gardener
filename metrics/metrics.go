@@ -69,13 +69,13 @@ var (
 	// Provides metrics:
 	//  gardener_jobs_total
 	// Example usage:
-	// metrics.JobsTotal.WithLabelValues(exp, dt, "20200506", "success").Inc()
+	// metrics.JobsTotal.WithLabelValues(exp, dt, false, "success").Inc()
 	JobsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "gardener_jobs_total",
 			Help: "Number of finished jobs",
 		},
-		[]string{"experiment", "datatype", "date", "status"},
+		[]string{"experiment", "datatype", "daily", "status"},
 	)
 
 	// ConfigDatatypes identifies that experiments/datatypes that exist in the Gardener config.
@@ -120,20 +120,6 @@ var (
 			Help: "Most recent date for each state.",
 		},
 		[]string{"experiment", "datatype", "state"},
-	)
-
-	// YesterdayJobDate identifies the date of the most recent update to the yesterday job date.
-	//
-	// Provides metrics:
-	//  gardener_yesterday_job_date
-	// Example usage:
-	// metrics.YesterdayJobDate.WithLabelValues("20200506").Set(1)
-	YesterdayJobDate = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "gardener_yesterday_job_date",
-			Help: "Most recent date for yesterday job.",
-		},
-		[]string{"date"},
 	)
 
 	// StateTimeHistogram tracks the time spent in each state.  Not necessary to label data type, as
