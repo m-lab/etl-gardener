@@ -51,6 +51,7 @@ func (y *YesterdaySource) nextJob(ctx context.Context) *tracker.JobWithTarget {
 	// Copy the jobspec and set the date.
 	job := y.jobSpecs[y.nextIndex]
 	job.Date = y.Date
+	job.IsDaily = true
 
 	// Advance to the next jobSpec for next call.
 	y.nextIndex++

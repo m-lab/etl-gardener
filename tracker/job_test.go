@@ -104,37 +104,3 @@ func TestStatusFailure(t *testing.T) {
 	}
 	t.Log(s.Detail())
 }
-
-func TestIsDaily(t *testing.T) {
-	tests := []struct {
-		name string
-		date time.Time
-		want string
-	}{
-		{
-			name: "daily",
-			date: time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -1),
-			want: "true",
-		},
-		{
-			name: "historical",
-			date: time.Date(2021, 02, 03, 0, 0, 0, 0, time.UTC),
-			want: "false",
-		},
-		{
-			name: "today",
-			date: time.Now().UTC(),
-			want: "false",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			j := tracker.Job{Date: tt.date}
-			got := j.IsDaily()
-			if got != tt.want {
-				t.Errorf("Job.IsDaily() got %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
