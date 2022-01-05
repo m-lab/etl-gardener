@@ -32,7 +32,7 @@ type Job struct {
 	Experiment string
 	Datatype   string
 	Date       time.Time
-	IsDaily    bool
+	IsDaily    bool `json:",omitempty"`
 	// Filter is an optional regex to apply to ArchiveURL names
 	// Note that HasFiles does not use this, so ETL may process no files.
 	Filter string `json:",omitempty"`
