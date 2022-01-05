@@ -69,8 +69,6 @@ var errStringLock sync.Mutex
 var errStrings = make(map[string]struct{})
 var maxUniqueErrStrings = 10
 
-const DateFormat = "20060102"
-
 func (j Job) failureMetric(state State, errString string) {
 	log.Printf("Job failed in state: %s -- %s\n", state, errString)
 	errStringLock.Lock()
