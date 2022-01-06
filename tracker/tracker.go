@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"strconv"
 	"sync"
 	"time"
 
@@ -198,7 +197,7 @@ func (tr *Tracker) UpdateJob(job Job, new Status) error {
 	// When jobs are done, we update stats and may remove them from tracker.
 	if new.isDone() {
 		metrics.CompletedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
-		metrics.JobsTotal.WithLabelValues(job.Experiment, job.Datatype, strconv.FormatBool(job.isDaily), "success").Inc()
+		metrics.JobsTotal.WithLabelValues(job.Experiment, job.Datatype, job.IsDaily(), "success").Inc()
 
 		// This could be done by GetStatus, but would change behaviors slightly.
 		if tr.cleanupDelay == 0 {

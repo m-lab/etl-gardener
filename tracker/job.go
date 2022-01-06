@@ -25,7 +25,7 @@ import (
 	"github.com/m-lab/etl-gardener/metrics"
 )
 
-// Job describes a processing "Job", which includes
+// Job describes a reprocessing "Job", which includes
 // all data for a particular experiment, type and date.
 type Job struct {
 	Bucket     string
@@ -34,8 +34,7 @@ type Job struct {
 	Date       time.Time
 	// Filter is an optional regex to apply to ArchiveURL names
 	// Note that HasFiles does not use this, so ETL may process no files.
-	Filter  string `json:",omitempty"`
-	isDaily bool
+	Filter string `json:",omitempty"`
 }
 
 // JobWithTarget specifies a type/date job, and a destination
@@ -76,14 +75,14 @@ func (j Job) failureMetric(state State, errString string) {
 	defer errStringLock.Unlock()
 	if _, ok := errStrings[errString]; ok {
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
-		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, strconv.FormatBool(j.isDaily), errString).Inc()
+		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, j.IsDaily(), errString).Inc()
 	} else if len(errStrings) < maxUniqueErrStrings {
 		errStrings[errString] = struct{}{}
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
-		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, strconv.FormatBool(j.isDaily), errString).Inc()
+		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, j.IsDaily(), errString).Inc()
 	} else {
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, "generic").Inc()
-		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, strconv.FormatBool(j.isDaily), "generic").Inc()
+		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, j.IsDaily(), "generic").Inc()
 	}
 }
 
@@ -157,8 +156,15 @@ func (j Job) HasFiles(ctx context.Context, sClient stiface.Client) (bool, error)
 	return bh.HasFiles(ctx, prefix)
 }
 
-func (j Job) SetDaily(isDaily bool) {
-	j.isDaily = isDaily
+// IsDaily returns a string representing whether the job is a Daily job (e.g., job.Date = yesterday).
+func (j Job) IsDaily() string {
+	isDaily := j.Date.Equal(YesterdayDate())
+	return strconv.FormatBool(isDaily)
+}
+
+// YesterdayDate returns the date for the daily job (e.g, yesterday UTC).
+func YesterdayDate() time.Time {
+	return time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -1)
 }
 
 /////////////////////////////////////////////////////////////

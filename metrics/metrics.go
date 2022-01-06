@@ -78,6 +78,20 @@ var (
 		[]string{"experiment", "datatype", "daily", "status"},
 	)
 
+	// ConfigDatatypes identifies that experiments/datatypes that exist in the Gardener config.
+	//
+	// Provides metrics:
+	//	gardener_config_datatypes
+	// Example usage:
+	// metrics.ConfigDatatypes.WithLabelValues(exp, dt)
+	ConfigDatatypes = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "gardener_config_datatypes",
+			Help: "Datatypes in the Gardener config",
+		},
+		[]string{"experiment", "datatype"},
+	)
+
 	// TasksInFlight maintains a count of the number of tasks in flight.
 	// TODO consider deprecating this and using Started - Completed.
 	//

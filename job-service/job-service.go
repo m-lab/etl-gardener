@@ -77,7 +77,7 @@ func initYesterday(ctx context.Context, saver persistence.Saver, delay time.Dura
 		return nil, ErrNilParameter
 	}
 	// This is the fallback start date.
-	date := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -1)
+	date := tracker.YesterdayDate()
 
 	src := YesterdaySource{
 		saver:     saver,
@@ -155,10 +155,8 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 
 	// Check whether there is yesterday work to do.
 	if j := svc.yesterday.nextJob(ctx); j != nil {
-		jobCopy := *j
-		jobCopy.SetDaily(true)
-		log.Println("Yesterday job:", jobCopy)
-		return jobCopy
+		log.Println("Yesterday job:", j.Job)
+		return *j
 	}
 
 	job := svc.jobSpecs[svc.nextIndex]
