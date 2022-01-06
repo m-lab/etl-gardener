@@ -51,7 +51,6 @@ func (y *YesterdaySource) nextJob(ctx context.Context) *tracker.JobWithTarget {
 	// Copy the jobspec and set the date.
 	job := y.jobSpecs[y.nextIndex]
 	job.Date = y.Date
-	job.IsDaily = true
 
 	// Advance to the next jobSpec for next call.
 	y.nextIndex++
@@ -156,8 +155,10 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 
 	// Check whether there is yesterday work to do.
 	if j := svc.yesterday.nextJob(ctx); j != nil {
-		log.Println("Yesterday job:", j.Job)
-		return *j
+		jobCopy := *j
+		jobCopy.IsDaily = true
+		log.Println("Yesterday job:", jobCopy.Job)
+		return jobCopy
 	}
 
 	job := svc.jobSpecs[svc.nextIndex]
