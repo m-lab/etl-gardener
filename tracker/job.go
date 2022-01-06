@@ -32,10 +32,10 @@ type Job struct {
 	Experiment string
 	Datatype   string
 	Date       time.Time
-	IsDaily    bool `json:",omitempty"`
 	// Filter is an optional regex to apply to ArchiveURL names
 	// Note that HasFiles does not use this, so ETL may process no files.
-	Filter string `json:",omitempty"`
+	Filter  string `json:",omitempty"`
+	isDaily bool
 }
 
 // JobWithTarget specifies a type/date job, and a destination
@@ -76,14 +76,14 @@ func (j Job) failureMetric(state State, errString string) {
 	defer errStringLock.Unlock()
 	if _, ok := errStrings[errString]; ok {
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
-		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, strconv.FormatBool(j.IsDaily), errString).Inc()
+		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, strconv.FormatBool(j.isDaily), errString).Inc()
 	} else if len(errStrings) < maxUniqueErrStrings {
 		errStrings[errString] = struct{}{}
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
-		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, strconv.FormatBool(j.IsDaily), errString).Inc()
+		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, strconv.FormatBool(j.isDaily), errString).Inc()
 	} else {
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, "generic").Inc()
-		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, strconv.FormatBool(j.IsDaily), "generic").Inc()
+		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, strconv.FormatBool(j.isDaily), "generic").Inc()
 	}
 }
 
@@ -155,6 +155,10 @@ func (j Job) HasFiles(ctx context.Context, sClient stiface.Client) (bool, error)
 		return false, err
 	}
 	return bh.HasFiles(ctx, prefix)
+}
+
+func (j Job) SetDaily(isDaily bool) {
+	j.isDaily = isDaily
 }
 
 /////////////////////////////////////////////////////////////

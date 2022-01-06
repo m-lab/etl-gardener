@@ -84,11 +84,11 @@ func cleanup(client dsiface.Client, key *datastore.Key) error {
 }
 
 func TestJobPath(t *testing.T) {
-	withType := tracker.Job{"bucket", "exp", "type", startDate, false, ""}
+	withType := tracker.Job{Bucket: "bucket", Experiment: "exp", Datatype: "type", Date: startDate, Filter: ""}
 	if withType.Path() != "gs://bucket/exp/type/"+startDate.Format("2006/01/02/") {
 		t.Error("wrong path:", withType.Path())
 	}
-	withoutType := tracker.Job{"bucket", "exp", "", startDate, false, ""}
+	withoutType := tracker.Job{Bucket: "bucket", Experiment: "exp", Datatype: "", Date: startDate, Filter: ""}
 	if withoutType.Path() != "gs://bucket/exp/"+startDate.Format("2006/01/02/") {
 		t.Error("wrong path", withType.Path())
 	}
@@ -176,7 +176,7 @@ func TestUpdates(t *testing.T) {
 
 	createJobs(t, tk, "JobToUpdate", "type", 1)
 
-	job := tracker.Job{"bucket", "JobToUpdate", "type", startDate, false, ""}
+	job := tracker.Job{Bucket: "bucket", Experiment: "JobToUpdate", Datatype: "type", Date: startDate, Filter: ""}
 	must(t, tk.SetStatus(job, tracker.Parsing, "foo"))
 	must(t, tk.SetStatus(job, tracker.Stabilizing, "bar"))
 
@@ -193,7 +193,7 @@ func TestUpdates(t *testing.T) {
 		t.Error("Incorrect detail", status.LastStateInfo())
 	}
 
-	err = tk.SetStatus(tracker.Job{"bucket", "JobToUpdate", "other-type", startDate, false, ""}, tracker.Stabilizing, "")
+	err = tk.SetStatus(tracker.Job{Bucket: "bucket", Experiment: "JobToUpdate", Datatype: "other-type", Date: startDate, Filter: ""}, tracker.Stabilizing, "")
 	if err != tracker.ErrJobNotFound {
 		t.Error(err, "should have been ErrJobNotFound")
 	}

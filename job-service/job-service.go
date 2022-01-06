@@ -156,8 +156,8 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 	// Check whether there is yesterday work to do.
 	if j := svc.yesterday.nextJob(ctx); j != nil {
 		jobCopy := *j
-		jobCopy.IsDaily = true
-		log.Println("Yesterday job:", jobCopy.Job)
+		jobCopy.SetDaily(true)
+		log.Println("Yesterday job:", jobCopy)
 		return jobCopy
 	}
 
