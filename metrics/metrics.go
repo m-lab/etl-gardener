@@ -67,15 +67,29 @@ var (
 	// JobsTotal counts all the jobs (successful or otherwise) for each v2 datatype.
 	//
 	// Provides metrics:
-	//  gardener_jobs_total{datatype, status}
+	//  gardener_jobs_total
 	// Example usage:
-	// metrics.JobsTotal.WithLabelValues(dt, "success").Inc()
+	// metrics.JobsTotal.WithLabelValues(exp, dt, false, "success").Inc()
 	JobsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "gardener_jobs_total",
 			Help: "Number of finished jobs",
 		},
-		[]string{"experiment", "datatype", "status"},
+		[]string{"experiment", "datatype", "daily", "status"},
+	)
+
+	// ConfigDatatypes identifies that experiments/datatypes that exist in the Gardener config.
+	//
+	// Provides metrics:
+	//	gardener_config_datatypes
+	// Example usage:
+	// metrics.ConfigDatatypes.WithLabelValues(exp, dt)
+	ConfigDatatypes = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "gardener_config_datatypes",
+			Help: "Datatypes in the Gardener config",
+		},
+		[]string{"experiment", "datatype"},
 	)
 
 	// TasksInFlight maintains a count of the number of tasks in flight.
