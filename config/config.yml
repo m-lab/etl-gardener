@@ -26,6 +26,10 @@ sources:
   experiment: ndt
   datatype: scamper1
   target: tmp_ndt.scamper1
+- bucket: archive-measurement-lab
+  experiment: utilization
+  datatype: switch
+  target: tmp_utilization.switch
 #- bucket: archive-measurement-lab
 #  experiment: ndt
 #  datatype: tcpinfo
