@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package bq_test
@@ -38,7 +39,7 @@ func TestValidateQueries(t *testing.T) {
 		t.Log("Skipping test for --short")
 	}
 	ctx := context.Background()
-	dataTypes := []string{"annotation", "ndt7", "pcap", "hopannotation1", "scamper1"}
+	dataTypes := []string{"annotation", "ndt7", "pcap", "hopannotation1", "scamper1", "switch"}
 	// TODO Add "preserve" query
 	// Test for each datatype
 	for _, dataType := range dataTypes {
