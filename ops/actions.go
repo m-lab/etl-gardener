@@ -34,8 +34,8 @@ func newStateFunc(detail string) ActionFunc {
 // annotation job in the tracker.  Used to gate the join action.
 func newJoinConditionFunc(tk *tracker.Tracker, detail string) ConditionFunc {
 	return func(ctx context.Context, j tracker.Job) bool {
-		if j.Datatype == "annotation" {
-			// Annotation does not require joining, so the check is
+		if j.Datatype == "annotation" || j.Datatype == "switch" {
+			// Annotation and switch do not require joining, so the check is
 			// not needed.
 			log.Println(j, "condition met")
 			return true
