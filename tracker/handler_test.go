@@ -2,6 +2,7 @@ package tracker_test
 
 import (
 	"context"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -12,7 +13,6 @@ import (
 	"github.com/m-lab/go/logx"
 
 	"cloud.google.com/go/datastore"
-	"github.com/m-lab/etl-gardener/client"
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/go/cloudtest/dsfake"
 )
@@ -24,14 +24,17 @@ func init() {
 
 // fakeJobService returns a single job from NextJob.
 type fakeJobService struct {
-	j tracker.Job
+	jobs  []tracker.Job
+	calls int
 }
 
 func (f *fakeJobService) NextJob(ctx context.Context) tracker.JobWithTarget {
-	return tracker.JobWithTarget{Job: f.j}
+	j := f.jobs[f.calls]
+	f.calls++
+	return tracker.JobWithTarget{Job: j}
 }
 
-func testSetup(t *testing.T) (url.URL, *tracker.Tracker, tracker.Job) {
+func testSetup(t *testing.T, jobs []tracker.Job) (url.URL, *tracker.Tracker) {
 	client := dsfake.NewClient()
 	dsKey := datastore.NameKey("TestTrackerAddDelete", "jobs", nil)
 	dsKey.Namespace = "gardener"
@@ -43,12 +46,9 @@ func testSetup(t *testing.T) (url.URL, *tracker.Tracker, tracker.Job) {
 		t.Fatal("nil Tracker")
 	}
 
-	date := time.Date(2019, 01, 02, 0, 0, 0, 0, time.UTC)
-	// TODO - for now, PDT is ignored by json, so it must be empty.
-	job := tracker.NewJob("bucket", "exp", "type", date)
 	mux := http.NewServeMux()
 
-	js := &fakeJobService{job}
+	js := &fakeJobService{jobs: jobs}
 	h := tracker.NewHandler(tk, js)
 	h.Register(mux)
 
@@ -58,7 +58,7 @@ func testSetup(t *testing.T) (url.URL, *tracker.Tracker, tracker.Job) {
 		t.Fatal(err)
 	}
 
-	return *url, tk, job
+	return *url, tk
 }
 
 func getAndExpect(t *testing.T, url *url.URL, code int) {
@@ -70,18 +70,25 @@ func getAndExpect(t *testing.T, url *url.URL, code int) {
 	resp.Body.Close()
 }
 
-func postAndExpect(t *testing.T, url *url.URL, code int) {
+func postAndExpect(t *testing.T, url *url.URL, code int) string {
 	resp, err := http.Post(url.String(), "application/x-www-form-urlencoded", nil)
 	must(t, err)
 	if resp.StatusCode != code {
 		log.Output(2, resp.Status)
 		t.Fatalf("Expected %s, got %s", http.StatusText(code), resp.Status)
 	}
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
 	resp.Body.Close()
+	return string(b)
 }
 
 func TestUpdateHandler(t *testing.T) {
-	server, tk, job := testSetup(t)
+	date := time.Date(2019, 01, 02, 0, 0, 0, 0, time.UTC)
+	job := tracker.NewJob("bucket", "exp", "type", date)
+	server, tk := testSetup(t, []tracker.Job{job})
 
 	url := tracker.UpdateURL(server, job, tracker.Parsing, "foobar")
 
@@ -111,7 +118,9 @@ func TestUpdateHandler(t *testing.T) {
 
 func TestHeartbeatHandler(t *testing.T) {
 	logx.LogxDebug.Set("true")
-	server, tk, job := testSetup(t)
+	date := time.Date(2019, 01, 02, 0, 0, 0, 0, time.UTC)
+	job := tracker.NewJob("bucket", "exp", "type", date)
+	server, tk := testSetup(t, []tracker.Job{job})
 
 	url := tracker.HeartbeatURL(server, job)
 
@@ -141,7 +150,9 @@ func TestHeartbeatHandler(t *testing.T) {
 }
 
 func TestErrorHandler(t *testing.T) {
-	server, tk, job := testSetup(t)
+	date := time.Date(2019, 01, 02, 0, 0, 0, 0, time.UTC)
+	job := tracker.NewJob("bucket", "exp", "type", date)
+	server, tk := testSetup(t, []tracker.Job{job})
 
 	url := tracker.ErrorURL(server, job, "error")
 
@@ -172,6 +183,7 @@ func TestErrorHandler(t *testing.T) {
 	}
 }
 
+/*
 func TestNextJobHandler(t *testing.T) {
 	server, _, job := testSetup(t)
 
@@ -182,4 +194,29 @@ func TestNextJobHandler(t *testing.T) {
 	if job != j.Job {
 		t.Error("jobs do not match:")
 	}
+}
+*/
+
+func TestNextJobHandler(t *testing.T) {
+	date := time.Date(2019, 01, 02, 0, 0, 0, 0, time.UTC)
+	job := tracker.NewJob("bucket", "exp", "type", date)
+	// Add job, empty, and duplicate job.
+	url, _ := testSetup(t, []tracker.Job{job, tracker.Job{}, job})
+	url.Path = "job"
+
+	// Wrong method.
+	getAndExpect(t, &url, http.StatusMethodNotAllowed)
+
+	// This should succeed, because the fakeJobService returns its job.
+	r := postAndExpect(t, &url, http.StatusOK)
+	want := `{"Bucket":"bucket","Experiment":"exp","Datatype":"type","Date":"2019-01-02T00:00:00Z"}`
+	if want != r {
+		t.Fatal(r)
+	}
+
+	// This one should fail because the fakeJobService returns empty results.
+	postAndExpect(t, &url, http.StatusInternalServerError)
+
+	// This one should fail because the fakeJobService returns a duplicate job.
+	postAndExpect(t, &url, http.StatusInternalServerError)
 }

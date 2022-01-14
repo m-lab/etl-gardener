@@ -12,6 +12,11 @@ import (
 	"github.com/m-lab/go/logx"
 )
 
+var (
+	MsgNoJobFound = "No job found. Try again."
+	MsgJobExists  = "Job already exists. Try again."
+)
+
 // UpdateURL makes an update request URL.
 func UpdateURL(base url.URL, job Job, state State, detail string) *url.URL {
 	base.Path += "update"
@@ -156,12 +161,9 @@ func (h *Handler) nextJob(resp http.ResponseWriter, req *http.Request) {
 
 	// Check for empty job (no job found with files)
 	if job.Date.Equal(time.Time{}) {
-		log.Println("no job found")
+		log.Println(MsgNoJobFound)
 		resp.WriteHeader(http.StatusInternalServerError)
-		_, err := resp.Write([]byte("No job found.  Try again."))
-		if err != nil {
-			log.Println(err)
-		}
+		resp.Write([]byte(MsgNoJobFound))
 		return
 	}
 
@@ -169,10 +171,7 @@ func (h *Handler) nextJob(resp http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		log.Println(err, job)
 		resp.WriteHeader(http.StatusInternalServerError)
-		_, err = resp.Write([]byte("Job already exists.  Try again."))
-		if err != nil {
-			log.Println(err)
-		}
+		resp.Write([]byte(MsgJobExists))
 		return
 	}
 
