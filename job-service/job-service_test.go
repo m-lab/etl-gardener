@@ -291,8 +291,19 @@ func TestEarlyWrapping(t *testing.T) {
 		tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start},
 	}
 
-	for _, realJob := range expected {
+	for k, realJob := range expected {
 		got := svc.NextJob(context.Background())
+		tk.AddJob(got.Job)
+		if k == 2 {
+			// It's necessary to mark job complete to prevent AddJob error.
+			status, _ := tk.GetStatus(got.Job)
+			status.NewState(tracker.Complete)
+			err := tk.UpdateJob(got.Job, status)
+			if err != nil {
+				t.Error(err)
+			}
+		}
+
 		if got.Job != realJob {
 			t.Errorf("NextJob() wrong job: got %v, want %v", got.Job, realJob)
 		}
