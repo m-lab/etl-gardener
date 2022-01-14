@@ -12,6 +12,7 @@ import (
 	"github.com/m-lab/go/logx"
 
 	"cloud.google.com/go/datastore"
+	"github.com/m-lab/etl-gardener/client"
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/go/cloudtest/dsfake"
 )
@@ -19,6 +20,15 @@ import (
 func init() {
 	// Always prepend the filename and line number.
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
+// fakeJobService returns a single job from NextJob.
+type fakeJobService struct {
+	j tracker.Job
+}
+
+func (f *fakeJobService) NextJob(ctx context.Context) tracker.JobWithTarget {
+	return tracker.JobWithTarget{Job: f.j}
 }
 
 func testSetup(t *testing.T) (url.URL, *tracker.Tracker, tracker.Job) {
@@ -37,7 +47,9 @@ func testSetup(t *testing.T) (url.URL, *tracker.Tracker, tracker.Job) {
 	// TODO - for now, PDT is ignored by json, so it must be empty.
 	job := tracker.NewJob("bucket", "exp", "type", date)
 	mux := http.NewServeMux()
-	h := tracker.NewHandler(tk)
+
+	js := &fakeJobService{job}
+	h := tracker.NewHandler(tk, js)
 	h.Register(mux)
 
 	server := httptest.NewServer(mux)
@@ -157,5 +169,17 @@ func TestErrorHandler(t *testing.T) {
 	_, err = tk.GetStatus(job)
 	if err != tracker.ErrJobNotFound {
 		t.Fatal("Expected JobNotFound", err)
+	}
+}
+
+func TestNextJobHandler(t *testing.T) {
+	server, _, job := testSetup(t)
+
+	j, err := client.NextJob(context.Background(), server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job != j.Job {
+		t.Error("jobs do not match:")
 	}
 }
