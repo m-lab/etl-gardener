@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -283,40 +282,19 @@ func TestEarlyWrapping(t *testing.T) {
 	must(t, err)
 
 	// If a job is still present in the tracker when it wraps, /job returns an error.
-	expected := []struct {
-		code int
-		body string
-	}{
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`},
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-03T00:00:00Z"}`},
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-04T00:00:00Z"}`},
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-04T00:00:00Z"}`},
+	expected := []tracker.Job{
+		tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start},
+		tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start},
+		tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start.AddDate(0, 0, 1)},
+		tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Date: start.AddDate(0, 0, 1)},
 		// This one should work, because we complete it in the loop.
-		{code: 200, body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-03T00:00:00Z"}`},
-		{code: 500, body: `Job already exists.  Try again.`},
+		tracker.Job{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Date: start},
 	}
 
-	for k, result := range expected {
-		req := httptest.NewRequest("POST", "/job", nil)
-		resp := httptest.NewRecorder()
-		svc.JobHandler(resp, req)
-		if resp.Code != result.code {
-			t.Error(k, resp.Code, resp.Body.String())
-		}
-		if resp.Body.String() != result.body {
-			t.Error(k, "Got:", resp.Body.String(), "!=", result.body)
-		}
-
-		// TODO - this should be pulled into a separate test
-		if k == 2 {
-			job := tracker.Job{}
-			json.Unmarshal([]byte(expected[0].body), &job)
-			status, _ := tk.GetStatus(job)
-			status.NewState(tracker.Complete)
-			err := tk.UpdateJob(job, status)
-			if err != nil {
-				t.Error(err)
-			}
+	for _, realJob := range expected {
+		got := svc.NextJob(context.Background())
+		if got.Job != realJob {
+			t.Errorf("NextJob() wrong job: got %v, want %v", got.Job, realJob)
 		}
 	}
 }
