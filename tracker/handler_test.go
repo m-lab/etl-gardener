@@ -183,20 +183,6 @@ func TestErrorHandler(t *testing.T) {
 	}
 }
 
-/*
-func TestNextJobHandler(t *testing.T) {
-	server, _, job := testSetup(t)
-
-	j, err := client.NextJob(context.Background(), server)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if job != j.Job {
-		t.Error("jobs do not match:")
-	}
-}
-*/
-
 func TestNextJobHandler(t *testing.T) {
 	date := time.Date(2019, 01, 02, 0, 0, 0, 0, time.UTC)
 	job := tracker.NewJob("bucket", "exp", "type", date)
