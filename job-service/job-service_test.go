@@ -295,7 +295,7 @@ func TestEarlyWrapping(t *testing.T) {
 		got := svc.NextJob(context.Background())
 		tk.AddJob(got.Job)
 		if k == 2 {
-			// It's necessary to mark job complete to prevent AddJob error.
+			// Simulate "monitor" behavior and mark job complete to prevent AddJob error.
 			status, _ := tk.GetStatus(got.Job)
 			status.NewState(tracker.Complete)
 			err := tk.UpdateJob(got.Job, status)
