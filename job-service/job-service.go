@@ -155,7 +155,7 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 	// Check whether there is yesterday work to do.
 	if j := svc.yesterday.nextJob(ctx); j != nil {
 		log.Println("Yesterday job:", j.Job)
-		return *j
+		return svc.ifHasFiles(ctx, *j)
 	}
 
 	job := svc.jobSpecs[svc.nextIndex]
@@ -171,6 +171,20 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 		err := svc.saver.Save(ctx, svc)
 		if err != nil {
 			log.Println(err)
+		}
+	}
+	return svc.ifHasFiles(ctx, job)
+}
+
+func (svc *Service) ifHasFiles(ctx context.Context, job tracker.JobWithTarget) tracker.JobWithTarget {
+	if svc.sClient != nil {
+		ok, err := job.Job.HasFiles(ctx, svc.sClient)
+		if err != nil {
+			log.Println(err)
+		}
+		if !ok {
+			log.Println(job, "has no files", job.Bucket)
+			return tracker.JobWithTarget{}
 		}
 	}
 	return job
