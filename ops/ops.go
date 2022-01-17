@@ -133,6 +133,10 @@ func (m *Monitor) AddAction(state tracker.State, cond ConditionFunc, op ActionFu
 	}
 }
 
+func (m *Monitor) GetAction(state tracker.State) Action {
+	return m.actions[state]
+}
+
 // UpdateJob updates the tracker state with the outcome.
 func (m *Monitor) UpdateJob(o *Outcome, state tracker.State) (string, error) {
 	// Allow error to override implicit (-) detail.
