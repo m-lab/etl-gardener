@@ -23,6 +23,11 @@ SOURCE_PROJECT=${PROJECT_ID/mlab-oti/measurement-lab}
 sed -i \
     -e 's/{{ANNOTATION_SOURCE_PROJECT}}/'${SOURCE_PROJECT}'/g' \
     config/config.yml
+# Use sandbox in sandbox, measurement-lab in staging and oti.
+SOURCE_PROJECT=${SOURCE_PROJECT/mlab-staging/measurement-lab}
+sed -i \
+    -e 's/{{NDT_SOURCE_PROJECT}}/'${SOURCE_PROJECT}'/g' \
+    config/config.yml
 
 # Create the configmap
 kubectl create configmap gardener-config --dry-run \
