@@ -10,11 +10,11 @@ sources:
   experiment: ndt
   datatype: annotation
   target: tmp_ndt.annotation
-- bucket: archive-measurement-lab
+- bucket: archive-{{NDT_SOURCE_PROJECT}}
   experiment: ndt
   datatype: ndt7
   target: tmp_ndt.ndt7
-- bucket: archive-measurement-lab
+- bucket: archive-{{NDT_SOURCE_PROJECT}}
   experiment: ndt
   datatype: pcap
   target: tmp_ndt.pcap
