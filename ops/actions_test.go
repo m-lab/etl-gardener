@@ -4,6 +4,7 @@ package ops_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -40,7 +41,9 @@ func TestStandardMonitor(t *testing.T) {
 
 	m, err := ops.NewStandardMonitor(context.Background(), cloud.BQConfig{}, tk)
 	rtx.Must(err, "NewMonitor failure")
-	// We add some new actions in place of the Parser activity.
+	// We override some actions in place of the default Parser activity.
+	// The resulting sequence should be:
+	// init -> parsing -> parse complete -> copying -> deleting -> joining -> complete
 	m.AddAction(tracker.Init,
 		nil,
 		newStateFunc("-"),
@@ -49,7 +52,7 @@ func TestStandardMonitor(t *testing.T) {
 		nil,
 		newStateFunc("-"),
 		tracker.ParseComplete)
-	// Hack for testing - deliberately skip Load and Dedup functions.
+	// Deliberately skip Load and Dedup functions.
 	m.AddAction(tracker.ParseComplete,
 		nil,
 		newStateFunc("-"),
@@ -60,7 +63,14 @@ func TestStandardMonitor(t *testing.T) {
 
 	go m.Watch(ctx, 50*time.Millisecond)
 
-	failTime := time.Now().Add(30 * time.Second)
+	// NOTE: This is an integration test that runs live BQ operations.
+	// Therefore, the conditions under which these operations run are not
+	// entirely under our control. While the operations are simple, by
+	// observation, we see that occassionally they take multiple minutes. So,
+	// rather than report these delays as test failures, (which causes the test
+	// to be flaky), we wait up to 5min and ignore states pending in the final
+	// "Joining" state.
+	failTime := time.Now().Add(300 * time.Second)
 
 	for time.Now().Before(failTime) && (tk.NumJobs() > 2 || tk.NumFailed() < 1) {
 		time.Sleep(time.Millisecond)
@@ -68,7 +78,27 @@ func TestStandardMonitor(t *testing.T) {
 	if tk.NumFailed() != 2 {
 		t.Error("Expected NumFailed = 2:", tk.NumFailed())
 	}
-	if tk.NumJobs() != 2 {
+	// We expect only the two failed jobs; ignore jobs in the final (joining) state.
+	count := tk.NumJobs()
+	if count > 2 {
+		jobs, _, _ := tk.GetState()
+		for j, s := range jobs {
+			a := m.GetAction(s.LastStateInfo().State)
+			switch tracker.State(a.Name()) {
+			case tracker.Joining:
+				// Ignore delays in state "Joining" (the final step).
+				count--
+			case tracker.Failed:
+				// Ignore -- we expect two.
+			default:
+				// Consider other states an error.
+				t.Error("Monitor.Watch() process delay:", a, j, s)
+			}
+		}
+		fmt.Println()
+	}
+	// If there are still more than two failed jobs remaining, report an error.
+	if count != 2 {
 		t.Error("Expected NumJobs = 2:", tk.NumJobs())
 	}
 	cancel()
