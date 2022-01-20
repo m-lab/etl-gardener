@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"log"
-	"net/http"
 	"reflect"
 	"sync"
 	"time"
@@ -156,7 +155,7 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 	// Check whether there is yesterday work to do.
 	if j := svc.yesterday.nextJob(ctx); j != nil {
 		log.Println("Yesterday job:", j.Job)
-		return *j
+		return svc.ifHasFiles(ctx, *j)
 	}
 
 	job := svc.jobSpecs[svc.nextIndex]
@@ -174,56 +173,21 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 			log.Println(err)
 		}
 	}
-	return job
+	return svc.ifHasFiles(ctx, job)
 }
 
-// JobHandler handle requests for new jobs.
-// TODO - should update tracker instance.
-func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
-	// Must be a post because it changes state.
-	if req.Method != http.MethodPost {
-		resp.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	job := svc.NextJob(req.Context())
-
-	// Check whether there are any files
+func (svc *Service) ifHasFiles(ctx context.Context, job tracker.JobWithTarget) tracker.JobWithTarget {
 	if svc.sClient != nil {
-		ok, err := job.Job.HasFiles(req.Context(), svc.sClient)
+		ok, err := job.Job.HasFiles(ctx, svc.sClient)
 		if err != nil {
 			log.Println(err)
 		}
 		if !ok {
 			log.Println(job, "has no files", job.Bucket)
-			resp.WriteHeader(http.StatusInternalServerError)
-			_, err = resp.Write([]byte("Job has no files.  Try again."))
-			if err != nil {
-				log.Println(err)
-			}
-			return
+			return tracker.JobWithTarget{}
 		}
 	}
-
-	err := svc.jobAdder.AddJob(job.Job)
-	if err != nil {
-		log.Println(err, job)
-		resp.WriteHeader(http.StatusInternalServerError)
-		_, err = resp.Write([]byte("Job already exists.  Try again."))
-		if err != nil {
-			log.Println(err)
-		}
-		return
-	}
-
-	log.Printf("Dispatching %s\n", job.Job)
-	_, err = resp.Write(job.Marshal())
-	if err != nil {
-		log.Println(err)
-		// This should precede the Write(), but the Write failed, so this
-		// is likely ok.
-		resp.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+	return job
 }
 
 // Recover the processing date.

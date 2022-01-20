@@ -1,13 +1,20 @@
 package tracker
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/m-lab/go/logx"
+)
+
+var (
+	MsgNoJobFound = "No job found. Try again."
+	MsgJobExists  = "Job already exists. Try again."
 )
 
 // UpdateURL makes an update request URL.
@@ -43,14 +50,19 @@ func ErrorURL(base url.URL, job Job, errString string) *url.URL {
 	return &base
 }
 
+type JobService interface {
+	NextJob(ctx context.Context) JobWithTarget
+}
+
 // Handler provides handlers for update, heartbeat, etc.
 type Handler struct {
-	tracker *Tracker
+	tracker    *Tracker
+	jobservice JobService
 }
 
 // NewHandler returns a Handler that sends updates to provided Tracker.
-func NewHandler(tr *Tracker) *Handler {
-	return &Handler{tr}
+func NewHandler(tr *Tracker, js JobService) *Handler {
+	return &Handler{tracker: tr, jobservice: js}
 }
 
 func getJob(jobString string) (Job, error) {
@@ -139,9 +151,45 @@ func (h *Handler) errorFunc(resp http.ResponseWriter, req *http.Request) {
 	resp.WriteHeader(http.StatusOK)
 }
 
+func (h *Handler) nextJob(resp http.ResponseWriter, req *http.Request) {
+	// Must be a post because it changes state.
+	if req.Method != http.MethodPost {
+		resp.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	job := h.jobservice.NextJob(req.Context())
+
+	// Check for empty job (no job found with files)
+	if job.Date.Equal(time.Time{}) {
+		log.Println(MsgNoJobFound)
+		resp.WriteHeader(http.StatusInternalServerError)
+		resp.Write([]byte(MsgNoJobFound))
+		return
+	}
+
+	err := h.tracker.AddJob(job.Job)
+	if err != nil {
+		log.Println(err, job)
+		resp.WriteHeader(http.StatusInternalServerError)
+		resp.Write([]byte(MsgJobExists))
+		return
+	}
+
+	log.Printf("Dispatching %s\n", job.Job)
+	_, err = resp.Write(job.Marshal())
+	if err != nil {
+		log.Println(err)
+		// This should precede the Write(), but the Write failed, so this
+		// is likely ok.
+		resp.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
 // Register registers the handlers on the server.
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/heartbeat", h.heartbeat)
 	mux.HandleFunc("/update", h.update)
 	mux.HandleFunc("/error", h.errorFunc)
+	mux.HandleFunc("/job", h.nextJob)
 }

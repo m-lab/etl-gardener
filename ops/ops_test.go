@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/m-lab/go/logx"
 	"github.com/m-lab/go/rtx"
 
 	"github.com/m-lab/etl-gardener/cloud"
@@ -35,8 +34,6 @@ func newStateFunc(detail string) ops.ActionFunc {
 }
 
 func TestMonitor_Watch(t *testing.T) {
-	logx.LogxDebug.Set("true")
-
 	ctx, cancel := context.WithCancel(context.Background())
 	tk, err := tracker.InitTracker(ctx, nil, nil, 0, 0, 0)
 	rtx.Must(err, "tk init")
@@ -79,8 +76,6 @@ func TestMonitor_Watch(t *testing.T) {
 }
 
 func TestOutcomeUpdate(t *testing.T) {
-	logx.LogxDebug.Set("true")
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	tk, err := tracker.InitTracker(ctx, nil, nil, 0, 0, 0)

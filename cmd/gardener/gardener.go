@@ -331,7 +331,7 @@ func mustStandardTracker() *tracker.Tracker {
 	return tk
 }
 
-func mustCreateJobService(ctx context.Context, mux *http.ServeMux) {
+func mustCreateJobService(ctx context.Context) *job.Service {
 	storageClient, err := storage.NewClient(ctx)
 	rtx.Must(err, "Could not create storage client for job service")
 
@@ -341,7 +341,7 @@ func mustCreateJobService(ctx context.Context, mux *http.ServeMux) {
 		os.Getenv("PROJECT"), config.Sources(), saver,
 		stiface.AdaptClient(storageClient))
 	rtx.Must(err, "Could not initialize job service")
-	mux.HandleFunc("/job", svc.JobHandler)
+	return svc
 }
 
 // ###############################################################################
@@ -410,10 +410,9 @@ func main() {
 		rtx.Must(err, "NewStandardMonitor failed")
 		go monitor.Watch(mainCtx, 5*time.Second)
 
-		handler := tracker.NewHandler(globalTracker)
+		js := mustCreateJobService(mainCtx)
+		handler := tracker.NewHandler(globalTracker, js)
 		handler.Register(mux)
-
-		mustCreateJobService(mainCtx, mux)
 
 		healthy = true
 		log.Println("Running as manager service")

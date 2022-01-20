@@ -5,9 +5,10 @@ package bq
 import (
 	"context"
 	"log"
-	"strings"
 	"testing"
 	"time"
+
+	"google.golang.org/api/googleapi"
 
 	"cloud.google.com/go/bigquery"
 	"github.com/googleapis/google-cloud-go-testing/bigquery/bqiface"
@@ -72,11 +73,20 @@ func TestSanityCheckAndCopy(t *testing.T) {
 	srcAt := NewAnnotatedTable(src, &ds)
 	destAt := NewAnnotatedTable(dest, &ds)
 
+	// NOTE: this function returns one of two errors. The difference
+	// is unknown, so we check for either 404 or 400.
+	// i.e.
+	//  - googleapi: Error 404: Not found: Project project, notFound
+	//  - googleapi: Error 400: Cannot parse  as CloudRegion., badRequest
 	err = SanityCheckAndCopy(ctx, srcAt, destAt)
 	if err == nil {
-		t.Fatal("Should have 404 error")
+		t.Fatal("SanityCheckAndCopy() should return 4xx error: got nil")
 	}
-	if !strings.HasPrefix(err.Error(), "googleapi: Error 404") {
+	gerr, ok := err.(*googleapi.Error)
+	if !ok {
+		t.Fatalf("Unknown error type: got %T, want *googleapi.Error", err)
+	}
+	if gerr.Code != 404 && gerr.Code != 400 {
 		t.Fatal(err)
 	}
 }
