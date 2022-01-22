@@ -114,7 +114,10 @@ func TestResume(t *testing.T) {
 	ctx := context.Background()
 
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
-	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0, 0) // Only using jobmap.
+	dsKey := datastore.NameKey("TestResume", "jobs", nil)
+	dsKey.Namespace = "gardener"
+	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
+	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0) // Only using jobmap.
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +272,10 @@ func TestEarlyWrapping(t *testing.T) {
 	})
 	defer monkey.Unpatch(time.Now)
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
-	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0, 0) // Only using jobmap.
+	dsKey := datastore.NameKey("TestEarlyWrapping", "jobs", nil)
+	dsKey.Namespace = "gardener"
+	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
+	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0) // Only using jobmap.
 	if err != nil {
 		t.Fatal(err)
 	}
