@@ -61,6 +61,7 @@ var (
 		Options: []string{"datastore", "local"},
 		Value:   "datastore",
 	}
+	saverDir string
 
 	jobExpirationTime = flag.Duration("job_expiration_time", 24*time.Hour, "Time after which stale jobs will be purged")
 	jobCleanupDelay   = flag.Duration("job_cleanup_delay", 3*time.Hour, "Time after which completed jobs will be removed from tracker")
@@ -76,6 +77,7 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	flag.Var(&saverType, "saver.backend", "Set the saver backend to 'datastore' or 'local' file.")
+	flag.StringVar(&saverDir, "saver.dir", "local", "When the saver backend is 'local', place files in this directory")
 }
 
 // Environment provides "global" variables.
@@ -331,7 +333,7 @@ func mustStandardTracker() *tracker.Tracker {
 		rtx.Must(err, "datastore client")
 		saver = tracker.NewDatastoreSaver(dsiface.AdaptClient(client), dsKey)
 	case "local":
-		saver = tracker.NewLocalSaver(dsKey)
+		saver = tracker.NewLocalSaver(saverDir, dsKey)
 	}
 
 	tk, err := tracker.InitTracker(
@@ -355,7 +357,7 @@ func mustCreateJobService(ctx context.Context) *job.Service {
 		saver, err = persistence.NewDatastoreSaver(context.Background(), os.Getenv("PROJECT"))
 		rtx.Must(err, "Could not initialize datastore saver")
 	case "local":
-		saver = persistence.NewLocalSaver()
+		saver = persistence.NewLocalSaver(saverDir)
 	}
 	svc, err := job.NewJobService(
 		ctx, globalTracker, config.StartDate(),
