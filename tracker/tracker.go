@@ -18,6 +18,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"sync"
 	"time"
 
@@ -33,8 +34,7 @@ import (
 type Tracker struct {
 	// client dsiface.Client
 	// dsKey  *datastore.Key
-	saver  Saver
-	ticker *time.Ticker
+	saver Saver
 
 	// The lock should be held whenever accessing the jobs JobMap
 	lock         sync.Mutex
@@ -53,6 +53,7 @@ type Tracker struct {
 type Saver interface {
 	Save(ctx context.Context, src interface{}) error
 	Load(ctx context.Context) (JobMap, Job, error)
+	Delete(ctx context.Context) error
 }
 
 type DatastoreSaver struct {
@@ -76,25 +77,35 @@ func (ds *DatastoreSaver) Load(ctx context.Context) (JobMap, Job, error) {
 	return loadJobMap(ctx, ds.client, ds.key)
 }
 
-type LocalSaver struct {
-	key *datastore.Key
+func (ds *DatastoreSaver) Delete(ctx context.Context) error {
+	return nil
 }
 
-func NewLocalSaver(dsKey *datastore.Key) *LocalSaver {
+type LocalSaver struct {
+	dir  string
+	key  *datastore.Key
+	lock sync.Mutex
+}
+
+func NewLocalSaver(dir string, dsKey *datastore.Key) *LocalSaver {
 	return &LocalSaver{
+		dir: dir,
 		key: dsKey,
 	}
 }
 
 func (ls *LocalSaver) fname() string {
-	return ls.key.Kind + "-" + ls.key.Name // NOTE: this is not generic for all key types.
+	return path.Join(ls.dir, ls.key.Namespace+"-"+ls.key.Kind+"-"+ls.key.Name)
 }
 
 func (ls *LocalSaver) Save(ctx context.Context, state interface{}) error {
-	f, err := os.OpenFile(ls.fname(), os.O_CREATE|os.O_WRONLY, 0644)
+	ls.lock.Lock()
+	defer ls.lock.Unlock()
+	f, err := os.OpenFile(ls.fname(), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 	b, err := json.Marshal(state)
 	if err != nil {
 		return err
@@ -104,17 +115,25 @@ func (ls *LocalSaver) Save(ctx context.Context, state interface{}) error {
 }
 
 func (ls *LocalSaver) Load(ctx context.Context) (JobMap, Job, error) {
+	ls.lock.Lock()
+	defer ls.lock.Unlock()
 	b, err := ioutil.ReadFile(ls.fname())
 	if err != nil {
 		return nil, Job{}, err
 	}
 
-	state := saverStruct{Jobs: make([]byte, 0)}
+	state := saverStruct{}
 	err = json.Unmarshal(b, &state)
 	if err != nil {
 		return nil, Job{}, err
 	}
 	return loadJobMapFromState(state)
+}
+
+func (ls *LocalSaver) Delete(ctx context.Context) error {
+	ls.lock.Lock()
+	defer ls.lock.Unlock()
+	return os.Remove(ls.fname())
 }
 
 // InitTracker recovers the Tracker state from a Client object.
@@ -126,7 +145,6 @@ func InitTracker(
 
 	jobMap, lastJob, err := saver.Load(ctx)
 	if err != nil {
-		log.Println(err)
 		jobMap = make(JobMap, 100)
 	}
 	for j, s := range jobMap {
@@ -141,7 +159,7 @@ func InitTracker(
 		lastJob: lastJob, jobs: jobMap,
 		expirationTime: expirationTime, cleanupDelay: cleanupDelay}
 	if saver != nil && saveInterval > 0 {
-		t.saveEvery(saveInterval)
+		go t.saveEvery(ctx, saveInterval)
 	}
 	return &t, nil
 }
@@ -192,20 +210,21 @@ func (tr *Tracker) Sync(ctx context.Context, lastSave time.Time) (time.Time, err
 	return lastTry, nil
 }
 
-func (tr *Tracker) saveEvery(interval time.Duration) {
-	tr.ticker = time.NewTicker(interval)
-	go func() {
-		lastSave := time.Time{}
-		// TODO - is there a better source for this context?
-		ctx := context.Background()
-		for range tr.ticker.C {
-			var err error
+func (tr *Tracker) saveEvery(ctx context.Context, interval time.Duration) {
+	var err error
+	ticker := time.NewTicker(interval)
+	lastSave := time.Time{}
+	for {
+		select {
+		case <-ticker.C:
 			lastSave, err = tr.Sync(ctx, lastSave)
 			if err != nil {
 				log.Println(err)
 			}
+		case <-ctx.Done():
+			return
 		}
-	}()
+	}
 }
 
 // GetStatus retrieves the status of an existing job.
