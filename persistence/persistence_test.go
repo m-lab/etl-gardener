@@ -4,11 +4,9 @@ package persistence_test
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"reflect"
 	"testing"
-	"time"
 
 	"cloud.google.com/go/datastore"
 
@@ -68,51 +66,4 @@ func TestDatastoreSaver(t *testing.T) {
 	if err != datastore.ErrNoSuchEntity {
 		t.Fatal("Should have errored")
 	}
-}
-
-func TestFetchAll(t *testing.T) {
-	o := NewO1("foo")
-	o.Integer = 1234
-
-	ctx := context.Background()
-	ds, err := persistence.NewDatastoreSaver(ctx, "mlab-testing")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = ds.Save(ctx, &o)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 20; i++ {
-		o := NewO1(fmt.Sprint("foo", i))
-		o.Integer = (int32)(i)
-		err = ds.Save(ctx, &o)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	var keys []*datastore.Key
-	var slice []O1
-
-	// datastore sometimes takes a while to become consistent.
-	for i := 0; i < 50; i++ {
-		var objs interface{}
-		keys, objs, err = ds.FetchAll(ctx, O1{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		slice = objs.([]O1)
-		if len(slice) >= 21 {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	if len(slice) != 21 {
-		t.Error("Should be 21 items, but got", len(slice))
-	}
-
-	err = ds.Client.DeleteMulti(ctx, keys)
-	rtx.Must(err, "Delete error")
 }

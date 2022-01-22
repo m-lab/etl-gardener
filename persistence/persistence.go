@@ -6,7 +6,8 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"reflect"
+	"path"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/datastore"
@@ -98,51 +99,27 @@ func (ds *DatastoreSaver) Fetch(ctx context.Context, o StateObject) error {
 	return ds.Client.Get(ctx, &key, o)
 }
 
-// FetchAll fetches all objects of a particular type from Datastore.
-// The "o" parameter should be an instance of the type to fetch, which is
-// used only to determine the kind, and to create the result slice.
-func (ds *DatastoreSaver) FetchAll(ctx context.Context, o StateObject) ([]*datastore.Key, interface{}, error) {
-	q := datastore.NewQuery(o.GetKind()).Namespace(ds.Namespace)
-	keys, err := ds.Client.GetAll(ctx, q.KeysOnly(), nil)
-	if err != nil {
-		log.Println("FetchAll error", err)
-		return nil, nil, err
-	}
-	// Passing .Interface() to GetAll doesn't work, whether the slice is empty
-	// or not, and we can't assert the correct type because we don't know it.
-	// However, passing Interface() to GetMulti works just fine, so we use
-	// that.
-
-	// GetMulti accepts a slice as an interface{}, whereas GetAll does not.
-	// It modifies the elements of the slice, and does not change the slice
-	// itself.
-	objs := reflect.MakeSlice(reflect.SliceOf(reflect.TypeOf(o)), len(keys), len(keys)).Interface()
-	err = ds.Client.GetMulti(ctx, keys, objs)
-	if err != nil {
-		log.Println(err)
-		return nil, nil, err
-	}
-	return keys, objs, err
-}
-
 // LocalSaver implements a Saver that stores state objects in local files.
 type LocalSaver struct {
 	Namespace string
+	dir       string
+	lock      sync.Mutex
 }
 
 // NewLocalSaver creates and returns a new local saver.
-func NewLocalSaver() *LocalSaver {
-	return &LocalSaver{Namespace: "gardener"}
+func NewLocalSaver(dir string) *LocalSaver {
+	return &LocalSaver{dir: dir, Namespace: "gardener"}
 }
 
 func (ls *LocalSaver) fname(o StateObject) string {
-	k := ls.Namespace + "-" + o.GetKind() + "-" + o.GetName()
-	return k
+	return path.Join(ls.dir, ls.Namespace+"-"+o.GetKind()+"-"+o.GetName())
 }
 
 // Save implements Saver.Save using Datastore.
 func (ls *LocalSaver) Save(ctx context.Context, o StateObject) error {
-	f, err := os.OpenFile(ls.fname(o), os.O_CREATE|os.O_WRONLY, 0644)
+	ls.lock.Lock()
+	defer ls.lock.Unlock()
+	f, err := os.OpenFile(ls.fname(o), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
@@ -156,11 +133,15 @@ func (ls *LocalSaver) Save(ctx context.Context, o StateObject) error {
 
 // Delete implements Saver.Delete using Datastore.
 func (ls *LocalSaver) Delete(ctx context.Context, o StateObject) error {
+	ls.lock.Lock()
+	defer ls.lock.Unlock()
 	return os.Remove(ls.fname(o))
 }
 
 // Fetch implements Saver.Fetch to fetch state of requested StateObject from Datastore.
 func (ls *LocalSaver) Fetch(ctx context.Context, o StateObject) error {
+	ls.lock.Lock()
+	defer ls.lock.Unlock()
 	b, err := ioutil.ReadFile(ls.fname(o))
 	if err != nil {
 		return err
