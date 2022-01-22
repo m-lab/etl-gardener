@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"cloud.google.com/go/datastore"
-
 	"github.com/m-lab/go/rtx"
 
 	"github.com/m-lab/etl-gardener/cloud"
@@ -37,8 +35,7 @@ func newStateFunc(detail string) ops.ActionFunc {
 
 func TestMonitor_Watch(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	dsKey := datastore.NameKey("TestMonitor_Watch", "monitor", nil)
-	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
+	saver := tracker.NewLocalSaver(t.TempDir(), nil)
 	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
 	tk.AddJob(tracker.NewJob("bucket", "exp", "type", time.Now()))
@@ -82,8 +79,7 @@ func TestMonitor_Watch(t *testing.T) {
 func TestOutcomeUpdate(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	dsKey := datastore.NameKey("TestOutcomeUpdate", "monitor", nil)
-	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
+	saver := tracker.NewLocalSaver(t.TempDir(), nil)
 	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
 	job := tracker.NewJob("bucket", "exp", "type", time.Now())

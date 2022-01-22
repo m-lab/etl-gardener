@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"cloud.google.com/go/datastore"
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/ops"
 	"github.com/m-lab/etl-gardener/tracker"
@@ -28,9 +27,7 @@ func TestStandardMonitor(t *testing.T) {
 	defer cleanup()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	dsKey := datastore.NameKey("TestConcurrentUpdates", "jobs", nil)
-	dsKey.Namespace = "gardener"
-	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
+	saver := tracker.NewLocalSaver(t.TempDir(), nil)
 	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
 	tk.AddJob(tracker.NewJob("bucket", "exp", "type", time.Now()))

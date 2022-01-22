@@ -101,7 +101,6 @@ func TestTrackerAddDelete(t *testing.T) {
 	dsKey := datastore.NameKey("TestTrackerAddDelete", "jobs", nil)
 	dsKey.Namespace = "gardener"
 	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
-	defer saver.Delete(context.Background())
 
 	tk, err := tracker.InitTracker(ctx, saver, 0, 0, time.Second)
 	must(t, err)
@@ -169,7 +168,6 @@ func TestUpdates(t *testing.T) {
 	dsKey := datastore.NameKey("TestUpdate", "jobs", nil)
 	dsKey.Namespace = "gardener"
 	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
-	defer saver.Delete(context.Background())
 
 	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 	must(t, err)
@@ -214,7 +212,6 @@ func TestNonexistentJobAccess(t *testing.T) {
 	dsKey := datastore.NameKey("TestNonexistentJobAccess", "jobs", nil)
 	dsKey.Namespace = "gardener"
 	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
-	defer saver.Delete(context.Background())
 
 	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 	must(t, err)
@@ -250,7 +247,6 @@ func TestJobMapHTML(t *testing.T) {
 	dsKey := datastore.NameKey("TestJobMapHTML", "jobs", nil)
 	dsKey.Namespace = "gardener"
 	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
-	defer saver.Delete(context.Background())
 
 	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 	must(t, err)
@@ -274,7 +270,6 @@ func TestExpiration(t *testing.T) {
 	dsKey := datastore.NameKey("TestExpiration", "jobs", nil)
 	dsKey.Namespace = "gardener"
 	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
-	defer saver.Delete(context.Background())
 
 	ctx, cancel := context.WithCancel(context.Background())
 

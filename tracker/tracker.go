@@ -53,7 +53,6 @@ type Tracker struct {
 type Saver interface {
 	Save(ctx context.Context, src interface{}) error
 	Load(ctx context.Context) (JobMap, Job, error)
-	Delete(ctx context.Context) error
 }
 
 type DatastoreSaver struct {
@@ -77,10 +76,6 @@ func (ds *DatastoreSaver) Load(ctx context.Context) (JobMap, Job, error) {
 	return loadJobMap(ctx, ds.client, ds.key)
 }
 
-func (ds *DatastoreSaver) Delete(ctx context.Context) error {
-	return nil
-}
-
 type LocalSaver struct {
 	dir  string
 	key  *datastore.Key
@@ -95,6 +90,9 @@ func NewLocalSaver(dir string, dsKey *datastore.Key) *LocalSaver {
 }
 
 func (ls *LocalSaver) fname() string {
+	if ls.key == nil {
+		return "nil-localsaver.txt"
+	}
 	return path.Join(ls.dir, ls.key.Namespace+"-"+ls.key.Kind+"-"+ls.key.Name)
 }
 
