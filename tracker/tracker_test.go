@@ -98,12 +98,12 @@ func TestTrackerAddDelete(t *testing.T) {
 	ctx := context.Background()
 	logx.LogxDebug.Set("true")
 
-	client := dsfake.NewClient()
 	dsKey := datastore.NameKey("TestTrackerAddDelete", "jobs", nil)
 	dsKey.Namespace = "gardener"
-	defer must(t, cleanup(client, dsKey))
+	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
+	defer saver.Delete(context.Background())
 
-	tk, err := tracker.InitTracker(ctx, client, dsKey, 0, 0, time.Second)
+	tk, err := tracker.InitTracker(ctx, saver, 0, 0, time.Second)
 	must(t, err)
 	if tk == nil {
 		t.Fatal("nil Tracker")
@@ -121,7 +121,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	}
 	// Check that the sync (and InitTracker) work.
 	// Jobs will be removed by GetStatus 50 milliseconds after Complete.
-	restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, 50*time.Millisecond)
+	restore, err := tracker.InitTracker(context.Background(), saver, 0, 0, 50*time.Millisecond)
 	must(t, err)
 
 	if restore.NumJobs() != 100 {
@@ -166,12 +166,12 @@ func TestTrackerAddDelete(t *testing.T) {
 }
 
 func TestUpdates(t *testing.T) {
-	client := dsfake.NewClient()
 	dsKey := datastore.NameKey("TestUpdate", "jobs", nil)
 	dsKey.Namespace = "gardener"
-	defer must(t, cleanup(client, dsKey))
+	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
+	defer saver.Delete(context.Background())
 
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, 0)
+	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 	must(t, err)
 
 	createJobs(t, tk, "JobToUpdate", "type", 1)
@@ -211,12 +211,12 @@ func TestUpdates(t *testing.T) {
 // This tests whether AddJob and SetStatus generate appropriate
 // errors when job doesn't exist.
 func TestNonexistentJobAccess(t *testing.T) {
-	client := dsfake.NewClient()
 	dsKey := datastore.NameKey("TestNonexistentJobAccess", "jobs", nil)
 	dsKey.Namespace = "gardener"
-	defer must(t, cleanup(client, dsKey))
+	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
+	defer saver.Delete(context.Background())
 
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, 0)
+	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 	must(t, err)
 
 	job := tracker.Job{}
@@ -247,7 +247,12 @@ func TestNonexistentJobAccess(t *testing.T) {
 }
 
 func TestJobMapHTML(t *testing.T) {
-	tk, err := tracker.InitTracker(context.Background(), nil, nil, 0, 0, 0)
+	dsKey := datastore.NameKey("TestJobMapHTML", "jobs", nil)
+	dsKey.Namespace = "gardener"
+	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
+	defer saver.Delete(context.Background())
+
+	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 	must(t, err)
 
 	job := tracker.Job{}
@@ -266,13 +271,15 @@ func TestJobMapHTML(t *testing.T) {
 }
 
 func TestExpiration(t *testing.T) {
-	client := dsfake.NewClient()
 	dsKey := datastore.NameKey("TestExpiration", "jobs", nil)
 	dsKey.Namespace = "gardener"
-	defer must(t, cleanup(client, dsKey))
+	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
+	defer saver.Delete(context.Background())
+
+	ctx, cancel := context.WithCancel(context.Background())
 
 	// Expire jobs after 1 second of monkey time.
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 5*time.Millisecond, 10*time.Millisecond, 1*time.Millisecond)
+	tk, err := tracker.InitTracker(ctx, saver, 5*time.Millisecond, 10*time.Millisecond, 1*time.Millisecond)
 	must(t, err)
 
 	job := tracker.NewJob("bucket", "exp", "type", startDate)
@@ -288,8 +295,12 @@ func TestExpiration(t *testing.T) {
 	}
 
 	// Let enough time go by that expirationTime passes, and saver runs.
-	time.Sleep(20 * time.Millisecond)
+	time.Sleep(40 * time.Millisecond)
 
 	// Job should have been removed by saveEvery, so this should succeed.
 	must(t, tk.AddJob(job))
+
+	// Stop saveEvery go routine, so cleanup will remove file.
+	cancel()
+	time.Sleep(40 * time.Millisecond)
 }
