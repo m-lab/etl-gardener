@@ -35,7 +35,8 @@ func newStateFunc(detail string) ops.ActionFunc {
 
 func TestMonitor_Watch(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	tk, err := tracker.InitTracker(ctx, nil, nil, 0, 0, 0)
+	saver := tracker.NewLocalSaver(t.TempDir(), nil)
+	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
 	tk.AddJob(tracker.NewJob("bucket", "exp", "type", time.Now()))
 	tk.AddJob(tracker.NewJob("bucket", "exp2", "type", time.Now()))
@@ -78,7 +79,8 @@ func TestMonitor_Watch(t *testing.T) {
 func TestOutcomeUpdate(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	tk, err := tracker.InitTracker(ctx, nil, nil, 0, 0, 0)
+	saver := tracker.NewLocalSaver(t.TempDir(), nil)
+	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
 	job := tracker.NewJob("bucket", "exp", "type", time.Now())
 	tk.AddJob(job)

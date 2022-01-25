@@ -57,6 +57,12 @@ var (
 )
 
 var (
+	saverType = flagx.Enum{
+		Options: []string{"datastore", "local"},
+		Value:   "datastore",
+	}
+	saverDir string
+
 	jobExpirationTime = flag.Duration("job_expiration_time", 24*time.Hour, "Time after which stale jobs will be purged")
 	jobCleanupDelay   = flag.Duration("job_cleanup_delay", 3*time.Hour, "Time after which completed jobs will be removed from tracker")
 	shutdownTimeout   = flag.Duration("shutdown_timeout", 1*time.Minute, "Graceful shutdown time allowance")
@@ -69,6 +75,9 @@ var (
 func init() {
 	// Always prepend the filename and line number.
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	flag.Var(&saverType, "saver.backend", "Set the saver backend to 'datastore' or 'local' file.")
+	flag.StringVar(&saverDir, "saver.dir", "local", "When the saver backend is 'local', place files in this directory")
 }
 
 // Environment provides "global" variables.
@@ -314,14 +323,21 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 func mustStandardTracker() *tracker.Tracker {
-	client, err := datastore.NewClient(context.Background(), env.Project)
-	rtx.Must(err, "datastore client")
+	var saver tracker.Saver
 	dsKey := datastore.NameKey("tracker", "jobs", nil)
 	dsKey.Namespace = "gardener"
 
+	switch saverType.Value {
+	case "datastore":
+		client, err := datastore.NewClient(context.Background(), env.Project)
+		rtx.Must(err, "datastore client")
+		saver = tracker.NewDatastoreSaver(dsiface.AdaptClient(client), dsKey)
+	case "local":
+		saver = tracker.NewLocalSaver(saverDir, dsKey)
+	}
+
 	tk, err := tracker.InitTracker(
-		context.Background(),
-		dsiface.AdaptClient(client), dsKey,
+		context.Background(), saver,
 		time.Minute, *jobExpirationTime, *jobCleanupDelay)
 	rtx.Must(err, "tracker init")
 	if tk == nil {
@@ -332,12 +348,19 @@ func mustStandardTracker() *tracker.Tracker {
 }
 
 func mustCreateJobService(ctx context.Context) *job.Service {
+	var saver persistence.Saver
 	storageClient, err := storage.NewClient(ctx)
 	rtx.Must(err, "Could not create storage client for job service")
 
-	saver, err := persistence.NewDatastoreSaver(context.Background(), os.Getenv("PROJECT"))
-	rtx.Must(err, "Could not initialize datastore saver")
-	svc, err := job.NewJobService(ctx, globalTracker, config.StartDate(),
+	switch saverType.Value {
+	case "datastore":
+		saver, err = persistence.NewDatastoreSaver(context.Background(), os.Getenv("PROJECT"))
+		rtx.Must(err, "Could not initialize datastore saver")
+	case "local":
+		saver = persistence.NewLocalSaver(saverDir)
+	}
+	svc, err := job.NewJobService(
+		ctx, globalTracker, config.StartDate(),
 		os.Getenv("PROJECT"), config.Sources(), saver,
 		stiface.AdaptClient(storageClient))
 	rtx.Must(err, "Could not initialize job service")
