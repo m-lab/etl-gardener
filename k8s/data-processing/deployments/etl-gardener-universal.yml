@@ -36,7 +36,12 @@ spec:
       containers:
       - image: gcr.io/{{GCLOUD_PROJECT}}/etl-gardener:{{GIT_COMMIT}}
         name: etl-gardener
-        args: ["--prometheusx.listen-address=:9090", "--config_path=/etc/config.yml"]
+        args: [
+          "--prometheusx.listen-address=:9090",
+          "--config_path=/etc/config.yml",
+          "-saver.backend=local",
+          "-saver.dir=/singleton"
+        ]
         env:
         - name: SERVICE_MODE # Whether to use task-queues or run as manager.
           value: "manager"
