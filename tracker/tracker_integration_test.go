@@ -29,7 +29,8 @@ func TestWithDatastore(t *testing.T) {
 	// quite a while to propogate.
 	defer must(t, cleanup(client, dsKey))
 
-	tk, err := tracker.InitTracker(ctx, client, dsKey, 0, 0, 0)
+	saver := tracker.NewDatastoreSaver(client, dsKey)
+	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
 	must(t, err)
 	if tk == nil {
 		t.Fatal("nil Tracker")
@@ -45,7 +46,7 @@ func TestWithDatastore(t *testing.T) {
 	_, err = tk.Sync(ctx, time.Time{})
 	must(t, err)
 	// Check that the sync (and InitTracker) work.
-	restore, err := tracker.InitTracker(ctx, client, dsKey, 0, 0, 0)
+	restore, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
 	must(t, err)
 
 	if restore.NumJobs() != 500 {

@@ -13,7 +13,6 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/m-lab/etl-gardener/tracker"
-	"github.com/m-lab/go/cloudtest/dsfake"
 )
 
 func TestConcurrentUpdates(t *testing.T) {
@@ -27,14 +26,13 @@ func TestConcurrentUpdates(t *testing.T) {
 
 	ctx := context.Background()
 
-	client := dsfake.NewClient()
 	dsKey := datastore.NameKey("TestConcurrentUpdates", "jobs", nil)
 	dsKey.Namespace = "gardener"
-	defer must(t, cleanup(client, dsKey))
+	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
 
 	// For testing, push to the saver every 5 milliseconds.
 	saverInterval := 5 * time.Millisecond
-	tk, err := tracker.InitTracker(ctx, client, dsKey, saverInterval, 0, 0)
+	tk, err := tracker.InitTracker(ctx, saver, saverInterval, 0, 0)
 	must(t, err)
 
 	jobs := 20
@@ -78,7 +76,7 @@ func TestConcurrentUpdates(t *testing.T) {
 	if testing.Verbose() {
 		_, err := tk.Sync(ctx, time.Time{})
 		must(t, err)
-		restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, 0)
+		restore, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 		must(t, err)
 
 		status, _, _ := restore.GetState()

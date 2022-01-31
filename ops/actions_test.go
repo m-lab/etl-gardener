@@ -27,7 +27,8 @@ func TestStandardMonitor(t *testing.T) {
 	defer cleanup()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	tk, err := tracker.InitTracker(ctx, nil, nil, 0, 0, 0)
+	saver := tracker.NewLocalSaver(t.TempDir(), nil)
+	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
 	tk.AddJob(tracker.NewJob("bucket", "exp", "type", time.Now()))
 	// Not yet supported.

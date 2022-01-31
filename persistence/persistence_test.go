@@ -4,14 +4,11 @@ package persistence_test
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"reflect"
 	"testing"
-	"time"
 
 	"cloud.google.com/go/datastore"
-
 	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/go/rtx"
 )
@@ -57,7 +54,6 @@ func TestDatastoreSaver(t *testing.T) {
 	o.Integer = 0
 	err = ds.Fetch(ctx, &o)
 	rtx.Must(err, "Fetch error")
-	t.Log(o)
 	if o.Integer != 1234 {
 		t.Error("Integer should be 1234", o)
 	}
@@ -70,49 +66,36 @@ func TestDatastoreSaver(t *testing.T) {
 	}
 }
 
-func TestFetchAll(t *testing.T) {
-	o := NewO1("foo")
-	o.Integer = 1234
+func TestNewLocalSaver(t *testing.T) {
+	t.Run("create-save-fetch-delete", func(t *testing.T) {
+		dir := t.TempDir()
+		got := persistence.NewLocalSaver(dir)
+		if got == nil {
+			t.Fatalf("NewLocalSaver() = nil, want valid local saver.")
+		}
+		o := NewO1("foo-state")
+		ctx := context.Background()
+		o.Integer = 101 // Value to persist.
 
-	ctx := context.Background()
-	ds, err := persistence.NewDatastoreSaver(ctx, "mlab-testing")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = ds.Save(ctx, &o)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 20; i++ {
-		o := NewO1(fmt.Sprint("foo", i))
-		o.Integer = (int32)(i)
-		err = ds.Save(ctx, &o)
+		err := got.Save(ctx, o)
 		if err != nil {
-			t.Fatal(err)
+			t.Errorf("LocalSaver.Save() = %v, want nil", err)
 		}
-	}
-
-	var keys []*datastore.Key
-	var slice []O1
-
-	// datastore sometimes takes a while to become consistent.
-	for i := 0; i < 50; i++ {
-		var objs interface{}
-		keys, objs, err = ds.FetchAll(ctx, O1{})
+		o2 := NewO1("foo-state")  // Without value.
+		err = got.Fetch(ctx, &o2) // Read value.
 		if err != nil {
-			t.Fatal(err)
+			t.Errorf("LocalSaver.Fetch() = %v, want nil", err)
 		}
-		slice = objs.([]O1)
-		if len(slice) >= 21 {
-			break
+		if o != o2 { // Compare values.
+			t.Errorf("LocalSaver.Fetch() wrong result; got %v, want %v", o2, o)
 		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	if len(slice) != 21 {
-		t.Error("Should be 21 items, but got", len(slice))
-	}
-
-	err = ds.Client.DeleteMulti(ctx, keys)
-	rtx.Must(err, "Delete error")
+		err = got.Delete(ctx, o)
+		if err != nil {
+			t.Errorf("LocalSaver.Delete() = %v, want nil", err)
+		}
+		err = got.Fetch(ctx, &o2) // Read value after delete.
+		if err == nil {
+			t.Errorf("LocalSaver.Fetch() returned value after delete; got nil, want err")
+		}
+	})
 }

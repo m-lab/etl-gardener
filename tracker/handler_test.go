@@ -14,7 +14,6 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/m-lab/etl-gardener/tracker"
-	"github.com/m-lab/go/cloudtest/dsfake"
 )
 
 func init() {
@@ -35,12 +34,11 @@ func (f *fakeJobService) NextJob(ctx context.Context) tracker.JobWithTarget {
 }
 
 func testSetup(t *testing.T, jobs []tracker.Job) (url.URL, *tracker.Tracker) {
-	client := dsfake.NewClient()
 	dsKey := datastore.NameKey("TestTrackerAddDelete", "jobs", nil)
 	dsKey.Namespace = "gardener"
-	defer must(t, cleanup(client, dsKey))
 
-	tk, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, 0)
+	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
+	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 	must(t, err)
 	if tk == nil {
 		t.Fatal("nil Tracker")
