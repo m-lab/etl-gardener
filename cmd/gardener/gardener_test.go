@@ -74,9 +74,10 @@ func TestManagerMode(t *testing.T) {
 	mainCtx, mainCancel = context.WithCancel(context.Background())
 
 	vars := map[string]string{
-		"SERVICE_MODE": "manager",
-		"PROJECT":      "mlab-testing",
-		"STATUS_PORT":  ":0",
+		"SERVICE_MODE":  "manager",
+		"PROJECT":       "mlab-testing",
+		"STATUS_PORT":   ":0",
+		"GARDENER_ADDR": ":8888", // any number other than default.
 	}
 	for k, v := range vars {
 		cleanup := osx.MustSetenv(k, v)
@@ -85,7 +86,7 @@ func TestManagerMode(t *testing.T) {
 
 	go func(t *testing.T) {
 		defer mainCancel()
-		resp, err := waitFor("http://localhost:8080/ready")
+		resp, err := waitFor("http://localhost:8888/ready")
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -67,6 +67,7 @@ var (
 	jobCleanupDelay   = flag.Duration("job_cleanup_delay", 3*time.Hour, "Time after which completed jobs will be removed from tracker")
 	shutdownTimeout   = flag.Duration("shutdown_timeout", 1*time.Minute, "Graceful shutdown time allowance")
 	statusPort        = flag.String("status_port", ":0", "The public interface port where status (and pprof) will be published")
+	gardenerAddr      = flag.String("gardener_addr", ":8080", "The listen address for the gardener jobs service")
 
 	// Context and injected variables to allow smoke testing of main()
 	mainCtx, mainCancel = context.WithCancel(context.Background())
@@ -398,7 +399,7 @@ func main() {
 	mux := http.NewServeMux()
 	// Start up the main job and update server.
 	server := &http.Server{
-		Addr:    ":8080",
+		Addr:    *gardenerAddr,
 		Handler: mux,
 	}
 
