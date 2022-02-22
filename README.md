@@ -85,8 +85,9 @@ gcloud auth application-default login
   -output=local
 ```
 
-If the `start_date` in the input `test.yml` matches, the parser should begin
-parsing archives immediately and writing them to the `./output` directory.
+If the `start_date` in the input `test.yml` for your datatype includes archive
+files, then the parser should begin parsing archives immediately and writing them to
+the `./output` directory.
 
 ## Unit Testing
 
