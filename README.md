@@ -8,7 +8,7 @@ Gardener provides services for maintaining and reprocessing M-Lab data.
 
 ## Overview
 
-The v2 date pipeline depends on the gardener for daily and historical
+The v2 data pipeline depends on the gardener for daily and historical
 processing.
 
 Daily processing is daily around 10:30 UTC to allow time for nodes to upload
@@ -18,7 +18,7 @@ completed, the gardener starts again from its start date.
 
 For both of these modes, gardener issues Jobs (dates) to parsers that request
 them. The parsers will enuemerate all files for that date and parse each, and
-reports status updates to the gardener for the Job date until all are complete.
+report status updates to the gardener for the Job date until all are complete.
 
 ### Jobs API
 
@@ -36,18 +36,18 @@ These resources are available on the `-gardener_addr`.
 ### Status Page
 
 Gardener maintains a status page on a separate status port, that summarizes
-recent jobs, current state, and any errors. Jobs transition through a standard
-stages:
+recent jobs, current state, and any errors. Jobs transition through the
+following stages:
 
-* Parsing - gardener has issued a job and a parser is working on it.
-* postProcessing - the parser completed parsing a job.
-* Loading - gardener loads the parser output from GCS to a temporary BigQuery table.
-* Deduplicating - gardener deletes duplicate rows from the temporary table.
-* Copying - gardener copies rows from the temporary table to the "raw" table.
-* Deleting - gardener deletes the temporary table.
-* Joining - after gardener processes all raw tables for a date, it may combine
+* `Parsing` - gardener has issued a job and a parser is working on it.
+* `postProcessing` - the parser completed parsing a job.
+* `Loading` - gardener loads the parser output from GCS to a temporary BigQuery table.
+* `Deduplicating` - gardener deletes duplicate rows from the temporary table.
+* `Copying` - gardener copies rows from the temporary table to the "raw" table.
+* `Deleting` - gardener deletes the temporary table.
+* `Joining` - after gardener processes all raw tables for a date, it may combine
   the raw table with other raw tables in a materialized join.
-* Complete - all steps were completed successfully.
+* `Complete` - all steps were completed successfully.
 
 The status page is available on the `-status_port`.
 
