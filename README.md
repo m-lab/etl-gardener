@@ -44,7 +44,7 @@ following stages:
 * `Loading` - gardener loads the parser output from GCS to a temporary BigQuery table.
 * `Deduplicating` - gardener deletes duplicate rows from the temporary table.
 * `Copying` - gardener copies rows from the temporary table to the "raw" table.
-* `Deleting` - gardener deletes the temporary table.
+* `Deleting` - gardener deletes the job rows from the temporary table.
 * `Joining` - after gardener processes all raw tables for a date, it may combine
   the raw table with other raw tables in a materialized join.
 * `Complete` - all steps were completed successfully.
@@ -85,7 +85,7 @@ gcloud auth application-default login
   -output=local
 ```
 
-If the `start_time` in the input `test.yml` matches, the parser should begin
+If the `start_date` in the input `test.yml` matches, the parser should begin
 parsing archives immediately and writing them to the `./output` directory.
 
 ## Unit Testing
