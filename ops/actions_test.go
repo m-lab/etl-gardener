@@ -12,7 +12,6 @@ import (
 	"github.com/m-lab/etl-gardener/ops"
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/go/logx"
-	"github.com/m-lab/go/osx"
 	"github.com/m-lab/go/rtx"
 )
 
@@ -23,8 +22,6 @@ func TestStandardMonitor(t *testing.T) {
 		t.Skip("Skipping test that uses BQ backend")
 	}
 	logx.LogxDebug.Set("true")
-	cleanup := osx.MustSetenv("PROJECT", "mlab-testing")
-	defer cleanup()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	saver := tracker.NewLocalSaver(t.TempDir(), nil)
@@ -40,7 +37,7 @@ func TestStandardMonitor(t *testing.T) {
 		tk.AddJob(tracker.NewJob("bucket", "ndt", datatype, time.Now()))
 	}
 
-	m, err := ops.NewStandardMonitor(context.Background(), cloud.BQConfig{}, tk)
+	m, err := ops.NewStandardMonitor(context.Background(), "mlab-testing", cloud.BQConfig{}, tk)
 	rtx.Must(err, "NewMonitor failure")
 	// We override some actions in place of the default Parser activity.
 	// The resulting sequence should be:
