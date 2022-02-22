@@ -4,112 +4,131 @@
 |--------|-----------|-----------|-------------|
 | master | [![Travis Build Status](https://travis-ci.org/m-lab/etl-gardener.svg?branch=master)](https://travis-ci.org/m-lab/etl-gardener) | [![Go Report Card](https://goreportcard.com/badge/github.com/m-lab/etl-gardener)](https://goreportcard.com/report/github.com/m-lab/etl-gardener) | [![Coverage Status](https://coveralls.io/repos/m-lab/etl-gardener/badge.svg?branch=master)](https://coveralls.io/github/m-lab/etl-gardener?branch=master) |
 
-[![Waffle.io](https://badge.waffle.io/m-lab/etl-gardener.svg?title=Ready)](http://waffle.io/m-lab/etl-gardener)
-
 Gardener provides services for maintaining and reprocessing M-Lab data.
+
+## Overview
+
+The v2 data pipeline depends on the gardener for daily and historical
+processing.
+
+Daily processing is daily around 10:30 UTC to allow time for nodes to upload
+data and the daily transfer jobs to copy data to the public archives.
+Historical processing is currently continuous. As soon as one pass has
+completed, the gardener starts again from its start date.
+
+For both of these modes, gardener issues Jobs (dates) to parsers that request
+them. The parsers will enuemerate all files for that date and parse each, and
+report status updates to the gardener for the Job date until all are complete.
+
+### Jobs API
+
+Parsers request new date jobs from the gardener via the Jobs API. The API
+supports four operations:
+
+* `/job` - return the next job
+* `/update` - update the status of a job
+* `/error` - report a job error
+* `/heartbeat` - update progress for a job and tell gardener that work is
+  still in progress.
+
+These resources are available on the `-gardener_addr`.
+
+### Status Page
+
+Gardener maintains a status page on a separate status port, that summarizes
+recent jobs, current state, and any errors. Jobs transition through the
+following stages:
+
+* `Parsing` - gardener has issued a job and a parser is working on it.
+* `postProcessing` - the parser completed parsing a job.
+* `Loading` - gardener loads the parser output from GCS to a temporary BigQuery table.
+* `Deduplicating` - gardener deletes duplicate rows from the temporary table.
+* `Copying` - gardener copies rows from the temporary table to the "raw" table.
+* `Deleting` - gardener deletes the job rows from the temporary table.
+* `Joining` - after gardener processes all raw tables for a date, it may combine
+  the raw table with other raw tables in a materialized join.
+* `Complete` - all steps were completed successfully.
+
+The status page is available on the `-status_port`.
+
+## Local Development with Parser
+
+Both the gardener and parsers support a local development mode. To run both
+follow the following steps.
+
+Create a test configuration, e.g. `test.yml`, with a subset of the production
+configuration that includes only the datatype you are working with.
+
+Run the gardener v2 ("manager" mode) with local writer support:
+
+```sh
+go get ./cmd/gardener
+~/bin/gardener \
+    -project=mlab-sandbox \
+    -service.mode=manager \
+    -status_port=:8082 \
+    -gardener_addr=localhost:8081 \
+    -prometheusx.listen-address=:9991 \
+    -config_path=config/test.yml \
+    -saver.backend=local \
+    -saver.dir=singleton
+```
+
+Run the parser to target the local gardener:
+
+```sh
+go get ./cmd/etl_worker
+gcloud auth application-default login
+~/bin/etl_worker \
+  -gardener_addr=localhost:8081 \
+  -output_dir=./output \
+  -output=local
+```
+
+If the `start_date` in the input `test.yml` for your datatype includes archive
+files, then the parser should begin parsing archives immediately and writing them to
+the `./output` directory.
 
 ## Unit Testing
 
-Travis now uses the datastore emulator to better support unit tests.
-Tests continue to use mlab-testing, so that they can be run manually from
-workstation without configuring the emulator.
+Some of the gardener packages depend on complex, third-party services. To
+accommodate these the gardener unit tests are split into three categories:
 
-To start the emulator, .travis.yml now includes:
+* Standard unit tests
 
-```yaml
-before_script:
-# Try removing boto config, recommended for datastore emulator.
-- sudo rm -f /etc/boto.cfg
+  ```sh
+  go test -v ./...
+  ```
 
-- gcloud components install beta
-- gcloud components install cloud-datastore-emulator
-- gcloud beta emulators datastore start --no-store-on-disk &
-- sleep 2 # allow time for emulator to start up.
-- $(gcloud beta emulators datastore env-init)
-```
+* Integration unit tests
 
-You probably don't want to do this on your local machine, as it will leave
-your local machine configured to use datastore emulation.  So be aware
-that if you do, you'll want to clean up the `DATASTORE_` environment variables.
+  Many integration tests depend on datastore, so be sure the datastore emulator
+  is installed:
 
-## k8s cluster and network
+  ```sh
+  gcloud components install beta
+  gcloud components install cloud-datastore-emulator
+  ```
 
-Gardener will soon provide a job allocation service to the ETL parsers.  To do
-this, we run gardener in a cluster that uses a custom internal network, and
-reserve a static ip address at 10.100.1.2 for the Gardener service.
+  And, then start the emulator, and set environment variables to make it
+  discoverable:
 
-The network and firewall rules are set up like this:
-(TODO - what about prometheus metrics and app engine logs)
+  ```sh
+  gcloud beta emulators datastore start --project mlab-testing --no-store-on-disk &
+  sleep 2
+  $(gcloud beta emulators datastore env-init)
+  ```
 
-```bash
-gcloud --project=mlab-sandbox \
-  compute networks create data-processing --subnet-mode=custom \
-  --description="Network for communication among backend processing services."
+  Finally, run the integration tests, and optionally unset the datastore
+  environment variables:
 
-gcloud --project=mlab-sandbox compute firewall-rules create dp-allow-ssh \
-  --network=data-processing --allow=tcp:22 --direction=INGRESS \
-  --description='Allow SSH from anywhere'
+  ```sh
+  go test -v -tags=integration -coverprofile=_integration.cov ./...
+  $(gcloud beta emulators datastore env-unset)
+  ```
 
-gcloud --project=mlab-sandbox compute firewall-rules create \
-  dp-allow-internal --network=data-processing \
-  --allow=tcp:0-65535,udp:0-65535,icmp --direction=INGRESS \
-  --source-ranges=10.128.0.0/9,10.100.0.0/16 \
-  --description='Allow internal traffic from anywhere'
+* Race unit tests
 
-```
-
-Then the subnet and the static IP address...
-
-```bash
-gcloud --project=mlab-sandbox \
-  compute networks subnets create dp-gardener \
-  --network=data-processing --range=10.100.0.0/16 \
-  --enable-private-ip-google-access --region=us-east1 \
-  --description="Subnet for gardener,etl,annotation-service. Subnet has the same name and address range across projects, but each is in a distinct (data-processing) VPC network."
-```
-
-```bash
-gcloud --project=mlab-sandbox compute addresses create etl-gardener \
-  --region=us-east1 --subnet=dp-gardener --addresses=10.100.1.2
-```
-
-```bash
-gcloud --project=mlab-sandbox container clusters create data-processing \
-  --region=us-east1 --enable-autorepair --enable-autoupgrade \
-  --network=data-processing --subnetwork=dp-gardener \
-  --scopes=bigquery,taskqueue,compute-rw,storage-ro,service-control,service-management,datastore \
-  --num-nodes 2 --image-type=cos --machine-type=n1-standard-4 \
-  --node-labels=gardener-node=true --labels=data-processing=true
-```
-
-### Accessing from ETL parser instances
-
-ETL Parsers will access the Gardener service through the custom subnetwork.  This requires adding to the network section of the App Engine Flex config:
-
-```yaml
-network:
-  subnetwork_name: default-gardener
-```
-
-NOTE: In addition to adding the subnetwork_name to the config, the app engine
-instances must run in the same region as the data-processing cluster, i.e.
-us-east1.
-
-## Node Pools (deprecated)
-
-Gardener runs in the GKE data-processing-cluster.
-
-Each cluster includes a node-pool reserved for Gardener deployments, created
-using the following command line:
-
-```bash
-gcloud --project=mlab-sandbox container node-pools create gardener-pool \
-  --cluster=data-processing-cluster \
-  --num-nodes=3 \
-  --scopes=bigquery,taskqueue,compute-rw,storage-ro,service-control,service-management,datastore \
-  --node-labels=gardener-node=true \
-  --enable-autorepair \
-  --enable-autoupgrade \
-  --image-type=cos \
-  --machine-type=n1-standard-8
-```
+  ```sh
+  go test -race -v ./...
+  ```
