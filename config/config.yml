@@ -12,6 +12,10 @@ sources:
   target: tmp_ndt.annotation
 - bucket: archive-{{NDT_SOURCE_PROJECT}}
   experiment: ndt
+  datatype: ndt5
+  target: tmp_ndt.ndt5
+- bucket: archive-{{NDT_SOURCE_PROJECT}}
+  experiment: ndt
   datatype: ndt7
   target: tmp_ndt.ndt7
 - bucket: archive-{{NDT_SOURCE_PROJECT}}

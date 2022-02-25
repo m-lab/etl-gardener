@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	JoinableDatatypes = map[string]bool{"ndt7": true, "scamper1": true}
+	JoinableDatatypes = map[string]bool{"ndt7": true, "scamper1": true, "ndt5": true}
 )
 
 func newStateFunc(detail string) ActionFunc {
