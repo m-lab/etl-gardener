@@ -162,6 +162,10 @@ func (j Job) IsDaily() string {
 	return strconv.FormatBool(isDaily)
 }
 
+func (j Job) Key() Key {
+	return Key(fmt.Sprintf("%s/%s/%s/%s", j.Bucket, j.Experiment, j.Datatype, j.Date.Format("20060102")))
+}
+
 // YesterdayDate returns the date for the daily job (e.g, yesterday UTC).
 func YesterdayDate() time.Time {
 	return time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -1)
