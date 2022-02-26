@@ -88,7 +88,8 @@ func (h *Handler) heartbeat(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusUnprocessableEntity)
 		return
 	}
-	if err := h.tracker.Heartbeat(job); err != nil {
+	// TODO(soltesz): update client to send "key" instead of job.
+	if err := h.tracker.Heartbeat(job.Key()); err != nil {
 		logx.Debug.Printf("%v %+v\n", err, job)
 		resp.WriteHeader(http.StatusGone)
 		return
@@ -117,7 +118,8 @@ func (h *Handler) update(resp http.ResponseWriter, req *http.Request) {
 	}
 	detail := req.Form.Get("detail")
 
-	if err := h.tracker.SetStatus(job, State(state), detail); err != nil {
+	// TODO(soltesz): update client to send "key" instead of job.
+	if err := h.tracker.SetStatus(job.Key(), State(state), detail); err != nil {
 		log.Printf("Not found %+v\n", job)
 		resp.WriteHeader(http.StatusGone)
 		return
@@ -144,7 +146,8 @@ func (h *Handler) errorFunc(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusFailedDependency)
 		return
 	}
-	if err := h.tracker.SetStatus(job, ParseError, jobErr); err != nil {
+	// TODO(soltesz): update client to send "key" instead of job.
+	if err := h.tracker.SetStatus(job.Key(), ParseError, jobErr); err != nil {
 		resp.WriteHeader(http.StatusGone)
 		return
 	}
