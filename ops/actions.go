@@ -44,7 +44,7 @@ func newJoinConditionFunc(tk *tracker.Tracker, detail string) ConditionFunc {
 		// (Technically, we only need to know whether the copy has completed.)
 		ann := j
 		ann.Datatype = "annotation"
-		status, err := tk.GetStatus(ann)
+		status, err := tk.GetStatus(ann.Key())
 		if err != nil {
 			// For early dates, there is no annotation job, so if the job
 			// is absent, we proceed with the join.

@@ -147,17 +147,17 @@ func (m *Monitor) UpdateJob(o *Outcome, state tracker.State) (string, error) {
 
 	switch {
 	case o.IsDone():
-		if err := m.tk.SetStatus(o.job, state, detail); err != nil {
+		if err := m.tk.SetStatus(o.job.Key(), state, detail); err != nil {
 			return "set status error", err
 		}
 		return "done", nil
 	case o.ShouldRetry():
-		if err := m.tk.SetDetail(o.job, detail); err != nil {
+		if err := m.tk.SetDetail(o.job.Key(), detail); err != nil {
 			return "set status error", err
 		}
 		return "retry", nil
 	default:
-		if err := m.tk.SetJobError(o.job, detail); err != nil {
+		if err := m.tk.SetJobError(o.job.Key(), detail); err != nil {
 			return "set status error", err
 		}
 		return "fail", nil
