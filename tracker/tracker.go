@@ -158,8 +158,8 @@ func InitTracker(
 			metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype, s.Label()).Inc()
 		}
 	}
-	// Map from Job to Status.
 
+	// Load the jobStatus and jobState from the loaded jobMap.
 	jobStatus := make(JobStatusMap, 100)
 	jobState := make(JobStateMap, 100)
 	for j, s := range jobMap {
@@ -392,6 +392,7 @@ func (tr *Tracker) SetJobError(key Key, errString string) error {
 func (tr *Tracker) GetState() (JobMap, Job, time.Time) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
+	// Construct a JobMap from the jobState and jobStatus maps.
 	m := make(JobMap)
 	for k, j := range tr.jobState {
 		s := tr.jobStatus[k]
