@@ -18,6 +18,7 @@ var (
 )
 
 // UpdateURL makes an update request URL.
+// TODO(soltesz): move client functions to client package.
 func UpdateURL(base url.URL, job Job, state State, detail string) *url.URL {
 	base.Path += "update"
 	params := make(url.Values, 3)
@@ -88,7 +89,7 @@ func (h *Handler) heartbeat(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusUnprocessableEntity)
 		return
 	}
-	// TODO(soltesz): update client to send "key" instead of job.
+	// TODO(soltesz): update client to send "id" instead of job.
 	if err := h.tracker.Heartbeat(job.Key()); err != nil {
 		logx.Debug.Printf("%v %+v\n", err, job)
 		resp.WriteHeader(http.StatusGone)
@@ -118,7 +119,7 @@ func (h *Handler) update(resp http.ResponseWriter, req *http.Request) {
 	}
 	detail := req.Form.Get("detail")
 
-	// TODO(soltesz): update client to send "key" instead of job.
+	// TODO(soltesz): update client to send "id" instead of job.
 	if err := h.tracker.SetStatus(job.Key(), State(state), detail); err != nil {
 		log.Printf("Not found %+v\n", job)
 		resp.WriteHeader(http.StatusGone)
@@ -146,7 +147,7 @@ func (h *Handler) errorFunc(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusFailedDependency)
 		return
 	}
-	// TODO(soltesz): update client to send "key" instead of job.
+	// TODO(soltesz): update client to send "id" instead of job.
 	if err := h.tracker.SetStatus(job.Key(), ParseError, jobErr); err != nil {
 		resp.WriteHeader(http.StatusGone)
 		return
