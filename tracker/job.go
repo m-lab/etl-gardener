@@ -19,7 +19,6 @@ import (
 	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
 	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
 
-	"github.com/m-lab/go/cloud/bqx"
 	"github.com/m-lab/go/cloud/gcs"
 
 	"github.com/m-lab/etl-gardener/metrics"
@@ -40,11 +39,9 @@ type Job struct {
 // JobWithTarget specifies a type/date job, and a destination
 // table or GCS prefix
 type JobWithTarget struct {
+	ID Key // ID used by gardener & parsers to identify a Job's status and configuration.
 	Job
-	// One of these two fields indicates the destination,
-	// either a BigQuery table, or a GCS bucket/prefix string.
-	TargetTable           bqx.PDT `json:",omitempty"`
-	TargetBucketAndPrefix string  `json:",omitempty"` // gs://bucket/prefix
+	// TODO: enable configuration for parser to target alterate buckets.
 }
 
 func (j JobWithTarget) String() string {
@@ -55,7 +52,8 @@ func (j JobWithTarget) String() string {
 // DEPRECATED
 // NB:  The date will be converted to UTC and truncated to day boundary!
 func NewJob(bucket, exp, typ string, date time.Time) Job {
-	return Job{Bucket: bucket,
+	return Job{
+		Bucket:     bucket,
 		Experiment: exp,
 		Datatype:   typ,
 		Date:       date.UTC().Truncate(24 * time.Hour),
@@ -84,18 +82,6 @@ func (j Job) failureMetric(state State, errString string) {
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, "generic").Inc()
 		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, j.IsDaily(), "generic").Inc()
 	}
-}
-
-// Target adds a Target to the job, returning a JobWithTarget
-func (j Job) Target(target string) (JobWithTarget, error) {
-	if strings.HasPrefix(target, "gs://") {
-		return JobWithTarget{Job: j, TargetBucketAndPrefix: target}, nil
-	}
-	pdt, err := bqx.ParsePDT(target)
-	if err != nil {
-		return JobWithTarget{}, err
-	}
-	return JobWithTarget{Job: j, TargetTable: pdt}, nil
 }
 
 // Path returns the GCS path prefix to the job data.
