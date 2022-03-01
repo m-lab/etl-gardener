@@ -62,11 +62,18 @@ var (
 		Value:   "datastore",
 	}
 	saverDir string
+	project  string
+
+	serviceMode = flagx.Enum{
+		Options: []string{"legacy", "manager"},
+		Value:   "legacy",
+	}
 
 	jobExpirationTime = flag.Duration("job_expiration_time", 24*time.Hour, "Time after which stale jobs will be purged")
 	jobCleanupDelay   = flag.Duration("job_cleanup_delay", 3*time.Hour, "Time after which completed jobs will be removed from tracker")
 	shutdownTimeout   = flag.Duration("shutdown_timeout", 1*time.Minute, "Graceful shutdown time allowance")
 	statusPort        = flag.String("status_port", ":0", "The public interface port where status (and pprof) will be published")
+	gardenerAddr      = flag.String("gardener_addr", ":8080", "The listen address for the gardener jobs service")
 
 	// Context and injected variables to allow smoke testing of main()
 	mainCtx, mainCancel = context.WithCancel(context.Background())
@@ -78,6 +85,9 @@ func init() {
 
 	flag.Var(&saverType, "saver.backend", "Set the saver backend to 'datastore' or 'local' file.")
 	flag.StringVar(&saverDir, "saver.dir", "local", "When the saver backend is 'local', place files in this directory")
+
+	flag.StringVar(&project, "project", "", "GCP project id")
+	flag.Var(&serviceMode, "service.mode", "Run the gardener in either 'legacy' (v1) or 'manager' (v2) mode.")
 }
 
 // Environment provides "global" variables.
@@ -124,6 +134,10 @@ var (
 
 func loadEnvVarsForTaskQueue() {
 	var ok bool
+
+	env.BatchDataset = os.Getenv("DATASET")
+	env.FinalDataset = os.Getenv("FINAL_DATASET")
+
 	env.QueueBase, ok = os.LookupEnv("QUEUE_BASE")
 	if !ok {
 		env.Error = ErrNoQueueBase
@@ -177,21 +191,13 @@ func loadEnvVarsForTaskQueue() {
 
 // LoadEnv loads any required environment variables.
 func LoadEnv() {
-	var ok bool
 	env.Commit = GitCommit
 	env.Version = Version
-	env.BatchDataset = os.Getenv("DATASET")
-	env.FinalDataset = os.Getenv("FINAL_DATASET")
-
-	env.Project, ok = os.LookupEnv("PROJECT")
-	if !ok {
+	env.ServiceMode = serviceMode.Value
+	env.Project = project
+	if env.Project == "" {
 		env.Error = ErrNoProject
 		log.Println(env.Error)
-	}
-
-	env.ServiceMode, ok = os.LookupEnv("SERVICE_MODE")
-	if !ok {
-		env.ServiceMode = "legacy"
 	}
 
 	switch env.ServiceMode {
@@ -354,14 +360,14 @@ func mustCreateJobService(ctx context.Context) *job.Service {
 
 	switch saverType.Value {
 	case "datastore":
-		saver, err = persistence.NewDatastoreSaver(context.Background(), os.Getenv("PROJECT"))
+		saver, err = persistence.NewDatastoreSaver(context.Background(), project)
 		rtx.Must(err, "Could not initialize datastore saver")
 	case "local":
 		saver = persistence.NewLocalSaver(saverDir)
 	}
 	svc, err := job.NewJobService(
 		ctx, globalTracker, config.StartDate(),
-		os.Getenv("PROJECT"), config.Sources(), saver,
+		project, config.Sources(), saver,
 		stiface.AdaptClient(storageClient))
 	rtx.Must(err, "Could not initialize job service")
 	return svc
@@ -398,7 +404,7 @@ func main() {
 	mux := http.NewServeMux()
 	// Start up the main job and update server.
 	server := &http.Server{
-		Addr:    ":8080",
+		Addr:    *gardenerAddr,
 		Handler: mux,
 	}
 
@@ -411,8 +417,8 @@ func main() {
 
 	switch env.ServiceMode {
 	case "manager":
-		// This is new new "manager" mode, in which Gardener provides /job and /update apis
-		// for parsers to get work and report progress.
+		// This is the v2 "manager" mode, in which Gardener provides the "jobs" API
+		// for parsers to request work and report progress.
 		// TODO Once the legacy deployments are turned down, this should move to head of main().
 		config.ParseConfig()
 
@@ -425,11 +431,10 @@ func main() {
 		// TODO - refactor this block.
 		cloudCfg := cloud.Config{
 			Project: env.Project,
-			Client:  nil}
+			Client:  nil,
+		}
 		bqConfig := NewBQConfig(cloudCfg)
-		bqConfig.BQFinalDataset = "base_tables"
-		bqConfig.BQBatchDataset = "batch"
-		monitor, err := ops.NewStandardMonitor(mainCtx, bqConfig, globalTracker)
+		monitor, err := ops.NewStandardMonitor(mainCtx, project, bqConfig, globalTracker)
 		rtx.Must(err, "NewStandardMonitor failed")
 		go monitor.Watch(mainCtx, 5*time.Second)
 
@@ -440,7 +445,7 @@ func main() {
 		healthy = true
 		log.Println("Running as manager service")
 	case "legacy":
-		// This is the "legacy" mode, that manages work through task queues.
+		// This is the v1 "legacy" mode, that manages work through task queues.
 		// TODO - this creates a storage client, which should be closed on termination.
 		th, err := taskHandlerFromEnv(mainCtx, http.DefaultClient)
 

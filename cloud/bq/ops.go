@@ -56,6 +56,8 @@ func NewTableOpsWithClient(client bqiface.Client, job tracker.Job, project strin
 		fallthrough
 	case "scamper1":
 		fallthrough
+	case "ndt5":
+		fallthrough
 	case "ndt7":
 		return &TableOps{
 			client:        client,
@@ -264,6 +266,9 @@ func (to TableOps) Join(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 			WriteDisposition: bigquery.WriteTruncate,
 			// Create the table if it doesn't exist
 			CreateDisposition: bigquery.CreateIfNeeded,
+			// Allow additional fields introduced by the raw tables to be automatically
+			// added to the joined, materialized output table.
+			SchemaUpdateOptions: []string{"ALLOW_FIELD_ADDITION", "ALLOW_FIELD_RELAXATION"},
 			// Partitioning spec, in event we have to create the table.
 			TimePartitioning: &bigquery.TimePartitioning{
 				Field:                  "date",
