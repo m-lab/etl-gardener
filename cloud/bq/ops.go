@@ -46,6 +46,8 @@ func NewTableOps(ctx context.Context, job tracker.Job, project string, loadSourc
 // NewTableOpsWithClient creates a suitable QueryParams for a Job.
 func NewTableOpsWithClient(client bqiface.Client, job tracker.Job, project string, loadSource string) (*TableOps, error) {
 	switch job.Datatype {
+	case "switch":
+		fallthrough
 	case "annotation":
 		fallthrough
 	case "hopannotation1":
