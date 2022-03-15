@@ -27,9 +27,9 @@ func TestStandardMonitor(t *testing.T) {
 	saver := tracker.NewLocalSaver(t.TempDir(), nil)
 	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
+	// Not supported.
 	tk.AddJob(tracker.NewJob("bucket", "exp", "type", time.Now()))
-	// Not yet supported.
-	tk.AddJob(tracker.NewJob("bucket", "exp2", "tcpinfo", time.Now()))
+	tk.AddJob(tracker.NewJob("bucket", "exp2", "type2", time.Now()))
 	// Valid experiment and datatype
 	// This does an actual dedup, so we need to allow enough time.
 	datatypes := []string{"ndt7", "annotation", "pcap", "hopannotation1", "scamper1"}
