@@ -56,6 +56,8 @@ func NewTableOpsWithClient(client bqiface.Client, job tracker.Job, project strin
 		fallthrough
 	case "scamper1":
 		fallthrough
+	case "tcpinfo":
+		fallthrough
 	case "ndt5":
 		fallthrough
 	case "ndt7":
