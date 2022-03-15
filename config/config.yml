@@ -34,7 +34,7 @@ sources:
   experiment: utilization
   datatype: switch
   target: tmp_utilization.switch
-#- bucket: archive-measurement-lab
-#  experiment: ndt
-#  datatype: tcpinfo
-#  target: tmp_ndt.tcpinfo
+- bucket: archive-{{NDT_SOURCE_PROJECT}}
+  experiment: ndt
+  datatype: tcpinfo
+  target: tmp_ndt.tcpinfo
