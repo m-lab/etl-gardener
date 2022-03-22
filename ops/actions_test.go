@@ -27,12 +27,11 @@ func TestStandardMonitor(t *testing.T) {
 	saver := tracker.NewLocalSaver(t.TempDir(), nil)
 	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
+	// Not supported.
 	tk.AddJob(tracker.NewJob("bucket", "exp", "type", time.Now()))
-	// Not yet supported.
-	tk.AddJob(tracker.NewJob("bucket", "exp2", "tcpinfo", time.Now()))
 	// Valid experiment and datatype
 	// This does an actual dedup, so we need to allow enough time.
-	datatypes := []string{"ndt7", "annotation", "pcap", "hopannotation1", "scamper1"}
+	datatypes := []string{"ndt7", "annotation", "pcap", "hopannotation1", "scamper1", "tcpinfo"}
 	for _, datatype := range datatypes {
 		tk.AddJob(tracker.NewJob("bucket", "ndt", datatype, time.Now()))
 	}
@@ -70,15 +69,15 @@ func TestStandardMonitor(t *testing.T) {
 	// "Joining" state.
 	failTime := time.Now().Add(300 * time.Second)
 
-	for time.Now().Before(failTime) && (tk.NumJobs() > 2 || tk.NumFailed() < 1) {
+	for time.Now().Before(failTime) && (tk.NumJobs() > 1 || tk.NumFailed() < 1) {
 		time.Sleep(time.Millisecond)
 	}
-	if tk.NumFailed() != 2 {
-		t.Error("Expected NumFailed = 2:", tk.NumFailed())
+	if tk.NumFailed() != 1 {
+		t.Error("Expected NumFailed = 1:", tk.NumFailed())
 	}
 	// We expect only the two failed jobs; ignore jobs in the final (joining) state.
 	count := tk.NumJobs()
-	if count > 2 {
+	if count > 1 {
 		jobs, _, _ := tk.GetState()
 		for j, s := range jobs {
 			a := m.GetAction(s.LastStateInfo().State)
@@ -96,8 +95,8 @@ func TestStandardMonitor(t *testing.T) {
 		fmt.Println()
 	}
 	// If there are still more than two failed jobs remaining, report an error.
-	if count != 2 {
-		t.Error("Expected NumJobs = 2:", tk.NumJobs())
+	if count != 1 {
+		t.Error("Expected NumJobs = 1:", tk.NumJobs())
 	}
 	cancel()
 }
