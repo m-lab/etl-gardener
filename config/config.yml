@@ -18,7 +18,7 @@ sources:
   experiment: ndt
   datatype: ndt7
   target: tmp_ndt.ndt7
-- bucket: archive-{{NDT_SOURCE_PROJECT}}
+- bucket: archive-measurement-lab
   experiment: ndt
   datatype: pcap
   target: tmp_ndt.pcap
