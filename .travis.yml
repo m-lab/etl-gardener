@@ -29,7 +29,7 @@ install:
 - gcloud components install beta
 - gcloud components install cloud-datastore-emulator
 
-# script:
+script:
 # Run all the non-integration unit tests.
 - cd $TRAVIS_BUILD_DIR
 - go test -v -coverprofile=_unit.cov ./...
