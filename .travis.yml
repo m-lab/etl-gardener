@@ -29,18 +29,18 @@ install:
 - gcloud components install beta
 - gcloud components install cloud-datastore-emulator
 
-script:
-# Run all the non-integration unit tests.
-- cd $TRAVIS_BUILD_DIR
-- go test -v -coverprofile=_unit.cov ./...
+# script:
+# # Run all the non-integration unit tests.
+# - cd $TRAVIS_BUILD_DIR
+# - go test -v -coverprofile=_unit.cov ./...
 
-# Run all integration unit tests. Some tests are repeated, but this preserves
-# coverage statistics.
-- ./integration-testing.sh
+# # Run all integration unit tests. Some tests are repeated, but this preserves
+# # coverage statistics.
+# - ./integration-testing.sh
 
-# Also run some concurrency sensitive tests with -race
-- go test -v ./tracker/... ./ops/... -race
+# # Also run some concurrency sensitive tests with -race
+# - go test -v ./tracker/... ./ops/... -race
 
-# Combine coverage of all unit tests and send the results to coveralls.
-- $HOME/gopath/bin/gocovmerge _*.cov > _merge.cov
-- $HOME/gopath/bin/goveralls -coverprofile=_merge.cov -service=travis-ci || true  # Ignore failure
+# # Combine coverage of all unit tests and send the results to coveralls.
+# - $HOME/gopath/bin/gocovmerge _*.cov > _merge.cov
+# - $HOME/gopath/bin/goveralls -coverprofile=_merge.cov -service=travis-ci || true  # Ignore failure
