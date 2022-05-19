@@ -52,19 +52,19 @@ steps:
     "build", "-t", "gardener-testing", "-f", "Dockerfile.testing", "."
   ]
 
-# - name: gardener-testing
-#   id: "Run all gardener unit tests"
-#   args:
-#   - go version
-#   - go get -v -t ./...
-#   - go get -v -tags=integration -t ./...
-#   - go test -v -coverprofile=_unit.cov ./...
-#   - go test -v ./tracker/... ./ops/... -race
-#   # Integration testing requires additional SA credentials.
-#   - ./integration-testing.sh
-#   env:
-#   - SERVICE_ACCOUNT_mlab_testing=$_SERVICE_ACCOUNT_MLAB_TESTING
-#   - WORKSPACE_LINK=/go/src/github.com/m-lab/etl-gardener
+- name: gardener-testing
+  id: "Run all gardener unit tests"
+  args:
+  - go version
+  - go get -v -t ./...
+  - go get -v -tags=integration -t ./...
+  - go test -v -coverprofile=_unit.cov ./...
+  - go test -v ./tracker/... ./ops/... -race
+  # Integration testing requires additional SA credentials.
+  - ./integration-testing.sh
+  env:
+  - SERVICE_ACCOUNT_mlab_testing=$_SERVICE_ACCOUNT_MLAB_TESTING
+  - WORKSPACE_LINK=/go/src/github.com/m-lab/etl-gardener
 
 - name: gcr.io/cloud-builders/docker
   id: "Build the etl-gardener docker container"
