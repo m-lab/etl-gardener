@@ -123,13 +123,6 @@ func NewBQConfig(config cloud.Config) cloud.BQConfig {
 	}
 }
 
-/*
-TODO: remove
-	err = reproc.RunDispatchLoop(mainCtx, th, env.Project, env.Bucket, env.Experiment, env.StartDate, env.DateSkip)
-	exec, err := rex.NewReprocessingExecutor(ctx, bqConfig)
-	return reproc.NewTaskHandler(env.Experiment, exec, queues, saver), nil
-*/
-
 // Job state tracker, when operating in manager mode.
 var globalTracker *tracker.Tracker
 
