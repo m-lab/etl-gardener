@@ -32,7 +32,6 @@ import (
 	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/etl-gardener/ops"
 	"github.com/m-lab/etl-gardener/persistence"
-	"github.com/m-lab/etl-gardener/state"
 	"github.com/m-lab/etl-gardener/tracker"
 
 	// Enable exported debug vars.  See https://golang.org/pkg/expvar/
@@ -149,7 +148,6 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	if globalTracker != nil {
 		globalTracker.WriteHTMLStatusTo(r.Context(), w)
 	}
-	state.WriteHTMLStatusTo(r.Context(), w, env.Project)
 	fmt.Fprintf(w, "</br>\n")
 
 	env := os.Environ()
