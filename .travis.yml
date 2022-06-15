@@ -13,7 +13,7 @@ before_install:
 
 # Coverage tools
 - go install github.com/mattn/goveralls@latest
-- go install get github.com/wadey/gocovmerge@latest
+- go install github.com/wadey/gocovmerge@latest
 
 # Install gcloud, for integration tests.
 - $TRAVIS_BUILD_DIR/travis/install_gcloud.sh
