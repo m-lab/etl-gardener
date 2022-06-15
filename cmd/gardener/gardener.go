@@ -126,7 +126,6 @@ func NewBQConfig(config cloud.Config) cloud.BQConfig {
 /*
 TODO: remove
 	err = reproc.RunDispatchLoop(mainCtx, th, env.Project, env.Bucket, env.Experiment, env.StartDate, env.DateSkip)
-func taskHandlerFromEnv(ctx context.Context, client *http.Client) (*reproc.TaskHandler, error) {
 	exec, err := rex.NewReprocessingExecutor(ctx, bqConfig)
 	return reproc.NewTaskHandler(env.Experiment, exec, queues, saver), nil
 */
@@ -141,8 +140,7 @@ var globalTracker *tracker.Tracker
 // Status provides basic information about the service.  For now, it is just
 // configuration and version info.  In future it will likely include more
 // dynamic information.
-// TODO(gfr) Add either a black list or a white list for the environment
-// variables, so we can hide sensitive vars. https://github.com/m-lab/etl/issues/384
+// TODO(github.com/m-lab/etl/issues/1095) Place all public accessible ports behind oauth access.
 func Status(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "<html><body>\n")
 	if len(env.Commit) >= 8 {
@@ -158,7 +156,7 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	if globalTracker != nil {
 		globalTracker.WriteHTMLStatusTo(r.Context(), w)
 	}
-	state.WriteHTMLStatusTo(r.Context(), w, env.Project, env.Experiment)
+	state.WriteHTMLStatusTo(r.Context(), w, env.Project)
 	fmt.Fprintf(w, "</br>\n")
 
 	env := os.Environ()
