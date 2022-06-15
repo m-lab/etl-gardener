@@ -19,6 +19,6 @@ WORKDIR $GOPATH
 RUN apt-get update
 RUN apt-get install -y jq gcc netcat
 RUN apt install ca-certificates libgnutls30 -y
-RUN go get -v github.com/m-lab/gcp-config/cmd/cbif
+RUN go install -v github.com/m-lab/gcp-config/cmd/cbif@v1.3.12
 
 ENTRYPOINT ["/go/bin/cbif"]
