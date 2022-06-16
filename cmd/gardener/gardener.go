@@ -176,11 +176,11 @@ func startStatusServer() *http.Server {
 	return server
 }
 
-var isReady = false
+var healthy = false
 
 // healthCheck, for now, used for both /ready and /alive.
 func healthCheck(w http.ResponseWriter, r *http.Request) {
-	if !isReady {
+	if !healthy {
 		log.Println("Reporting unhealthy for", r.RequestURI)
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, `{"message": "Internal server error."}`)
@@ -301,7 +301,7 @@ func main() {
 	handler := tracker.NewHandler(globalTracker, js)
 	handler.Register(mux)
 
-	isReady = true
+	healthy = true
 	log.Println("Running as manager service")
 
 	rtx.Must(httpx.ListenAndServeAsync(server), "Could not start main server")
