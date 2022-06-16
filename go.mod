@@ -10,11 +10,14 @@ require (
 	github.com/go-test/deep v1.0.8
 	github.com/googleapis/google-cloud-go-testing v0.0.0-20210719221736-1c9a4c676720
 	github.com/kelseyhightower/envconfig v1.4.0
+	github.com/m-lab/etl v2.4.3+incompatible
 	github.com/m-lab/go v0.1.48
 	github.com/prometheus/client_golang v1.12.2
 	golang.org/x/net v0.0.0-20220615171555-694bf12d69de
 	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
 	google.golang.org/api v0.84.0
+	google.golang.org/appengine v1.6.7
+	google.golang.org/grpc v1.47.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
@@ -41,8 +44,6 @@ require (
 	golang.org/x/sys v0.0.0-20220610221304-9f5ed59c137d // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f // indirect
-	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20220608133413-ed9918b62aac // indirect
-	google.golang.org/grpc v1.47.0 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 )
