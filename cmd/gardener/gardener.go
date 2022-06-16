@@ -115,10 +115,7 @@ func LoadEnv() {
 // NewBQConfig creates a BQConfig for use with NewDedupHandler
 func NewBQConfig(config cloud.Config) cloud.BQConfig {
 	return cloud.BQConfig{
-		Config:    config,
-		BQProject: config.Project,
-		// BQBatchDataset: env.BatchDataset,
-		// BQFinalDataset: env.FinalDataset,
+		Config: config,
 	}
 }
 
