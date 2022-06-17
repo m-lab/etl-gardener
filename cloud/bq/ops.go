@@ -16,6 +16,13 @@ import (
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
+var (
+	// ErrTableNotFound is returned when trying to load to non-existent tmp tables.
+	ErrTableNotFound = errors.New("table not found")
+	// ErrDatatypeNotSupported is returned by Query for unsupported datatypes.
+	ErrDatatypeNotSupported = errors.New("datatype not supported")
+)
+
 // TableOps is used to construct and execute table partition operations.
 type TableOps struct {
 	client     bqiface.Client
@@ -27,9 +34,6 @@ type TableOps struct {
 	PartitionKeys map[string]string
 	OrderKeys     string
 }
-
-// ErrDatatypeNotSupported is returned by Query for unsupported datatypes.
-var ErrDatatypeNotSupported = errors.New("Datatype not supported")
 
 // NewTableOps creates a suitable QueryParams for a Job.
 // The context is used to create a bigquery client, and should be kept alive while
