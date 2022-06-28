@@ -31,6 +31,7 @@ func UpdateURL(base url.URL, job Job, state State, detail string) *url.URL {
 }
 
 // HeartbeatURL makes an update request URL.
+// TODO(soltesz): move client functions to client package.
 func HeartbeatURL(base url.URL, job Job) *url.URL {
 	base.Path += "heartbeat"
 	params := make(url.Values, 3)
@@ -41,6 +42,7 @@ func HeartbeatURL(base url.URL, job Job) *url.URL {
 }
 
 // ErrorURL makes an update request URL.
+// TODO(soltesz): move client functions to client package.
 func ErrorURL(base url.URL, job Job, errString string) *url.URL {
 	base.Path += "error"
 	params := make(url.Values, 3)
@@ -84,12 +86,12 @@ func (h *Handler) heartbeat(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	// TODO(soltesz): update client to send "id" instead of job.
 	job, err := getJob(req.Form.Get("job"))
 	if err != nil {
 		resp.WriteHeader(http.StatusUnprocessableEntity)
 		return
 	}
-	// TODO(soltesz): update client to send "id" instead of job.
 	if err := h.tracker.Heartbeat(job.Key()); err != nil {
 		logx.Debug.Printf("%v %+v\n", err, job)
 		resp.WriteHeader(http.StatusGone)
@@ -107,6 +109,7 @@ func (h *Handler) update(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	// TODO(soltesz): update client to send "id" instead of job.
 	job, err := getJob(req.Form.Get("job"))
 	if err != nil {
 		resp.WriteHeader(http.StatusUnprocessableEntity)
@@ -119,7 +122,6 @@ func (h *Handler) update(resp http.ResponseWriter, req *http.Request) {
 	}
 	detail := req.Form.Get("detail")
 
-	// TODO(soltesz): update client to send "id" instead of job.
 	if err := h.tracker.SetStatus(job.Key(), State(state), detail); err != nil {
 		log.Printf("Not found %+v\n", job)
 		resp.WriteHeader(http.StatusGone)
@@ -138,6 +140,7 @@ func (h *Handler) errorFunc(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 	jobErr := req.Form.Get("error")
+	// TODO(soltesz): update client to send "id" instead of job.
 	job, err := getJob(req.Form.Get("job"))
 	if err != nil {
 		resp.WriteHeader(http.StatusUnprocessableEntity)
@@ -147,7 +150,6 @@ func (h *Handler) errorFunc(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusFailedDependency)
 		return
 	}
-	// TODO(soltesz): update client to send "id" instead of job.
 	if err := h.tracker.SetStatus(job.Key(), ParseError, jobErr); err != nil {
 		resp.WriteHeader(http.StatusGone)
 		return
