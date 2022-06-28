@@ -29,6 +29,7 @@ import (
 	"github.com/m-lab/go/logx"
 )
 
+// Key is a unique identifier for a single tracker Job. Key may be used as a map key.
 type Key string
 
 // jobStatusMap and jobStateMap are used within the tracker to map Job Keys to a
