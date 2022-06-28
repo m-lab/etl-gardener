@@ -149,6 +149,7 @@ func (j Job) IsDaily() string {
 }
 
 func (j Job) Key() Key {
+	// TODO(soltesz): include target dataset in key to allow different experiment/datatype combinations without conflict.
 	return Key(fmt.Sprintf("%s/%s/%s/%s", j.Bucket, j.Experiment, j.Datatype, j.Date.Format("20060102")))
 }
 
