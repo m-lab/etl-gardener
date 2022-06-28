@@ -30,25 +30,25 @@ import (
 )
 
 type Key string
-type JobStatusMap map[Key]Status
-type JobStateMap map[Key]Job
+
+// jobStatusMap and jobStateMap are used within the tracker to map Job Keys to a
+// Job or Job Status.
+type jobStatusMap map[Key]Status
+type jobStateMap map[Key]Job
 
 // Tracker keeps track of all the jobs in flight.
 // Only tracker functions should access any of the fields.
 type Tracker struct {
-	// client dsiface.Client
-	// dsKey  *datastore.Key
 	saver Saver
 
-	// The lock should be held whenever accessing the jobs JobMap
+	// The lock should be held whenever accessing the jobs maps.
 	lock         sync.Mutex
 	lastModified time.Time
 
 	// These are the stored values.
 	lastJob   Job          // The last job that was added/initialized.
-	jobs      JobMap       // Map from Job to Status.
-	jobStatus JobStatusMap // Map from Job to Status.
-	jobState  JobStateMap  // Map from Job to Status.
+	jobStatus jobStatusMap // Map from Job to Status.
+	jobState  jobStateMap  // Map from Job to Status.
 
 	// Time after which stale job should be ignored or replaced.
 	expirationTime time.Duration
@@ -160,8 +160,8 @@ func InitTracker(
 	}
 
 	// Load the jobStatus and jobState from the loaded jobMap.
-	jobStatus := make(JobStatusMap, 100)
-	jobState := make(JobStateMap, 100)
+	jobStatus := make(jobStatusMap, 100)
+	jobState := make(jobStateMap, 100)
 	for j, s := range jobMap {
 		jobStatus[j.Key()] = s
 		jobState[j.Key()] = j
