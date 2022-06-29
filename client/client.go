@@ -66,7 +66,7 @@ func NextJob(ctx context.Context, base url.URL) (tracker.JobWithTarget, error) {
 	decoder := json.NewDecoder(bytes.NewReader(b))
 	decoder.DisallowUnknownFields()
 
-	err = decoder.Decode(&job)
+	err = decoder.Decode(&job.Job)
 	if err != nil {
 		// TODO add metric, but in the correct namespace???
 		// When this happens, it is likely to be very spammy.
@@ -74,7 +74,7 @@ func NextJob(ctx context.Context, base url.URL) (tracker.JobWithTarget, error) {
 
 		// Try again but ignore unknown fields.
 		decoder = json.NewDecoder(bytes.NewReader(b))
-		err = decoder.Decode(&job)
+		err = decoder.Decode(&job.Job)
 		if err != nil {
 			// This is a more serious error.
 			log.Println(err)

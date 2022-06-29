@@ -48,7 +48,7 @@ func (g *fakeGardener) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		j := g.jobs[0]
 		g.jobs = g.jobs[1:]
-		w.Write(j.Marshal())
+		w.Write(j.Job.Marshal())
 	case "/heartbeat":
 		g.t.Log(r.URL.Path, r.URL.Query())
 		g.heartbeats++
@@ -78,8 +78,8 @@ func TestJobClient(t *testing.T) {
 	j, err := client.NextJob(ctx, *gURL)
 	rtx.Must(err, "next job")
 
-	if j.Path() != "gs://foobar/ndt/ndt5/2019/01/01/" {
-		t.Error(j.Path())
+	if j.Job.Path() != "gs://foobar/ndt/ndt5/2019/01/01/" {
+		t.Error(j.Job.Path())
 	}
 
 	j, err = client.NextJob(ctx, *gURL)

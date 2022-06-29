@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 // Package job provides an http handler to serve up jobs to ETL parsers.
@@ -130,7 +131,7 @@ func TestResume(t *testing.T) {
 	svc, err := job.NewJobService(ctx, tk, start, "fake-bucket", sources, &NullSaver{}, nil)
 	must(t, err)
 	j := svc.NextJob(ctx)
-	if j.Date != last.Date {
+	if j.Job.Date != last.Date {
 		t.Error(j, last)
 	}
 }
@@ -194,7 +195,7 @@ func TestResumeFromSaver(t *testing.T) {
 	must(t, err)
 	// NextJob should return a job with date provided by FakeSaver.
 	j := svc.NextJob(ctx)
-	if j.Date != resume {
+	if j.Job.Date != resume {
 		t.Error("Expected ", resume, "got", j)
 	}
 
