@@ -195,7 +195,7 @@ func TestNextJobHandler(t *testing.T) {
 	r := postAndExpect(t, &url, http.StatusOK)
 	want := `{"Bucket":"bucket","Experiment":"exp","Datatype":"type","Date":"2019-01-02T00:00:00Z"}`
 	if want != r {
-		t.Fatal(r)
+		t.Fatalf("/job returned wrong result: got %q, want %q", r, want)
 	}
 
 	// This one should fail because the fakeJobService returns empty results.
@@ -219,7 +219,7 @@ func TestNextJobV2Handler(t *testing.T) {
 	r := postAndExpect(t, &url, http.StatusOK)
 	want := `{"ID":"","Job":{"Bucket":"bucket","Experiment":"exp","Datatype":"type","Date":"2019-01-02T00:00:00Z"}}`
 	if want != r {
-		t.Fatal(r)
+		t.Fatalf("/v2/job/next returned wrong result: got %q, want %q", r, want)
 	}
 
 	// This one should fail because the fakeJobService returns empty results.
