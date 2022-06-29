@@ -148,6 +148,7 @@ func (j Job) IsDaily() string {
 	return strconv.FormatBool(isDaily)
 }
 
+// Key returns a Job unique identifier (within the set of all jobs), suitable for use as a map key.
 func (j Job) Key() Key {
 	// TODO(soltesz): include target dataset in key to allow different experiment/datatype combinations without conflict.
 	return Key(fmt.Sprintf("%s/%s/%s/%s", j.Bucket, j.Experiment, j.Datatype, j.Date.Format("20060102")))
