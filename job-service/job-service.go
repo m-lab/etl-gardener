@@ -160,6 +160,7 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 
 	job := svc.jobSpecs[svc.nextIndex]
 	job.Date = svc.Date
+	job.ID = job.Job.Key()
 	svc.nextIndex++
 
 	if svc.nextIndex >= len(svc.jobSpecs) {
@@ -240,10 +241,9 @@ func NewJobService(ctx context.Context, tk jobAdder, startDate time.Time,
 			Date:       time.Time{}, // This is not used.
 		}
 		// TODO - handle gs:// targets
-		jt, err := job.Target(targetBase + "." + s.Target)
-		if err != nil {
-			log.Println(err, targetBase+s.Target)
-			continue
+		jt := tracker.JobWithTarget{
+			ID:  job.Key(),
+			Job: job,
 		}
 		specs = append(specs, jt)
 	}

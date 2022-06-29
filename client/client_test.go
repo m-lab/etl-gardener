@@ -25,9 +25,9 @@ type fakeGardener struct {
 }
 
 func (g *fakeGardener) AddJob(job tracker.Job, target string) error {
-	jt, err := job.Target(target)
-	if err != nil {
-		return err
+	jt := tracker.JobWithTarget{
+		ID:  job.Key(),
+		Job: job,
 	}
 	g.jobs = append(g.jobs, jt)
 	return nil
@@ -39,7 +39,7 @@ func (g *fakeGardener) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Fatal("Should be POST") // Not t.Fatal because this is asynchronous.
 	}
 	g.lock.Lock()
-	g.lock.Unlock()
+	defer g.lock.Unlock()
 	switch r.URL.Path {
 	case "/job":
 		if len(g.jobs) < 1 {

@@ -99,7 +99,7 @@ func TestUpdateHandler(t *testing.T) {
 
 	// should update state to Parsing
 	postAndExpect(t, url, http.StatusOK)
-	stat, err := tk.GetStatus(job)
+	stat, err := tk.GetStatus(job.Key())
 	must(t, err)
 	if stat.State() != tracker.Parsing {
 		t.Fatal("update failed", stat)
@@ -108,7 +108,7 @@ func TestUpdateHandler(t *testing.T) {
 	url = tracker.UpdateURL(server, job, tracker.Complete, "")
 	postAndExpect(t, url, http.StatusOK)
 
-	_, err = tk.GetStatus(job)
+	_, err = tk.GetStatus(job.Key())
 	if err != tracker.ErrJobNotFound {
 		t.Fatal("Expected JobNotFound", err)
 	}
@@ -131,7 +131,7 @@ func TestHeartbeatHandler(t *testing.T) {
 
 	// should update state to Parsing
 	postAndExpect(t, url, http.StatusOK)
-	stat, err := tk.GetStatus(job)
+	stat, err := tk.GetStatus(job.Key())
 	must(t, err)
 	if time.Since(stat.HeartbeatTime) > 1*time.Second {
 		t.Fatal("heartbeat failed", stat)
@@ -141,7 +141,7 @@ func TestHeartbeatHandler(t *testing.T) {
 	url = tracker.UpdateURL(server, job, tracker.Complete, "")
 	postAndExpect(t, url, http.StatusOK)
 
-	_, err = tk.GetStatus(job)
+	_, err = tk.GetStatus(job.Key())
 	if err != tracker.ErrJobNotFound {
 		t.Fatal("Expected JobNotFound", err)
 	}
@@ -163,7 +163,7 @@ func TestErrorHandler(t *testing.T) {
 
 	// should successfully update state to Failed
 	postAndExpect(t, url, http.StatusOK)
-	stat, err := tk.GetStatus(job)
+	stat, err := tk.GetStatus(job.Key())
 	must(t, err)
 	if stat.Detail() != "error" {
 		t.Error("Expected error:", stat.Detail())
@@ -175,7 +175,7 @@ func TestErrorHandler(t *testing.T) {
 	url = tracker.UpdateURL(server, job, tracker.Complete, "")
 	postAndExpect(t, url, http.StatusOK)
 
-	_, err = tk.GetStatus(job)
+	_, err = tk.GetStatus(job.Key())
 	if err != tracker.ErrJobNotFound {
 		t.Fatal("Expected JobNotFound", err)
 	}

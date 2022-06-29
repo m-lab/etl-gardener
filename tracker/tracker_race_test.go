@@ -52,12 +52,12 @@ func TestConcurrentUpdates(t *testing.T) {
 				Date:       startDate.Add(time.Duration(24*rand.Intn(jobs)) * time.Hour),
 			}
 			if i%5 == 0 {
-				err := tk.SetStatus(k, tracker.State(fmt.Sprintf("State:%d", i)), "")
+				err := tk.SetStatus(k.Key(), tracker.State(fmt.Sprintf("State:%d", i)), "")
 				if err != nil {
 					log.Fatal(err, " ", k)
 				}
 			} else {
-				err := tk.Heartbeat(k)
+				err := tk.Heartbeat(k.Key())
 				if err != nil {
 					log.Fatal(err, " ", k)
 				}

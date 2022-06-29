@@ -91,7 +91,7 @@ func TestOutcomeUpdate(t *testing.T) {
 	retry := ops.Retry(job, errors.New("error"), "foobar")
 	m.UpdateJob(retry, tracker.Joining)
 
-	status, err := tk.GetStatus(job)
+	status, err := tk.GetStatus(job.Key())
 	must(t, err)
 	if status.Detail() != "foobar" {
 		t.Error(status.Detail())
