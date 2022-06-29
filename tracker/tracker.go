@@ -32,8 +32,8 @@ import (
 // Key is a unique identifier for a single tracker Job. Key may be used as a map key.
 type Key string
 
-// jobStatusMap and jobStateMap are used within the tracker to map Job Keys to a
-// Job or Job Status.
+// jobStatusMap and jobStateMap are used by the tracker to save all Jobs and Job
+// statuses using a shared job Key.
 type jobStatusMap map[Key]Status
 type jobStateMap map[Key]Job
 
@@ -46,10 +46,12 @@ type Tracker struct {
 	lock         sync.Mutex
 	lastModified time.Time
 
-	// These are the stored values.
-	lastJob   Job          // The last job that was added/initialized.
-	jobStatus jobStatusMap // Map from Job to Status.
-	jobState  jobStateMap  // Map from Job to Status.
+	// These values are the complete tracker job state and statuses. They are
+	// periodically saved to external storage. On startup, these values are
+	// loaded back so the tracker may resume from last known state.
+	lastJob  Job          // The last job that was added/initialized.
+	statuses jobStatusMap // statuses contains all tracked Job statuses.
+	jobs     jobStateMap  // jobs contains all tracked Jobs.
 
 	// Time after which stale job should be ignored or replaced.
 	expirationTime time.Duration
@@ -150,7 +152,7 @@ func InitTracker(
 
 	jobMap, lastJob, err := saver.Load(ctx)
 	if err != nil {
-		jobMap = make(JobMap, 100)
+		jobMap = make(JobMap)
 	}
 	for j, s := range jobMap {
 		// Update the metrics for all jobs still in flight or failed.
@@ -160,18 +162,18 @@ func InitTracker(
 		}
 	}
 
-	// Load the jobStatus and jobState from the loaded jobMap.
-	jobStatus := make(jobStatusMap, 100)
-	jobState := make(jobStateMap, 100)
+	// Load the statuses and jobs from the loaded jobMap.
+	statuses := make(jobStatusMap)
+	jobs := make(jobStateMap)
 	for j, s := range jobMap {
-		jobStatus[j.Key()] = s
-		jobState[j.Key()] = j
+		statuses[j.Key()] = s
+		jobs[j.Key()] = j
 	}
 	t := Tracker{
 		saver: saver, lastModified: time.Now(),
 		lastJob:        lastJob,
-		jobState:       jobState,
-		jobStatus:      jobStatus,
+		jobs:           jobs,
+		statuses:       statuses,
 		expirationTime: expirationTime, cleanupDelay: cleanupDelay}
 	if saver != nil && saveInterval > 0 {
 		go t.saveEvery(ctx, saveInterval)
@@ -184,7 +186,7 @@ func InitTracker(
 func (tr *Tracker) NumJobs() int {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	return len(tr.jobState)
+	return len(tr.jobs)
 }
 
 // NumFailed returns the number of failed jobs.
@@ -248,7 +250,7 @@ func (tr *Tracker) saveEvery(ctx context.Context, interval time.Duration) {
 func (tr *Tracker) GetStatus(key Key) (Status, error) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	status, ok := tr.jobStatus[key]
+	status, ok := tr.statuses[key]
 	if !ok {
 		return Status{}, ErrJobNotFound
 	}
@@ -262,7 +264,7 @@ func (tr *Tracker) AddJob(job Job) error {
 
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	s, ok := tr.jobStatus[job.Key()]
+	s, ok := tr.statuses[job.Key()]
 	if ok {
 		if s.isDone() {
 			log.Println("Restarting completed job", job)
@@ -278,8 +280,8 @@ func (tr *Tracker) AddJob(job Job) error {
 	tr.lastJob = job
 	tr.lastModified = time.Now()
 	metrics.StartedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
-	tr.jobStatus[job.Key()] = status
-	tr.jobState[job.Key()] = job
+	tr.statuses[job.Key()] = status
+	tr.jobs[job.Key()] = job
 	status.updateMetrics(job)
 	return nil
 }
@@ -289,11 +291,11 @@ func (tr *Tracker) AddJob(job Job) error {
 func (tr *Tracker) UpdateJob(key Key, new Status) error {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	old, ok := tr.jobStatus[key]
+	old, ok := tr.statuses[key]
 	if !ok {
 		return ErrJobNotFound
 	}
-	job, ok := tr.jobState[key]
+	job, ok := tr.jobs[key]
 	if !ok {
 		return ErrJobNotFound
 	}
@@ -311,13 +313,13 @@ func (tr *Tracker) UpdateJob(key Key, new Status) error {
 
 		// This could be done by GetStatus, but would change behaviors slightly.
 		if tr.cleanupDelay == 0 {
-			delete(tr.jobStatus, key)
-			delete(tr.jobState, key)
+			delete(tr.statuses, key)
+			delete(tr.jobs, key)
 			return nil
 		}
 	}
-	tr.jobStatus[key] = new
-	tr.jobState[key] = job
+	tr.statuses[key] = new
+	tr.jobs[key] = job
 	return nil
 }
 
@@ -340,7 +342,7 @@ func (tr *Tracker) SetStatus(key Key, state State, detail string) error {
 	// NOTE: This is not a deep copy.  Shares the History elements.
 	status, err := tr.GetStatus(key)
 	if err != nil {
-		job := tr.jobState[key]
+		job := tr.jobs[key]
 		metrics.WarningCount.WithLabelValues(job.Experiment, job.Datatype, "NoSuchJob").Inc()
 		return err
 	}
@@ -379,7 +381,7 @@ func (tr *Tracker) SetJobError(key Key, errString string) error {
 		return err
 	}
 	oldState := status.State()
-	job := tr.jobState[key]
+	job := tr.jobs[key]
 	job.failureMetric(oldState, errString)
 	status.NewState(Failed)
 	// Set the final detail to include the prior state and error message.
@@ -393,10 +395,10 @@ func (tr *Tracker) SetJobError(key Key, errString string) error {
 func (tr *Tracker) GetState() (JobMap, Job, time.Time) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	// Construct a JobMap from the jobState and jobStatus maps.
+	// Construct a JobMap from the jobs and statues maps.
 	m := make(JobMap)
-	for k, j := range tr.jobState {
-		s := tr.jobStatus[k]
+	for k, j := range tr.jobs {
+		s := tr.statuses[k]
 		// Remove any obsolete jobs.
 		updateTime := s.DetailTime()
 		if (tr.expirationTime > 0 && time.Since(updateTime) > tr.expirationTime) ||
@@ -407,8 +409,8 @@ func (tr *Tracker) GetState() (JobMap, Job, time.Time) {
 				log.Println("Deleting stale job", j, time.Since(updateTime), tr.cleanupDelay)
 			}
 			tr.lastModified = time.Now()
-			delete(tr.jobState, k)
-			delete(tr.jobStatus, k)
+			delete(tr.jobs, k)
+			delete(tr.statuses, k)
 		} else {
 			m[j] = s
 		}
