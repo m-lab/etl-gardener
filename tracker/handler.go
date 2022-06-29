@@ -157,11 +157,11 @@ func (h *Handler) errorFunc(resp http.ResponseWriter, req *http.Request) {
 	resp.WriteHeader(http.StatusOK)
 }
 
-func (h *Handler) nextJob(resp http.ResponseWriter, req *http.Request) {
+func (h *Handler) nextJob(resp http.ResponseWriter, req *http.Request) *JobWithTarget {
 	// Must be a post because it changes state.
 	if req.Method != http.MethodPost {
 		resp.WriteHeader(http.StatusMethodNotAllowed)
-		return
+		return nil
 	}
 	job := h.jobservice.NextJob(req.Context())
 
@@ -170,7 +170,7 @@ func (h *Handler) nextJob(resp http.ResponseWriter, req *http.Request) {
 		log.Println(MsgNoJobFound)
 		resp.WriteHeader(http.StatusInternalServerError)
 		resp.Write([]byte(MsgNoJobFound))
-		return
+		return nil
 	}
 
 	err := h.tracker.AddJob(job.Job)
@@ -178,11 +178,32 @@ func (h *Handler) nextJob(resp http.ResponseWriter, req *http.Request) {
 		log.Println(err, job)
 		resp.WriteHeader(http.StatusInternalServerError)
 		resp.Write([]byte(MsgJobExists))
+		return nil
+	}
+	return &job
+}
+
+// nextJobV1 returns the next JobWithTarget and returns the tracker.Job to the requesting client.
+func (h *Handler) nextJobV1(resp http.ResponseWriter, req *http.Request) {
+	job := h.nextJob(resp, req)
+	log.Printf("Dispatching %s\n", job.Job)
+	_, err := resp.Write(job.Marshal())
+	if err != nil {
+		log.Println(err)
+		// This should precede the Write(), but the Write failed, so this
+		// is likely ok.
+		resp.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+}
 
+// nextJobV2 returns the next JobWithTarget to the requesting client.
+func (h *Handler) nextJobV2(resp http.ResponseWriter, req *http.Request) {
+	job := h.nextJob(resp, req)
 	log.Printf("Dispatching %s\n", job.Job)
-	_, err = resp.Write(job.Marshal())
+	// Marshal complete JobWithTarget object.
+	b, _ := json.Marshal(job)
+	_, err := resp.Write(b)
 	if err != nil {
 		log.Println(err)
 		// This should precede the Write(), but the Write failed, so this
@@ -197,5 +218,5 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/heartbeat", h.heartbeat)
 	mux.HandleFunc("/update", h.update)
 	mux.HandleFunc("/error", h.errorFunc)
-	mux.HandleFunc("/job", h.nextJob)
+	mux.HandleFunc("/job", h.nextJobV1)
 }
