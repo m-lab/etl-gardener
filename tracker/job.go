@@ -39,13 +39,13 @@ type Job struct {
 // JobWithTarget specifies a type/date job, and a destination
 // table or GCS prefix
 type JobWithTarget struct {
-	ID Key // ID used by gardener & parsers to identify a Job's status and configuration.
-	Job
+	ID  Key // ID used by gardener & parsers to identify a Job's status and configuration.
+	Job Job
 	// TODO: enable configuration for parser to target alterate buckets.
 }
 
 func (j JobWithTarget) String() string {
-	return fmt.Sprint(j.Job.String(), j.Filter)
+	return fmt.Sprint(j.Job.String(), j.Job.Filter)
 }
 
 // NewJob creates a new job object.
