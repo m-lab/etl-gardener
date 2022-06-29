@@ -204,3 +204,27 @@ func TestNextJobHandler(t *testing.T) {
 	// This one should fail because the fakeJobService returns a duplicate job.
 	postAndExpect(t, &url, http.StatusInternalServerError)
 }
+
+func TestNextJobV2Handler(t *testing.T) {
+	date := time.Date(2019, 01, 02, 0, 0, 0, 0, time.UTC)
+	job := tracker.NewJob("bucket", "exp", "type", date)
+	// Add job, empty, and duplicate job.
+	url, _ := testSetup(t, []tracker.Job{job, tracker.Job{}, job})
+	url.Path = "/v2/job/next"
+
+	// Wrong method.
+	getAndExpect(t, &url, http.StatusMethodNotAllowed)
+
+	// This should succeed, because the fakeJobService returns its job.
+	r := postAndExpect(t, &url, http.StatusOK)
+	want := `{"ID":"","Job":{"Bucket":"bucket","Experiment":"exp","Datatype":"type","Date":"2019-01-02T00:00:00Z"}}`
+	if want != r {
+		t.Fatal(r)
+	}
+
+	// This one should fail because the fakeJobService returns empty results.
+	postAndExpect(t, &url, http.StatusInternalServerError)
+
+	// This one should fail because the fakeJobService returns a duplicate job.
+	postAndExpect(t, &url, http.StatusInternalServerError)
+}
