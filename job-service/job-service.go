@@ -49,7 +49,7 @@ func (y *YesterdaySource) nextJob(ctx context.Context) *tracker.JobWithTarget {
 
 	// Copy the jobspec and set the date.
 	job := y.jobSpecs[y.nextIndex]
-	job.Date = y.Date
+	job.Job.Date = y.Date
 
 	// Advance to the next jobSpec for next call.
 	y.nextIndex++
@@ -159,7 +159,7 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 	}
 
 	job := svc.jobSpecs[svc.nextIndex]
-	job.Date = svc.Date
+	job.Job.Date = svc.Date
 	job.ID = job.Job.Key()
 	svc.nextIndex++
 
@@ -184,7 +184,7 @@ func (svc *Service) ifHasFiles(ctx context.Context, job tracker.JobWithTarget) t
 			log.Println(err)
 		}
 		if !ok {
-			log.Println(job, "has no files", job.Bucket)
+			log.Println(job, "has no files", job.Job.Bucket)
 			return tracker.JobWithTarget{}
 		}
 	}
