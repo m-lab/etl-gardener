@@ -50,6 +50,8 @@ func (j JobWithTarget) String() string {
 	return fmt.Sprint(j.Job.String(), j.Job.Filter)
 }
 
+// Marshal marshals the JobWithTarget to json. If the JobWithTarget type ever
+// includes fields that cannot be marshalled, then Marshal will panic.
 func (j JobWithTarget) Marshal() []byte {
 	b, err := json.Marshal(j)
 	// NOTE: marshaling a struct with primitive types should never fail.
@@ -103,7 +105,8 @@ func (j Job) Path() string {
 		j.Bucket, j.Experiment, j.Date.Format("2006/01/02/"))
 }
 
-// Marshal marshals the job to json.
+// Marshal marshals the Job to json. If the Job type ever includes fields that
+// cannot be marshalled, then Marshal will panic.
 func (j Job) Marshal() []byte {
 	b, err := json.Marshal(j)
 	rtx.PanicOnError(err, "failed to marshal Job: %s", j)
