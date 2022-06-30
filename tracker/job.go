@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/m-lab/go/rtx"
+
 	"cloud.google.com/go/datastore"
 	"cloud.google.com/go/storage"
 	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
@@ -46,6 +48,13 @@ type JobWithTarget struct {
 
 func (j JobWithTarget) String() string {
 	return fmt.Sprint(j.Job.String(), j.Job.Filter)
+}
+
+func (j JobWithTarget) Marshal() []byte {
+	b, err := json.Marshal(j)
+	// NOTE: marshaling a struct with primitive types should never fail.
+	rtx.PanicOnError(err, "failed to marshal JobWithTarget: %s", j)
+	return b
 }
 
 // NewJob creates a new job object.
@@ -96,7 +105,8 @@ func (j Job) Path() string {
 
 // Marshal marshals the job to json.
 func (j Job) Marshal() []byte {
-	b, _ := json.Marshal(j)
+	b, err := json.Marshal(j)
+	rtx.PanicOnError(err, "failed to marshal Job: %s", j)
 	return b
 }
 
