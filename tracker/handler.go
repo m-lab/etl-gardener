@@ -111,7 +111,7 @@ func (h *Handler) heartbeat(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if err := h.tracker.Heartbeat(id); err != nil {
-		logx.Debug.Printf("%v %+v\n", err, id)
+		logx.Debug.Printf("Heartbeat(%q) failed: %v\n", id, err)
 		resp.WriteHeader(http.StatusGone)
 		return
 	}
@@ -179,34 +179,34 @@ func (h *Handler) nextJob(resp http.ResponseWriter, req *http.Request) *JobWithT
 		resp.WriteHeader(http.StatusMethodNotAllowed)
 		return nil
 	}
-	job := h.jobservice.NextJob(req.Context())
+	jt := h.jobservice.NextJob(req.Context())
 
 	// Check for empty job (no job found with files)
-	if job.Job.Date.Equal(time.Time{}) {
+	if jt.Job.Date.Equal(time.Time{}) {
 		log.Println(MsgNoJobFound)
 		resp.WriteHeader(http.StatusInternalServerError)
 		resp.Write([]byte(MsgNoJobFound))
 		return nil
 	}
 
-	err := h.tracker.AddJob(job.Job)
+	err := h.tracker.AddJob(jt.Job)
 	if err != nil {
-		log.Println(err, job)
+		log.Println(err, jt)
 		resp.WriteHeader(http.StatusInternalServerError)
 		resp.Write([]byte(MsgJobExists))
 		return nil
 	}
-	return &job
+	return &jt
 }
 
 // nextJobV1 returns the next JobWithTarget and returns the tracker.Job to the requesting client.
 func (h *Handler) nextJobV1(resp http.ResponseWriter, req *http.Request) {
-	job := h.nextJob(resp, req)
-	if job == nil {
+	jt := h.nextJob(resp, req)
+	if jt == nil {
 		return
 	}
-	log.Printf("Dispatching %s\n", job.Job)
-	_, err := resp.Write(job.Job.Marshal())
+	log.Printf("Dispatching %s\n", jt.Job)
+	_, err := resp.Write(jt.Job.Marshal())
 	if err != nil {
 		log.Println(err)
 		return
@@ -215,14 +215,12 @@ func (h *Handler) nextJobV1(resp http.ResponseWriter, req *http.Request) {
 
 // nextJobV2 returns the next JobWithTarget to the requesting client.
 func (h *Handler) nextJobV2(resp http.ResponseWriter, req *http.Request) {
-	job := h.nextJob(resp, req)
-	if job == nil {
+	jt := h.nextJob(resp, req)
+	if jt == nil {
 		return
 	}
-	log.Printf("Dispatching %s\n", job.Job)
-	// Marshal complete JobWithTarget object.
-	b, _ := json.Marshal(job)
-	_, err := resp.Write(b)
+	log.Printf("Dispatching %s\n", jt.Job)
+	_, err := resp.Write(jt.Marshal())
 	if err != nil {
 		log.Println(err)
 		return
