@@ -54,7 +54,7 @@ func ErrorURL(base url.URL, job Job, errString string) *url.URL {
 }
 
 type JobService interface {
-	NextJob(ctx context.Context) JobWithTarget
+	NextJob(ctx context.Context) *JobWithTarget
 }
 
 // Handler provides handlers for update, heartbeat, etc.
@@ -196,7 +196,7 @@ func (h *Handler) nextJob(resp http.ResponseWriter, req *http.Request) *JobWithT
 		resp.Write([]byte(MsgJobExists))
 		return nil
 	}
-	return &jt
+	return jt
 }
 
 // nextJobV1 returns the next JobWithTarget and returns the tracker.Job to the requesting client.
