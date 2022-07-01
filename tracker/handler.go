@@ -77,6 +77,25 @@ func getJob(jobString string) (Job, error) {
 	return job, err
 }
 
+func getID(req *http.Request) (Key, error) {
+	// Prefer the /v2 "id" parameter.
+	id := req.Form.Get("id")
+	if id != "" {
+		return Key(id), nil
+	}
+
+	// Fallback to the "job" parameter used by the original /job api.
+	j := req.Form.Get("job")
+	if j == "" {
+		return "", errors.New("no job id found")
+	}
+	job, err := getJob(j)
+	if err != nil {
+		return "", err
+	}
+	return job.Key(), nil
+}
+
 func (h *Handler) heartbeat(resp http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		resp.WriteHeader(http.StatusMethodNotAllowed)
@@ -86,14 +105,13 @@ func (h *Handler) heartbeat(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	// TODO(soltesz): update client to send "id" instead of job.
-	job, err := getJob(req.Form.Get("job"))
+	id, err := getID(req)
 	if err != nil {
 		resp.WriteHeader(http.StatusUnprocessableEntity)
 		return
 	}
-	if err := h.tracker.Heartbeat(job.Key()); err != nil {
-		logx.Debug.Printf("%v %+v\n", err, job)
+	if err := h.tracker.Heartbeat(id); err != nil {
+		logx.Debug.Printf("Heartbeat(%q) failed: %v\n", id, err)
 		resp.WriteHeader(http.StatusGone)
 		return
 	}
@@ -109,8 +127,7 @@ func (h *Handler) update(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	// TODO(soltesz): update client to send "id" instead of job.
-	job, err := getJob(req.Form.Get("job"))
+	id, err := getID(req)
 	if err != nil {
 		resp.WriteHeader(http.StatusUnprocessableEntity)
 		return
@@ -122,8 +139,8 @@ func (h *Handler) update(resp http.ResponseWriter, req *http.Request) {
 	}
 	detail := req.Form.Get("detail")
 
-	if err := h.tracker.SetStatus(job.Key(), State(state), detail); err != nil {
-		log.Printf("Not found %+v\n", job)
+	if err := h.tracker.SetStatus(id, State(state), detail); err != nil {
+		log.Printf("Not found %+v\n", id)
 		resp.WriteHeader(http.StatusGone)
 		return
 	}
@@ -140,8 +157,7 @@ func (h *Handler) errorFunc(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 	jobErr := req.Form.Get("error")
-	// TODO(soltesz): update client to send "id" instead of job.
-	job, err := getJob(req.Form.Get("job"))
+	id, err := getID(req)
 	if err != nil {
 		resp.WriteHeader(http.StatusUnprocessableEntity)
 		return
@@ -150,44 +166,63 @@ func (h *Handler) errorFunc(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusFailedDependency)
 		return
 	}
-	if err := h.tracker.SetStatus(job.Key(), ParseError, jobErr); err != nil {
+	if err := h.tracker.SetStatus(id, ParseError, jobErr); err != nil {
 		resp.WriteHeader(http.StatusGone)
 		return
 	}
 	resp.WriteHeader(http.StatusOK)
 }
 
-func (h *Handler) nextJob(resp http.ResponseWriter, req *http.Request) {
+func (h *Handler) nextJob(resp http.ResponseWriter, req *http.Request) *JobWithTarget {
 	// Must be a post because it changes state.
 	if req.Method != http.MethodPost {
 		resp.WriteHeader(http.StatusMethodNotAllowed)
-		return
+		return nil
 	}
-	job := h.jobservice.NextJob(req.Context())
+	jt := h.jobservice.NextJob(req.Context())
 
 	// Check for empty job (no job found with files)
-	if job.Date.Equal(time.Time{}) {
+	if jt.Job.Date.Equal(time.Time{}) {
 		log.Println(MsgNoJobFound)
 		resp.WriteHeader(http.StatusInternalServerError)
 		resp.Write([]byte(MsgNoJobFound))
-		return
+		return nil
 	}
 
-	err := h.tracker.AddJob(job.Job)
+	err := h.tracker.AddJob(jt.Job)
 	if err != nil {
-		log.Println(err, job)
+		log.Println(err, jt)
 		resp.WriteHeader(http.StatusInternalServerError)
 		resp.Write([]byte(MsgJobExists))
+		return nil
+	}
+	return &jt
+}
+
+// nextJobV1 returns the next JobWithTarget and returns the tracker.Job to the requesting client.
+func (h *Handler) nextJobV1(resp http.ResponseWriter, req *http.Request) {
+	jt := h.nextJob(resp, req)
+	if jt == nil {
 		return
 	}
-
-	log.Printf("Dispatching %s\n", job.Job)
-	_, err = resp.Write(job.Marshal())
+	log.Printf("Dispatching %s\n", jt.Job)
+	_, err := resp.Write(jt.Job.Marshal())
 	if err != nil {
 		log.Println(err)
-		// This should precede the Write(), but the Write failed, so this
-		// is likely ok.
-		resp.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
+// nextJobV2 returns the next JobWithTarget to the requesting client.
+func (h *Handler) nextJobV2(resp http.ResponseWriter, req *http.Request) {
+	jt := h.nextJob(resp, req)
+	if jt == nil {
+		return
+	}
+	log.Printf("Dispatching %s\n", jt.Job)
+	_, err := resp.Write(jt.Marshal())
+	if err != nil {
+		log.Println(err)
 		return
 	}
 }
@@ -197,5 +232,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/heartbeat", h.heartbeat)
 	mux.HandleFunc("/update", h.update)
 	mux.HandleFunc("/error", h.errorFunc)
-	mux.HandleFunc("/job", h.nextJob)
+	mux.HandleFunc("/job", h.nextJobV1)
+
+	mux.HandleFunc("/v2/job/heartbeat", h.heartbeat)
+	mux.HandleFunc("/v2/job/update", h.update)
+	mux.HandleFunc("/v2/job/error", h.errorFunc)
+	mux.HandleFunc("/v2/job/next", h.nextJobV2)
 }
