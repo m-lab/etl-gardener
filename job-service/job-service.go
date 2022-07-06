@@ -48,8 +48,9 @@ func (y *YesterdaySource) nextJob(ctx context.Context) *tracker.JobWithTarget {
 	}
 
 	// Copy the jobspec and set the date.
-	job := y.jobSpecs[y.nextIndex]
-	job.Job.Date = y.Date
+	jt := y.jobSpecs[y.nextIndex]
+	jt.Job.Date = y.Date
+	jt.ID = jt.Job.Key()
 
 	// Advance to the next jobSpec for next call.
 	y.nextIndex++
@@ -68,7 +69,7 @@ func (y *YesterdaySource) nextJob(ctx context.Context) *tracker.JobWithTarget {
 		}
 	}
 
-	return &job
+	return &jt
 }
 
 func initYesterday(ctx context.Context, saver persistence.Saver, delay time.Duration, specs []tracker.JobWithTarget) (*YesterdaySource, error) {
@@ -158,9 +159,9 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 		return svc.ifHasFiles(ctx, *j)
 	}
 
-	job := svc.jobSpecs[svc.nextIndex]
-	job.Job.Date = svc.Date
-	job.ID = job.Job.Key()
+	jt := svc.jobSpecs[svc.nextIndex]
+	jt.Job.Date = svc.Date
+	jt.ID = jt.Job.Key()
 	svc.nextIndex++
 
 	if svc.nextIndex >= len(svc.jobSpecs) {
@@ -174,7 +175,7 @@ func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
 			log.Println(err)
 		}
 	}
-	return svc.ifHasFiles(ctx, job)
+	return svc.ifHasFiles(ctx, jt)
 }
 
 func (svc *Service) ifHasFiles(ctx context.Context, job tracker.JobWithTarget) tracker.JobWithTarget {
