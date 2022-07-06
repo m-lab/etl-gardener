@@ -107,7 +107,7 @@ func TestJobClient_Next(t *testing.T) {
 			}
 			c := NewJobClient(*u)
 			if tt.corruptTransport {
-				// Corrupt the default http transport so that making the reqeust fails.
+				// Corrupt the default http transport so that making the request fails.
 				// Backup, reset for test, and restore.
 				orig := http.DefaultTransport
 				http.DefaultTransport = nil
