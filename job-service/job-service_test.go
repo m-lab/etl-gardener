@@ -1,6 +1,3 @@
-//go:build integration
-// +build integration
-
 // Package job provides an http handler to serve up jobs to ETL parsers.
 package job_test
 
@@ -9,14 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"os"
 	"testing"
 	"time"
 
 	"bou.ke/monkey"
-	"cloud.google.com/go/datastore"
 	"github.com/go-test/deep"
 
-	"github.com/m-lab/go/rtx"
+	"github.com/m-lab/go/testingx"
 
 	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/job-service"
@@ -235,22 +232,22 @@ func TestYesterdayFromSaver(t *testing.T) {
 		body string
 	}{
 		// Yesterday (twice to catch up)
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-14T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-14T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-15T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-15T00:00:00Z"}`},
+		{body: `{"ID":"fake-bucket/ndt/ndt5/20110214","Job":{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-14T00:00:00Z"}}`},
+		{body: `{"ID":"fake-bucket/ndt/tcpinfo/20110214","Job":{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-14T00:00:00Z"}}`},
+		{body: `{"ID":"fake-bucket/ndt/ndt5/20110215","Job":{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-15T00:00:00Z"}}`},
+		{body: `{"ID":"fake-bucket/ndt/tcpinfo/20110215","Job":{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-15T00:00:00Z"}}`},
 		// Resume
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-10T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-10T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-11T00:00:00Z"}`},
-		{body: `{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-11T00:00:00Z"}`},
+		{body: `{"ID":"fake-bucket/ndt/ndt5/20110210","Job":{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-10T00:00:00Z"}}`},
+		{body: `{"ID":"fake-bucket/ndt/tcpinfo/20110210","Job":{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-10T00:00:00Z"}}`},
+		{body: `{"ID":"fake-bucket/ndt/ndt5/20110211","Job":{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"ndt5","Date":"2011-02-11T00:00:00Z"}}`},
+		{body: `{"ID":"fake-bucket/ndt/tcpinfo/20110211","Job":{"Bucket":"fake-bucket","Experiment":"ndt","Datatype":"tcpinfo","Date":"2011-02-11T00:00:00Z"}}`},
 	}
 
 	for i, e := range expected {
-		want := tracker.Job{}
+		want := tracker.JobWithTarget{}
 		json.Unmarshal([]byte(e.body), &want)
 		got := svc.NextJob(ctx)
-		diff := deep.Equal(want, got.Job)
+		diff := deep.Equal(want, got)
 		if diff != nil {
 			t.Error(i, diff)
 		}
@@ -319,29 +316,24 @@ func assertYesterdayStateObject(so persistence.StateObject) {
 
 func TestPersistence(t *testing.T) {
 	ctx := context.Background()
-	ds, err := persistence.NewDatastoreSaver(ctx, "mlab-testing")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ls := persistence.NewLocalSaver(t.TempDir())
 
 	now := time.Now()
 	svc := job.Service{Date: now}
-	err = ds.Save(ctx, &svc)
-	rtx.Must(err, "Save error")
-	t.Log(&svc)
+	err := ls.Save(ctx, &svc)
+	testingx.Must(t, err, "Save error")
 
 	svc.Date = time.Time{}
-	err = ds.Fetch(ctx, &svc)
-	rtx.Must(err, "Fetch error")
-	t.Log(&svc)
+	err = ls.Fetch(ctx, &svc)
+	testingx.Must(t, err, "Fetch error")
 	if svc.Date.Unix() != now.Unix() {
 		t.Error("Date should be now", &svc, now.Unix(), svc.Date.Unix())
 	}
 
-	err = ds.Delete(ctx, &svc)
-	rtx.Must(err, "Delete error")
-	err = ds.Fetch(ctx, &svc)
-	if err != datastore.ErrNoSuchEntity {
+	err = ls.Delete(ctx, &svc)
+	testingx.Must(t, err, "Delete error")
+	err = ls.Fetch(ctx, &svc)
+	if !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("Should have errored", err)
 	}
 }
