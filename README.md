@@ -65,7 +65,6 @@ Run the gardener v2 ("manager" mode) with local writer support:
 go get ./cmd/gardener
 ~/bin/gardener \
     -project=mlab-sandbox \
-    -service.mode=manager \
     -status_port=:8082 \
     -gardener_addr=localhost:8081 \
     -prometheusx.listen-address=:9991 \
