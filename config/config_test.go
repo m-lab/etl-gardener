@@ -38,12 +38,12 @@ func TestParseConfig(t *testing.T) {
 			},
 		},
 		{
-			name:    "error-no-file",
+			name:    "error-empty-file-name",
 			file:    "",
 			wantErr: true,
 		},
 		{
-			name:    "error-no-such-file",
+			name:    "error-file-does-not-exist",
 			file:    "this-file-does-not-exist",
 			wantErr: true,
 		},
