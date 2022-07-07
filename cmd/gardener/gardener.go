@@ -63,6 +63,7 @@ var (
 	shutdownTimeout   = flag.Duration("shutdown_timeout", 1*time.Minute, "Graceful shutdown time allowance")
 	statusPort        = flag.String("status_port", ":0", "The public interface port where status (and pprof) will be published")
 	gardenerAddr      = flag.String("gardener_addr", ":8080", "The listen address for the gardener jobs service")
+	configPath        = flag.String("config_path", "config.yml", "Path to the config file.")
 
 	// Context and injected variables to allow smoke testing of main()
 	mainCtx, mainCancel = context.WithCancel(context.Background())
@@ -214,7 +215,7 @@ func mustStandardTracker() *tracker.Tracker {
 	return tk
 }
 
-func mustCreateJobService(ctx context.Context) *job.Service {
+func mustCreateJobService(ctx context.Context, g *config.Gardener) *job.Service {
 	var saver persistence.Saver
 	storageClient, err := storage.NewClient(ctx)
 	rtx.Must(err, "Could not create storage client for job service")
@@ -227,8 +228,8 @@ func mustCreateJobService(ctx context.Context) *job.Service {
 		saver = persistence.NewLocalSaver(saverDir)
 	}
 	svc, err := job.NewJobService(
-		ctx, globalTracker, config.StartDate(),
-		project, config.Sources(), saver,
+		ctx, globalTracker, g.Start(),
+		project, g.Sources, saver,
 		stiface.AdaptClient(storageClient))
 	rtx.Must(err, "Could not initialize job service")
 	return svc
@@ -279,9 +280,10 @@ func main() {
 	// This is the v2 "manager" mode, in which Gardener provides the "jobs" API
 	// for parsers to request work and report progress.
 	// TODO Once the legacy deployments are turned down, this should move to head of main().
-	config.ParseConfig()
+	gcfg, err := config.ParseConfig(*configPath)
+	rtx.Must(err, "Failed to parse config: %q", *configPath)
 
-	for _, src := range config.Sources() {
+	for _, src := range gcfg.Sources {
 		metrics.ConfigDatatypes.WithLabelValues(src.Experiment, src.Datatype)
 	}
 
@@ -297,7 +299,7 @@ func main() {
 	rtx.Must(err, "NewStandardMonitor failed")
 	go monitor.Watch(mainCtx, 5*time.Second)
 
-	js := mustCreateJobService(mainCtx)
+	js := mustCreateJobService(mainCtx, gcfg)
 	handler := tracker.NewHandler(globalTracker, js)
 	handler.Register(mux)
 
