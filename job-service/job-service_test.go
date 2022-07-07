@@ -244,8 +244,8 @@ func TestYesterdayFromSaver(t *testing.T) {
 	}
 
 	for i, e := range expected {
-		want := tracker.JobWithTarget{}
-		json.Unmarshal([]byte(e.body), &want)
+		want := &tracker.JobWithTarget{}
+		json.Unmarshal([]byte(e.body), want)
 		got := svc.NextJob(ctx)
 		diff := deep.Equal(want, got)
 		if diff != nil {
@@ -277,6 +277,7 @@ func TestEarlyWrapping(t *testing.T) {
 	sources := []config.SourceConfig{
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
 		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "pcap", Target: "tmp_ndt.pcap", DailyOnly: true}, // skipped.
 	}
 	svc, err := job.NewJobService(ctx, tk, start, "fake-bucket", sources, &NullSaver{}, nil)
 	must(t, err)
