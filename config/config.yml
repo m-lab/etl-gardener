@@ -22,6 +22,7 @@ sources:
   experiment: ndt
   datatype: pcap
   target: tmp_ndt.pcap
+  # daily_only: true
 - bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
   experiment: ndt
   datatype: hopannotation1
