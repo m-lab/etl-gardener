@@ -10,16 +10,13 @@ sources:
   datatype: tcpinfo
   filter: .*T??:??:00.*Z
   start: 2019-08-01
-  target: ndt.tcpinfo
 - bucket: archive-measurement-lab
   experiment: ndt
   datatype: ndt5
   filter: .*T??:??:00.*Z
   start: 2019-08-01
-  target: ndt.ndt5
 - bucket: archive-measurement-lab
   experiment: ndt
   datatype: pcap
   start: 2019-08-01
-  target: ndt.pcap
   daily_only: true

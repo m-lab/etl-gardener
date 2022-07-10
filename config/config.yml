@@ -9,42 +9,35 @@ sources:
 - bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
   experiment: ndt
   datatype: annotation
-  target: tmp_ndt.annotation
-  daily_only: true
 - bucket: archive-{{NDT_SOURCE_PROJECT}}
   experiment: ndt
   datatype: ndt5
-  target: tmp_ndt.ndt5
-  daily_only: true
+  target_datasets:
+    join: ndt
 - bucket: archive-{{NDT_SOURCE_PROJECT}}
   experiment: ndt
   datatype: ndt7
-  target: tmp_ndt.ndt7
-  daily_only: true
+  target_datasets:
+    join: ndt
 - bucket: archive-{{NDT_SOURCE_PROJECT}}
   experiment: ndt
   datatype: pcap
-  target: tmp_ndt.pcap
   # TODO(github.com/m-lab/etl-gardener/issues/389): Enable after pcap historical
   # reprocessing completes once.
   # daily_only: true
 - bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
   experiment: ndt
   datatype: hopannotation1
-  target: tmp_ndt.hopannotation1
-  daily_only: true
 - bucket: archive-measurement-lab
   experiment: ndt
   datatype: scamper1
-  target: tmp_ndt.scamper1
-  daily_only: true
+  target_datasets:
+    join: ndt
 - bucket: archive-measurement-lab
   experiment: utilization
   datatype: switch
-  target: tmp_utilization.switch
-  daily_only: true
 - bucket: archive-{{NDT_SOURCE_PROJECT}}
   experiment: ndt
   datatype: tcpinfo
-  target: tmp_ndt.tcpinfo
-  daily_only: true
+  target_datasets:
+    join: ndt
