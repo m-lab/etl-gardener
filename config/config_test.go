@@ -31,9 +31,9 @@ func TestParseConfig(t *testing.T) {
 				Tracker:   config.TrackerConfig{Timeout: 5 * time.Hour},
 				Monitor:   config.MonitorConfig{PollingInterval: 5 * time.Minute},
 				Sources: []config.SourceConfig{
-					{Bucket: "archive-measurement-lab", Experiment: "ndt", Datatype: "tcpinfo", Filter: ".*T??:??:00.*Z", Target: "ndt.tcpinfo", DailyOnly: false},
-					{Bucket: "archive-measurement-lab", Experiment: "ndt", Datatype: "ndt5", Filter: ".*T??:??:00.*Z", Target: "ndt.ndt5", DailyOnly: false},
-					{Bucket: "archive-measurement-lab", Experiment: "ndt", Datatype: "pcap", Filter: "", Target: "ndt.pcap", DailyOnly: true},
+					{Bucket: "archive-measurement-lab", Experiment: "ndt", Datatype: "tcpinfo", Filter: ".*T??:??:00.*Z", Datasets: config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt"}, DailyOnly: false},
+					{Bucket: "archive-measurement-lab", Experiment: "ndt", Datatype: "ndt5", Filter: ".*T??:??:00.*Z", Datasets: config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt"}, DailyOnly: false},
+					{Bucket: "archive-measurement-lab", Experiment: "ndt", Datatype: "pcap", Filter: "", Datasets: config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt"}, DailyOnly: true},
 				},
 			},
 		},
