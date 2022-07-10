@@ -27,10 +27,10 @@ type fakeJobService struct {
 	calls int
 }
 
-func (f *fakeJobService) NextJob(ctx context.Context) tracker.JobWithTarget {
+func (f *fakeJobService) NextJob(ctx context.Context) *tracker.JobWithTarget {
 	j := f.jobs[f.calls]
 	f.calls++
-	return tracker.JobWithTarget{Job: j}
+	return &tracker.JobWithTarget{Job: j}
 }
 
 func testSetup(t *testing.T, jobs []tracker.Job) (url.URL, *tracker.Tracker) {

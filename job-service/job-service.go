@@ -48,7 +48,8 @@ func (y *YesterdaySource) nextJob(ctx context.Context) *tracker.JobWithTarget {
 	}
 
 	// Copy the jobspec and set the date.
-	jt := y.jobSpecs[y.nextIndex]
+	jt := &tracker.JobWithTarget{}
+	*jt = y.jobSpecs[y.nextIndex]
 	jt.Job.Date = y.Date
 	jt.ID = jt.Job.Key()
 
@@ -68,8 +69,7 @@ func (y *YesterdaySource) nextJob(ctx context.Context) *tracker.JobWithTarget {
 			log.Println(err)
 		}
 	}
-
-	return &jt
+	return jt
 }
 
 func initYesterday(ctx context.Context, saver persistence.Saver, delay time.Duration, specs []tracker.JobWithTarget) (*YesterdaySource, error) {
@@ -149,47 +149,59 @@ func (svc *Service) advanceDate() {
 }
 
 // NextJob returns a tracker.Job to dispatch.
-func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
+func (svc *Service) NextJob(ctx context.Context) *tracker.JobWithTarget {
 	svc.lock.Lock()
 	defer svc.lock.Unlock()
 
 	// Check whether there is yesterday work to do.
-	if j := svc.yesterday.nextJob(ctx); j != nil {
-		log.Println("Yesterday job:", j.Job)
-		return svc.ifHasFiles(ctx, *j)
+	if jt := svc.yesterday.nextJob(ctx); jt != nil {
+		log.Println("Yesterday job:", jt.Job)
+		return svc.ifHasFiles(ctx, jt)
 	}
 
-	jt := svc.jobSpecs[svc.nextIndex]
-	jt.Job.Date = svc.Date
-	jt.ID = jt.Job.Key()
-	svc.nextIndex++
+	// Since some jobs may be configured as dailyOnly, or have no files
+	// for a given date, we check for these conditions, and skip the job if appropriate.
+	// If first job isn't suitable, we check up to len(jobSpecs) to try to find one.
+	for attempts := 0; attempts < len(svc.jobSpecs); attempts++ {
+		jt := &tracker.JobWithTarget{}
+		*jt = svc.jobSpecs[svc.nextIndex]
+		jt.Job.Date = svc.Date
+		jt.ID = jt.Job.Key()
+		svc.nextIndex++
 
-	if svc.nextIndex >= len(svc.jobSpecs) {
-		svc.advanceDate()
-		// Note that this will block other calls to NextJob
-		ctx, cf := context.WithTimeout(ctx, 5*time.Second)
-		defer cf()
-		log.Println("Saving", svc.GetName(), svc.GetKind(), svc.Date.Format("2006-01-02"))
-		err := svc.saver.Save(ctx, svc)
-		if err != nil {
-			log.Println(err)
+		if svc.nextIndex >= len(svc.jobSpecs) {
+			svc.advanceDate()
+			// Note that this will block other calls to NextJob
+			ctx, cf := context.WithTimeout(ctx, 5*time.Second)
+			defer cf()
+			log.Println("Saving", svc.GetName(), svc.GetKind(), svc.Date.Format("2006-01-02"))
+			err := svc.saver.Save(ctx, svc)
+			if err != nil {
+				log.Println(err)
+			}
 		}
+
+		// Skip the job if it is a dailyOnly job.
+		if jt.DailyOnly {
+			continue
+		}
+		return svc.ifHasFiles(ctx, jt)
 	}
-	return svc.ifHasFiles(ctx, jt)
+	return nil
 }
 
-func (svc *Service) ifHasFiles(ctx context.Context, job tracker.JobWithTarget) tracker.JobWithTarget {
+func (svc *Service) ifHasFiles(ctx context.Context, jt *tracker.JobWithTarget) *tracker.JobWithTarget {
 	if svc.sClient != nil {
-		ok, err := job.Job.HasFiles(ctx, svc.sClient)
+		ok, err := jt.Job.HasFiles(ctx, svc.sClient)
 		if err != nil {
 			log.Println(err)
 		}
 		if !ok {
-			log.Println(job, "has no files", job.Job.Bucket)
-			return tracker.JobWithTarget{}
+			log.Println(jt, "has no files", jt.Job.Bucket)
+			return nil
 		}
 	}
-	return job
+	return jt
 }
 
 // Recover the processing date.
@@ -214,7 +226,7 @@ func (svc *Service) recoverDate(ctx context.Context) {
 }
 
 // ErrInvalidStartDate is returned if startDate is time.Time{}
-var ErrInvalidStartDate = errors.New("Invalid start date")
+var ErrInvalidStartDate = errors.New("invalid start date")
 
 // NewJobService creates the default job service.
 // Context is used for retrieving state from datastore.
@@ -243,8 +255,9 @@ func NewJobService(ctx context.Context, tk jobAdder, startDate time.Time,
 		}
 		// TODO - handle gs:// targets
 		jt := tracker.JobWithTarget{
-			ID:  job.Key(),
-			Job: job,
+			ID:        job.Key(),
+			Job:       job,
+			DailyOnly: s.DailyOnly,
 		}
 		specs = append(specs, jt)
 	}
