@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/m-lab/etl-gardener/config"
+
 	"github.com/m-lab/go/rtx"
 
 	"cloud.google.com/go/datastore"
@@ -35,7 +37,13 @@ type Job struct {
 	Date       time.Time
 	// Filter is an optional regex to apply to ArchiveURL names
 	// Note that HasFiles does not use this, so ETL may process no files.
-	Filter string `json:",omitempty"`
+	Filter   string          `json:",omitempty"`
+	Datasets config.Datasets `json:",omitempty"` // TODO: does this belong here?
+}
+
+// TablePartition returns the BigQuery table partition for this Job's Date.
+func (j *Job) TablePartition() string {
+	return j.Datatype + "$" + j.Date.Format("20060102")
 }
 
 // JobWithTarget specifies a type/date job, and a destination
@@ -63,6 +71,7 @@ func (j JobWithTarget) Marshal() []byte {
 // NewJob creates a new job object.
 // DEPRECATED
 // NB:  The date will be converted to UTC and truncated to day boundary!
+// TODO: delete.
 func NewJob(bucket, exp, typ string, date time.Time) Job {
 	return Job{
 		Bucket:     bucket,
