@@ -138,3 +138,37 @@ func TestIsDaily(t *testing.T) {
 		})
 	}
 }
+
+func TestJob_TablePartition(t *testing.T) {
+	tests := []struct {
+		name     string
+		Datatype string
+		Date     time.Time
+		want     string
+	}{
+		{
+			name:     "success",
+			Datatype: "ndt7",
+			Date:     time.Date(2020, 03, 10, 0, 0, 0, 0, time.UTC),
+			want:     "ndt7$20200310",
+		},
+		{
+			name:     "uninitialized-time",
+			Datatype: "ndt7",
+			Date:     time.Time{},
+			want:     "ndt7$00010101",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			j := &tracker.Job{
+				Datatype: tt.Datatype,
+				Date:     tt.Date,
+			}
+			if got := j.TablePartition(); got != tt.want {
+				t.Errorf("Job.TablePartition() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
