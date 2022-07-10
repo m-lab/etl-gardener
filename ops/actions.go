@@ -20,10 +20,6 @@ import (
 	"github.com/m-lab/go/timex"
 )
 
-var (
-	JoinableDatatypes = map[string]bool{"ndt7": true, "scamper1": true, "ndt5": true, "tcpinfo": true}
-)
-
 func newStateFunc(detail string) ActionFunc {
 	return func(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
 		return Success(j, detail)
@@ -371,8 +367,8 @@ func (a *actionEnv) deleteFunc(ctx context.Context, j tracker.Job, stateChangeTi
 }
 
 func (a *actionEnv) joinFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
-	if !JoinableDatatypes[j.Datatype] {
-		// These should not be annotated.
+	if j.Datasets.Join == "" {
+		// These should not be joined / annotated.
 		return Success(j, fmt.Sprintf("%s does not require join", j.Datatype))
 	}
 	delay := time.Since(stateChangeTime).Round(time.Minute)
