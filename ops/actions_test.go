@@ -28,20 +28,13 @@ func TestStandardMonitor(t *testing.T) {
 	d := time.Now()
 	// Statically define jobs with full configurations specified.
 	jobs := []tracker.Job{
+		// Not yet supported.
 		{
 			Bucket:     "bucket",
 			Experiment: "exp",
 			Datatype:   "type",
 			Date:       d,
 			Datasets:   config.Datasets{Temp: "tmp_exp", Raw: "raw_exp"},
-		},
-		// Not yet supported.
-		{
-			Bucket:     "bucket",
-			Experiment: "exp2",
-			Datatype:   "tcpinfo",
-			Date:       d,
-			Datasets:   config.Datasets{Temp: "tmp_exp2", Raw: "raw_exp2"},
 		},
 		// Valid experiment and datatype
 		// This does an actual dedup, so we need to allow enough time.
