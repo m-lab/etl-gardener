@@ -19,6 +19,7 @@ import (
 	"github.com/m-lab/etl-gardener/job-service"
 	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
+	"github.com/m-lab/etl-gardener/tracker/jobtest"
 )
 
 func init() {
@@ -119,7 +120,7 @@ func TestResume(t *testing.T) {
 		t.Fatal(err)
 	}
 	lastJobDate := start.AddDate(0, 0, 3)
-	last := tracker.NewJob("fake-bucket", "ndt", "ndt5", lastJobDate)
+	last := jobtest.NewJob("fake-bucket", "ndt", "ndt5", lastJobDate)
 	tk.AddJob(last)
 
 	ds := config.Datasets{Temp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"}
