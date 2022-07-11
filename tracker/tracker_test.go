@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/m-lab/etl-gardener/tracker/jobtest"
 	"github.com/m-lab/go/timex"
 
 	"cloud.google.com/go/datastore"

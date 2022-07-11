@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/m-lab/etl-gardener/tracker/jobtest"
+
 	"github.com/m-lab/go/rtx"
 
 	"github.com/m-lab/etl-gardener/cloud"
