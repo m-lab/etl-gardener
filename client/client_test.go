@@ -12,6 +12,7 @@ import (
 
 	"github.com/m-lab/etl-gardener/client"
 	"github.com/m-lab/etl-gardener/tracker"
+	"github.com/m-lab/etl-gardener/tracker/jobtest"
 	"github.com/m-lab/go/rtx"
 )
 
@@ -67,7 +68,7 @@ func TestJobClient(t *testing.T) {
 
 	// set up a fake gardener service.
 	fg := fakeGardener{t: t, jobs: make([]tracker.JobWithTarget, 0)}
-	spec := tracker.NewJob(
+	spec := jobtest.NewJob(
 		"foobar", "ndt", "ndt5", time.Date(2019, 01, 01, 0, 0, 0, 0, time.UTC))
 	rtx.Must(fg.AddJob(spec, "a.b.c"), "add job")
 	gardener := httptest.NewServer(&fg)

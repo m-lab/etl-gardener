@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/m-lab/etl-gardener/tracker/jobtest"
+
 	"github.com/m-lab/go/rtx"
 
 	"github.com/m-lab/etl-gardener/cloud"
@@ -38,9 +40,9 @@ func TestMonitor_Watch(t *testing.T) {
 	saver := tracker.NewLocalSaver(t.TempDir(), nil)
 	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
-	tk.AddJob(tracker.NewJob("bucket", "exp", "type", time.Now()))
-	tk.AddJob(tracker.NewJob("bucket", "exp2", "type", time.Now()))
-	tk.AddJob(tracker.NewJob("bucket", "exp2", "type2", time.Now()))
+	tk.AddJob(jobtest.NewJob("bucket", "exp", "type", time.Now()))
+	tk.AddJob(jobtest.NewJob("bucket", "exp2", "type", time.Now()))
+	tk.AddJob(jobtest.NewJob("bucket", "exp2", "type2", time.Now()))
 
 	m, err := ops.NewMonitor(context.Background(), cloud.BQConfig{}, tk)
 	rtx.Must(err, "NewMonitor failure")
@@ -82,7 +84,7 @@ func TestOutcomeUpdate(t *testing.T) {
 	saver := tracker.NewLocalSaver(t.TempDir(), nil)
 	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
-	job := tracker.NewJob("bucket", "exp", "type", time.Now())
+	job := jobtest.NewJob("bucket", "exp", "type", time.Now())
 	tk.AddJob(job)
 
 	m, err := ops.NewMonitor(context.Background(), cloud.BQConfig{}, tk)

@@ -16,7 +16,7 @@ import (
 )
 
 func TestTemplate(t *testing.T) {
-	job := tracker.NewJob("bucket", "ndt", "annotation", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
+	job := jobtest.NewJob("bucket", "ndt", "annotation", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
 	q, err := bq.NewTableOps(context.Background(), job, "fake-project", "")
 	rtx.Must(err, "NewTableOps failed")
 	qs := bq.DedupQuery(*q)
