@@ -34,6 +34,7 @@ func TestStandardMonitor(t *testing.T) {
 			Experiment: "exp",
 			Datatype:   "type",
 			Date:       d,
+			Datasets:   config.Datasets{Temp: "tmp_exp", Raw: "raw_exp"},
 		},
 		// Valid experiment and datatype
 		// This does an actual dedup, so we need to allow enough time.
