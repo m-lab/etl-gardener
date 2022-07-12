@@ -14,6 +14,7 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/m-lab/etl-gardener/tracker"
+	"github.com/m-lab/etl-gardener/tracker/jobtest"
 )
 
 func init() {
@@ -85,7 +86,7 @@ func postAndExpect(t *testing.T, url *url.URL, code int) string {
 
 func TestUpdateHandler(t *testing.T) {
 	date := time.Date(2019, 01, 02, 0, 0, 0, 0, time.UTC)
-	job := tracker.NewJob("bucket", "exp", "type", date)
+	job := jobtest.NewJob("bucket", "exp", "type", date)
 	server, tk := testSetup(t, []tracker.Job{job})
 
 	url := tracker.UpdateURL(server, job, tracker.Parsing, "foobar")
@@ -117,7 +118,7 @@ func TestUpdateHandler(t *testing.T) {
 func TestHeartbeatHandler(t *testing.T) {
 	logx.LogxDebug.Set("true")
 	date := time.Date(2019, 01, 02, 0, 0, 0, 0, time.UTC)
-	job := tracker.NewJob("bucket", "exp", "type", date)
+	job := jobtest.NewJob("bucket", "exp", "type", date)
 	server, tk := testSetup(t, []tracker.Job{job})
 
 	url := tracker.HeartbeatURL(server, job)
@@ -149,7 +150,7 @@ func TestHeartbeatHandler(t *testing.T) {
 
 func TestErrorHandler(t *testing.T) {
 	date := time.Date(2019, 01, 02, 0, 0, 0, 0, time.UTC)
-	job := tracker.NewJob("bucket", "exp", "type", date)
+	job := jobtest.NewJob("bucket", "exp", "type", date)
 	server, tk := testSetup(t, []tracker.Job{job})
 
 	url := tracker.ErrorURL(server, job, "error")
@@ -183,7 +184,7 @@ func TestErrorHandler(t *testing.T) {
 
 func TestNextJobHandler(t *testing.T) {
 	date := time.Date(2019, 01, 02, 0, 0, 0, 0, time.UTC)
-	job := tracker.NewJob("bucket", "exp", "type", date)
+	job := jobtest.NewJob("bucket", "exp", "type", date)
 	// Add job, empty, and duplicate job.
 	url, _ := testSetup(t, []tracker.Job{job, tracker.Job{}, job})
 	url.Path = "job"
@@ -207,7 +208,7 @@ func TestNextJobHandler(t *testing.T) {
 
 func TestNextJobV2Handler(t *testing.T) {
 	date := time.Date(2019, 01, 02, 0, 0, 0, 0, time.UTC)
-	job := tracker.NewJob("bucket", "exp", "type", date)
+	job := jobtest.NewJob("bucket", "exp", "type", date)
 	// Add job, empty, and duplicate job.
 	url, _ := testSetup(t, []tracker.Job{job, tracker.Job{}, job})
 	url.Path = "/v2/job/next"

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/m-lab/etl-gardener/tracker"
+	"github.com/m-lab/etl-gardener/tracker/jobtest"
 	"github.com/m-lab/go/testingx"
 )
 
@@ -30,7 +31,7 @@ func TestJobClient_Next(t *testing.T) {
 			server: httptest.NewUnstartedServer(
 				// Returns a true tracker.JobWithTarget record.
 				http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
-					j := tracker.NewJob("bucket", "experiment", "datatype", start)
+					j := jobtest.NewJob("bucket", "experiment", "datatype", start)
 					job := tracker.JobWithTarget{
 						ID:  j.Key(),
 						Job: j,

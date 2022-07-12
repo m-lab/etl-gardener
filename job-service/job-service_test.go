@@ -19,6 +19,7 @@ import (
 	"github.com/m-lab/etl-gardener/job-service"
 	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
+	"github.com/m-lab/etl-gardener/tracker/jobtest"
 )
 
 func init() {
@@ -69,8 +70,8 @@ func TestService_NextJob(t *testing.T) {
 	ctx := context.Background()
 
 	sources := []config.SourceConfig{
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo"},
 	}
 	// This is three days before "now".  The job service should restart
 	// when it reaches 36 hours before "now", which is 2011-02-05
@@ -118,12 +119,12 @@ func TestResume(t *testing.T) {
 		t.Fatal(err)
 	}
 	lastJobDate := start.AddDate(0, 0, 3)
-	last := tracker.NewJob("fake-bucket", "ndt", "ndt5", lastJobDate)
+	last := jobtest.NewJob("fake-bucket", "ndt", "ndt5", lastJobDate)
 	tk.AddJob(last)
 
 	sources := []config.SourceConfig{
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo"},
 	}
 	svc, err := job.NewJobService(ctx, tk, start, "fake-bucket", sources, &NullSaver{}, nil)
 	must(t, err)
@@ -179,8 +180,8 @@ func TestResumeFromSaver(t *testing.T) {
 
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
 	sources := []config.SourceConfig{
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo"},
 	}
 
 	// Set up fake saver.
@@ -216,8 +217,8 @@ func TestYesterdayFromSaver(t *testing.T) {
 
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
 	sources := []config.SourceConfig{
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo"},
 	}
 
 	// Set up fake saver.
@@ -275,9 +276,9 @@ func TestEarlyWrapping(t *testing.T) {
 	}
 
 	sources := []config.SourceConfig{
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", Target: "tmp_ndt.ndt5"},
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", Target: "tmp_ndt.tcpinfo"},
-		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "pcap", Target: "tmp_ndt.pcap", DailyOnly: true}, // skipped.
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo"},
+		{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "pcap", DailyOnly: true}, // skipped.
 	}
 	svc, err := job.NewJobService(ctx, tk, start, "fake-bucket", sources, &NullSaver{}, nil)
 	must(t, err)

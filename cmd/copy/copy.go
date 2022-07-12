@@ -15,7 +15,8 @@ import (
 )
 
 var (
-	dataType = flag.String("datatype", "ndt7", "datatype")
+	exp      = flag.String("experiment", "ndt", "experiment name")
+	dataType = flag.String("datatype", "ndt7", "datatype name")
 	date     = flag.String("date", "", "partition date")
 )
 
@@ -28,7 +29,7 @@ DESCRIPTION
   It is intended for manual testing of the bq.TableOps.CopyTmpToRaw, and has no other practical purpose.
 
 EXAMPLES
-  copy -datatype=ndt7 -date=2020-03-01
+  copy -experiment=ndt -datatype=ndt7 -date=2020-03-01
 `
 
 func init() {
@@ -80,7 +81,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	j := tracker.NewJob("unused-bucket", "unused-experiment", *dataType, d)
+	j := tracker.Job{
+		Bucket: "unused-bucket", Experiment: *exp, Datatype: *dataType, Date: d,
+	}
 	log.Println(j)
 	copyFunc(ctx, j)
 }

@@ -11,10 +11,10 @@ import (
 	"cloud.google.com/go/datastore"
 	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
 
+	"github.com/m-lab/etl-gardener/tracker"
+	"github.com/m-lab/etl-gardener/tracker/jobtest"
 	"github.com/m-lab/go/cloudtest/dsfake"
 	"github.com/m-lab/go/logx"
-
-	"github.com/m-lab/etl-gardener/tracker"
 )
 
 func init() {
@@ -38,7 +38,7 @@ func createJobs(t *testing.T, tk *tracker.Tracker, exp string, typ string, n int
 	date := startDate
 	for i := 0; i < n; i++ {
 		go func(date time.Time) {
-			job := tracker.NewJob(
+			job := jobtest.NewJob(
 				"bucket", exp, typ, date,
 			)
 			err := tk.AddJob(job)
@@ -56,7 +56,7 @@ func completeJobs(t *testing.T, tk *tracker.Tracker, exp string, typ string, n i
 	// Delete all jobs.
 	date := startDate
 	for i := 0; i < n; i++ {
-		job := tracker.NewJob(
+		job := jobtest.NewJob(
 			"bucket", exp, typ, date,
 		)
 		err := tk.SetStatus(job.Key(), tracker.Complete, "")
@@ -236,7 +236,7 @@ func TestNonexistentJobAccess(t *testing.T) {
 		t.Error("Should be ErrJobNotFound", err)
 	}
 
-	js := tracker.NewJob("bucket", "exp", "type", startDate)
+	js := jobtest.NewJob("bucket", "exp", "type", startDate)
 	must(t, tk.AddJob(js))
 
 	err = tk.AddJob(js)
@@ -266,7 +266,7 @@ func TestJobMapHTML(t *testing.T) {
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)
 	}
-	js := tracker.NewJob("bucket", "exp", "type", startDate)
+	js := jobtest.NewJob("bucket", "exp", "type", startDate)
 	must(t, tk.AddJob(js))
 
 	buf := bytes.Buffer{}
@@ -287,7 +287,7 @@ func TestExpiration(t *testing.T) {
 	tk, err := tracker.InitTracker(ctx, saver, 5*time.Millisecond, 10*time.Millisecond, 1*time.Millisecond)
 	must(t, err)
 
-	job := tracker.NewJob("bucket", "exp", "type", startDate)
+	job := jobtest.NewJob("bucket", "exp", "type", startDate)
 	err = tk.SetStatus(job.Key(), tracker.Parsing, "")
 	if err != tracker.ErrJobNotFound {
 		t.Error("Should be ErrJobNotFound", err)
