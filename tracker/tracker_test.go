@@ -8,9 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/m-lab/etl-gardener/tracker/jobtest"
-	"github.com/m-lab/go/timex"
-
 	"cloud.google.com/go/datastore"
 	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
 
@@ -18,6 +15,7 @@ import (
 	"github.com/m-lab/etl-gardener/tracker/jobtest"
 	"github.com/m-lab/go/cloudtest/dsfake"
 	"github.com/m-lab/go/logx"
+	"github.com/m-lab/go/timex"
 )
 
 func init() {
