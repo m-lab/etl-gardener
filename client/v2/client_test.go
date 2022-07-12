@@ -15,6 +15,7 @@ import (
 	"github.com/m-lab/etl-gardener/tracker/jobtest"
 
 	"github.com/m-lab/etl-gardener/tracker"
+	"github.com/m-lab/etl-gardener/tracker/jobtest"
 	"github.com/m-lab/go/testingx"
 )
 
