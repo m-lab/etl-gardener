@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/m-lab/etl-gardener/tracker/jobtest"
-
 	"cloud.google.com/go/datastore"
 	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
 
