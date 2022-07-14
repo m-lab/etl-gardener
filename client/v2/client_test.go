@@ -52,8 +52,8 @@ func TestJobClient_Next(t *testing.T) {
 					Datatype:   "datatype",
 					Date:       start,
 					Datasets: config.Datasets{
-						Temp: "tmp_experiment",
-						Raw:  "raw_experiment",
+						Tmp: "tmp_experiment",
+						Raw: "raw_experiment",
 					},
 				},
 			},
