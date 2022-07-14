@@ -18,9 +18,7 @@ import (
 
 	"github.com/m-lab/go/rtx"
 
-	"cloud.google.com/go/datastore"
 	"cloud.google.com/go/storage"
-	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
 	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
 
 	"github.com/m-lab/go/cloud/gcs"
@@ -181,7 +179,6 @@ func YesterdayDate() time.Time {
 
 // Error declarations
 var (
-	ErrClientIsNil            = errors.New("nil datastore client")
 	ErrJobAlreadyExists       = errors.New("job already exists")
 	ErrJobNotFound            = errors.New("job not found")
 	ErrJobIsObsolete          = errors.New("job is obsolete")
@@ -395,7 +392,6 @@ func NewStatus() Status {
 
 // JobMap is defined to allow custom json marshal/unmarshal.
 // It defines the map from Job to Status.
-// TODO implement datastore.PropertyLoadSaver
 type JobMap map[Job]Status
 
 // MarshalJSON implements json.Marshal
@@ -496,51 +492,4 @@ func (jobs JobMap) WriteHTML(w io.Writer) error {
 		log.Println(err)
 	}
 	return err
-}
-
-// saverStruct is used only for saving and loading from datastore.
-type saverStruct struct {
-	SaveTime time.Time
-	LastInit Job
-	// Jobs is encoded as json, because datastore doesn't handle maps.
-	Jobs []byte `datastore:",noindex"`
-}
-
-func loadFromDatastore(ctx context.Context, client dsiface.Client, key *datastore.Key) (saverStruct, error) {
-	state := saverStruct{Jobs: make([]byte, 0)}
-	if client == nil {
-		return state, ErrClientIsNil
-	}
-
-	err := client.Get(ctx, key, &state) // This should error?
-	return state, err
-}
-
-// loadJobMap loads the persisted map of jobs in flight from datastore.
-func loadJobMap(ctx context.Context, client dsiface.Client, key *datastore.Key) (JobMap, Job, error) {
-	state, err := loadFromDatastore(ctx, client, key)
-	if err != nil {
-		return nil, Job{}, err
-	}
-	return loadJobMapFromState(state)
-}
-
-// loadJobMapFromState completes unmarshalling a saverStruct.
-func loadJobMapFromState(state saverStruct) (JobMap, Job, error) {
-	log.Println("Last save:", state.SaveTime.Format("01/02T15:04"))
-	log.Println(string(state.Jobs))
-
-	jobMap := make(JobMap, 100)
-	log.Println("Unmarshalling", len(state.Jobs))
-	err := json.Unmarshal(state.Jobs, &jobMap)
-	if err != nil {
-		log.Fatal("loadJobMap failed", err)
-	}
-	for j, s := range jobMap {
-		if len(s.History) < 1 {
-			log.Fatalf("Empty State history %+v : %+v\n", j, s)
-		}
-	}
-	return jobMap, state.LastInit, nil
-
 }
