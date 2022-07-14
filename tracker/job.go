@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/m-lab/go/timex"
+
 	"github.com/m-lab/go/rtx"
 
 	"cloud.google.com/go/datastore"
@@ -99,11 +101,11 @@ func (j Job) failureMetric(state State, errString string) {
 // Path returns the GCS path prefix to the job data.
 func (j Job) Path() string {
 	if len(j.Datatype) > 0 {
-		return fmt.Sprintf("gs://%s/%s/%s/%s",
-			j.Bucket, j.Experiment, j.Datatype, j.Date.Format("2006/01/02/"))
+		return fmt.Sprintf("gs://%s/%s/%s/%s/",
+			j.Bucket, j.Experiment, j.Datatype, j.Date.Format(timex.YYYYMMDDWithSlash))
 	}
-	return fmt.Sprintf("gs://%s/%s/%s",
-		j.Bucket, j.Experiment, j.Date.Format("2006/01/02/"))
+	return fmt.Sprintf("gs://%s/%s/%s/",
+		j.Bucket, j.Experiment, j.Date.Format(timex.YYYYMMDDWithSlash))
 }
 
 // Marshal marshals the Job to json. If the Job type ever includes fields that
@@ -115,7 +117,7 @@ func (j Job) Marshal() []byte {
 }
 
 func (j Job) String() string {
-	return fmt.Sprintf("%s:%s/%s", j.Date.Format("20060102"), j.Experiment, j.Datatype)
+	return fmt.Sprintf("%s:%s/%s", j.Date.Format(timex.YYYYMMDD), j.Experiment, j.Datatype)
 }
 
 // Prefix returns the path prefix for a job, not including the gs://bucket-name/.
@@ -165,7 +167,7 @@ func (j Job) IsDaily() string {
 // Key returns a Job unique identifier (within the set of all jobs), suitable for use as a map key.
 func (j Job) Key() Key {
 	// TODO(soltesz): include target dataset in key to allow different experiment/datatype combinations without conflict.
-	return Key(fmt.Sprintf("%s/%s/%s/%s", j.Bucket, j.Experiment, j.Datatype, j.Date.Format("20060102")))
+	return Key(fmt.Sprintf("%s/%s/%s/%s", j.Bucket, j.Experiment, j.Datatype, j.Date.Format(timex.YYYYMMDD)))
 }
 
 // YesterdayDate returns the date for the daily job (e.g, yesterday UTC).

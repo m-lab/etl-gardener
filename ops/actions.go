@@ -17,6 +17,7 @@ import (
 	"github.com/m-lab/etl-gardener/cloud/bq"
 	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/etl-gardener/tracker"
+	"github.com/m-lab/go/timex"
 )
 
 var (
@@ -144,8 +145,8 @@ func waitAndCheck(ctx context.Context, bqJob bqiface.Job, j tracker.Job, label s
 // would be a good place for the TableOps object.
 func (a *actionEnv) tableOps(ctx context.Context, j tracker.Job) (*bq.TableOps, error) {
 	// TODO pass in the JobWithTarget, and get this info from Target.
-	loadSource := fmt.Sprintf("gs://etl-%s/%s/%s/%s",
-		a.project, j.Experiment, j.Datatype, j.Date.Format("2006/01/02/*"))
+	loadSource := fmt.Sprintf("gs://etl-%s/%s/%s/%s/*",
+		a.project, j.Experiment, j.Datatype, j.Date.Format(timex.YYYYMMDDWithSlash))
 	return bq.NewTableOps(ctx, j, a.project, loadSource)
 }
 

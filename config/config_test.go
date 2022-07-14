@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/m-lab/go/timex"
+
 	"github.com/m-lab/etl-gardener/config"
 )
 
@@ -61,8 +63,8 @@ func TestParseConfig(t *testing.T) {
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("ParseConfig() = %v, want %v", got, tt.want)
 			}
-			if got.Start().Format("2006-01-02") != tt.start {
-				t.Errorf("Gardener.Start() wrong date; got %q, want %q", got.Start().Format("2006-01-02"), tt.start)
+			if got.Start().Format(timex.YYYYMMDDWithDash) != tt.start {
+				t.Errorf("Gardener.Start() wrong date; got %q, want %q", got.Start().Format(timex.YYYYMMDDWithDash), tt.start)
 			}
 		})
 	}
