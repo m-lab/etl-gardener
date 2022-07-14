@@ -41,7 +41,7 @@ type Job struct {
 
 // TablePartition returns the BigQuery table partition for this Job's Date.
 func (j *Job) TablePartition() string {
-	return j.Datatype + "$" + j.Date.Format("20060102")
+	return j.Datatype + "$" + j.Date.Format(timex.YYYYMMDD)
 }
 
 // JobWithTarget specifies a type/date job, and a destination
