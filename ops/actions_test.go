@@ -69,7 +69,7 @@ func TestStandardMonitor(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	saver := tracker.NewLocalSaver(t.TempDir(), nil)
+	saver := tracker.NewLocalSaver(t.TempDir())
 	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
 
