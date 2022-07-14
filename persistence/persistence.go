@@ -4,16 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"io/ioutil"
-	"log"
 	"os"
 	"path"
 	"sync"
-	"time"
-
-	"cloud.google.com/go/datastore"
 )
 
-// StateObject defines the interface for objects to be saved/retrieved from datastore.
+// StateObject defines the interface for objects to be saved/retrieved from persistent storage.
 type StateObject interface {
 	GetName() string
 	// Should be implemented in the actual type, as
@@ -46,59 +42,6 @@ type Saver interface {
 	Fetch(ctx context.Context, o StateObject) error
 }
 
-// DatastoreSaver implements a Saver that stores state objects in Datastore.
-type DatastoreSaver struct {
-	Client    *datastore.Client
-	Namespace string
-}
-
-// NewDatastoreSaver creates and returns an appropriate saver.
-// ctx is only used to create the client.
-// TODO - if this ever needs more context, use cloud.Config
-func NewDatastoreSaver(ctx context.Context, project string) (*DatastoreSaver, error) {
-	client, err := datastore.NewClient(ctx, project)
-	if err != nil {
-		return nil, err
-	}
-	return &DatastoreSaver{Client: client, Namespace: "gardener"}, nil
-}
-
-func (ds *DatastoreSaver) key(o StateObject) *datastore.Key {
-	k := datastore.NameKey(o.GetKind(), o.GetName(), nil)
-	k.Namespace = ds.Namespace
-	return k
-}
-
-// Save implements Saver.Save using Datastore.
-func (ds *DatastoreSaver) Save(ctx context.Context, o StateObject) error {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	_, err := ds.Client.Put(ctx, ds.key(o), o)
-	if err != nil {
-		log.Println("Save error", err, ds.key(o))
-		return err
-	}
-	return nil
-}
-
-// Delete implements Saver.Delete using Datastore.
-func (ds *DatastoreSaver) Delete(ctx context.Context, o StateObject) error {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	err := ds.Client.Delete(ctx, ds.key(o))
-	if err != nil {
-		log.Println("Delete error", err, ds.key(o))
-		return err
-	}
-	return nil
-}
-
-// Fetch implements Saver.Fetch to fetch state of requested StateObject from Datastore.
-func (ds *DatastoreSaver) Fetch(ctx context.Context, o StateObject) error {
-	key := datastore.Key{Kind: o.GetKind(), Name: o.GetName(), Namespace: ds.Namespace}
-	return ds.Client.Get(ctx, &key, o)
-}
-
 // LocalSaver implements a Saver that stores state objects in local files.
 type LocalSaver struct {
 	Namespace string
@@ -115,7 +58,7 @@ func (ls *LocalSaver) fname(o StateObject) string {
 	return path.Join(ls.dir, ls.Namespace+"-"+o.GetKind()+"-"+o.GetName())
 }
 
-// Save implements Saver.Save using Datastore.
+// Save implements Saver.Save using local files.
 func (ls *LocalSaver) Save(ctx context.Context, o StateObject) error {
 	ls.lock.Lock()
 	defer ls.lock.Unlock()
@@ -131,14 +74,14 @@ func (ls *LocalSaver) Save(ctx context.Context, o StateObject) error {
 	return err
 }
 
-// Delete implements Saver.Delete using Datastore.
+// Delete implements Saver.Delete using local files.
 func (ls *LocalSaver) Delete(ctx context.Context, o StateObject) error {
 	ls.lock.Lock()
 	defer ls.lock.Unlock()
 	return os.Remove(ls.fname(o))
 }
 
-// Fetch implements Saver.Fetch to fetch state of requested StateObject from Datastore.
+// Fetch implements Saver.Fetch to fetch state of requested StateObject from local files.
 func (ls *LocalSaver) Fetch(ctx context.Context, o StateObject) error {
 	ls.lock.Lock()
 	defer ls.lock.Unlock()
