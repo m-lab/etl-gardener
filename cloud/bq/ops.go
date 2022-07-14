@@ -131,7 +131,7 @@ func (to TableOps) LoadToTmp(ctx context.Context, dryRun bool) (bqiface.Job, err
 	gcsRef.SourceFormat = bigquery.JSON
 
 	dest := to.client.
-		Dataset(to.Job.Datasets.Temp).
+		Dataset(to.Job.Datasets.Tmp).
 		Table(to.Job.Datatype)
 	if dest == nil {
 		return nil, ErrTableNotFound
@@ -155,7 +155,7 @@ func (to TableOps) CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, err
 		return nil, dataset.ErrNilBqClient
 	}
 	tableName := to.Job.TablePartition()
-	src := to.client.Dataset(to.Job.Datasets.Temp).Table(tableName)
+	src := to.client.Dataset(to.Job.Datasets.Tmp).Table(tableName)
 	dest := to.client.Dataset(to.Job.Datasets.Raw).Table(tableName)
 
 	copier := dest.CopierFrom(src)
@@ -167,7 +167,7 @@ func (to TableOps) CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, err
 	return copier.Run(ctx)
 }
 
-const tmpTable = "`{{.Project}}.{{.Job.Datasets.Temp}}.{{.Job.Datatype}}`"
+const tmpTable = "`{{.Project}}.{{.Job.Datasets.Tmp}}.{{.Job.Datatype}}`"
 const rawTable = "`{{.Project}}.{{.Job.Datasets.Raw}}.{{.Job.Datatype}}`"
 
 // NOTE: experiment annotations must come from the same raw experiment dataset.
@@ -214,7 +214,7 @@ func (to TableOps) DeleteTmp(ctx context.Context) error {
 	if to.client == nil {
 		return dataset.ErrNilBqClient
 	}
-	tmp := to.client.Dataset(to.Job.Datasets.Temp).Table(to.Job.TablePartition())
+	tmp := to.client.Dataset(to.Job.Datasets.Tmp).Table(to.Job.TablePartition())
 	log.Println("Deleting", tmp.FullyQualifiedName())
 	return tmp.Delete(ctx)
 }

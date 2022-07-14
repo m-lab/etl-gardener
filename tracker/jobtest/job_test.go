@@ -30,8 +30,8 @@ func TestNewJob(t *testing.T) {
 				Datatype:   "typ",
 				Date:       time.Date(2019, time.February, 03, 00, 00, 00, 00, time.UTC),
 				Datasets: config.Datasets{
-					Temp: "tmp_exp",
-					Raw:  "raw_exp",
+					Tmp: "tmp_exp",
+					Raw: "raw_exp",
 				},
 			},
 		},
@@ -47,8 +47,8 @@ func TestNewJob(t *testing.T) {
 				Datatype:   "typ",
 				Date:       time.Date(2019, time.February, 03, 00, 00, 00, 00, time.UTC),
 				Datasets: config.Datasets{
-					Temp: "tmp_exp",
-					Raw:  "raw_exp",
+					Tmp: "tmp_exp",
+					Raw: "raw_exp",
 				},
 			},
 		},
