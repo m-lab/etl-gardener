@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/m-lab/go/timex"
+
 	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
 
 	"github.com/m-lab/etl-gardener/config"
@@ -63,7 +65,7 @@ func (y *YesterdaySource) nextJob(ctx context.Context) *tracker.JobWithTarget {
 
 		ctx, cf := context.WithTimeout(ctx, 5*time.Second)
 		defer cf()
-		log.Println("Saving", y.GetName(), y.GetKind(), y.Date.Format("2006-01-02"))
+		log.Println("Saving", y.GetName(), y.GetKind(), y.Date.Format(timex.YYYYMMDDWithDash))
 		err := y.saver.Save(ctx, y)
 		if err != nil {
 			log.Println(err)
@@ -174,7 +176,7 @@ func (svc *Service) NextJob(ctx context.Context) *tracker.JobWithTarget {
 			// Note that this will block other calls to NextJob
 			ctx, cf := context.WithTimeout(ctx, 5*time.Second)
 			defer cf()
-			log.Println("Saving", svc.GetName(), svc.GetKind(), svc.Date.Format("2006-01-02"))
+			log.Println("Saving", svc.GetName(), svc.GetKind(), svc.Date.Format(timex.YYYYMMDDWithDash))
 			err := svc.saver.Save(ctx, svc)
 			if err != nil {
 				log.Println(err)

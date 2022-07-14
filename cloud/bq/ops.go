@@ -12,6 +12,7 @@ import (
 	"github.com/googleapis/google-cloud-go-testing/bigquery/bqiface"
 
 	"github.com/m-lab/go/dataset"
+	"github.com/m-lab/go/timex"
 
 	"github.com/m-lab/etl-gardener/tracker"
 )
@@ -155,7 +156,7 @@ func (to TableOps) CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, err
 	if to.client == nil {
 		return nil, dataset.ErrNilBqClient
 	}
-	tableName := to.Job.Datatype + "$" + to.Job.Date.Format("20060102")
+	tableName := to.Job.Datatype + "$" + to.Job.Date.Format(timex.YYYYMMDD)
 	src := to.client.Dataset("tmp_" + to.Job.Experiment).Table(tableName)
 	dest := to.client.Dataset("raw_" + to.Job.Experiment).Table(tableName)
 
@@ -216,7 +217,7 @@ func (to TableOps) DeleteTmp(ctx context.Context) error {
 	}
 	// TODO - name should be field in queryer.
 	tmp := to.client.Dataset("tmp_" + to.Job.Experiment).Table(
-		fmt.Sprintf("%s$%s", to.Job.Datatype, to.Job.Date.Format("20060102")))
+		fmt.Sprintf("%s$%s", to.Job.Datatype, to.Job.Date.Format(timex.YYYYMMDD)))
 	log.Println("Deleting", tmp.FullyQualifiedName())
 	return tmp.Delete(ctx)
 }
@@ -263,7 +264,7 @@ func (to TableOps) Join(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	// The destintation is a partition in a table based on the job
 	// type and date.  Initially, this will only be ndt7.
 	dest := to.client.Dataset(to.Job.Experiment).Table(
-		to.Job.Datatype + "$" + to.Job.Date.Format("20060102"))
+		to.Job.Datatype + "$" + to.Job.Date.Format(timex.YYYYMMDD))
 	qc := bqiface.QueryConfig{
 		QueryConfig: bigquery.QueryConfig{
 			DryRun: dryRun,

@@ -10,7 +10,7 @@ require (
 	github.com/go-test/deep v1.0.8
 	github.com/googleapis/google-cloud-go-testing v0.0.0-20210719221736-1c9a4c676720
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/m-lab/go v0.1.48
+	github.com/m-lab/go v0.1.52
 	github.com/prometheus/client_golang v1.12.2
 	golang.org/x/net v0.0.0-20220615171555-694bf12d69de
 	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f

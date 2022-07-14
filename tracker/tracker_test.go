@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/m-lab/go/timex"
+
 	"cloud.google.com/go/datastore"
 	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
 
@@ -87,13 +89,13 @@ func TestJobPath(t *testing.T) {
 	withType := tracker.Job{
 		Bucket: "bucket", Experiment: "exp", Datatype: "type", Date: startDate, Filter: "",
 	}
-	if withType.Path() != "gs://bucket/exp/type/"+startDate.Format("2006/01/02/") {
+	if withType.Path() != "gs://bucket/exp/type/"+startDate.Format(timex.YYYYMMDDWithSlash+"/") {
 		t.Error("wrong path:", withType.Path())
 	}
 	withoutType := tracker.Job{
 		Bucket: "bucket", Experiment: "exp", Date: startDate, Filter: "",
 	}
-	if withoutType.Path() != "gs://bucket/exp/"+startDate.Format("2006/01/02/") {
+	if withoutType.Path() != "gs://bucket/exp/"+startDate.Format(timex.YYYYMMDDWithSlash+"/") {
 		t.Error("wrong path", withType.Path())
 	}
 }
