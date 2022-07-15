@@ -39,7 +39,6 @@ spec:
         args: [
           "-prometheusx.listen-address=:9090",
           "-config_path=/etc/config.yml",
-          "-saver.backend=local",
           "-saver.dir=/singleton",
           "-status_port=:8081",
           "-project={{GCLOUD_PROJECT}}",

@@ -12,7 +12,6 @@ import (
 
 	"github.com/m-lab/go/logx"
 
-	"cloud.google.com/go/datastore"
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/etl-gardener/tracker/jobtest"
 )
@@ -35,10 +34,7 @@ func (f *fakeJobService) NextJob(ctx context.Context) *tracker.JobWithTarget {
 }
 
 func testSetup(t *testing.T, jobs []tracker.Job) (url.URL, *tracker.Tracker) {
-	dsKey := datastore.NameKey("TestTrackerAddDelete", "jobs", nil)
-	dsKey.Namespace = "gardener"
-
-	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
+	saver := tracker.NewLocalSaver(t.TempDir())
 	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 	must(t, err)
 	if tk == nil {

@@ -15,9 +15,7 @@ import (
 	"runtime"
 	"time"
 
-	"cloud.google.com/go/datastore"
 	"cloud.google.com/go/storage"
-	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
 	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
 	"golang.org/x/sync/errgroup"
 
@@ -51,10 +49,6 @@ var (
 )
 
 var (
-	saverType = flagx.Enum{
-		Options: []string{"datastore", "local"},
-		Value:   "datastore",
-	}
 	saverDir string
 	project  string
 
@@ -73,7 +67,6 @@ func init() {
 	// Always prepend the filename and line number.
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	flag.Var(&saverType, "saver.backend", "Set the saver backend to 'datastore' or 'local' file.")
 	flag.StringVar(&saverDir, "saver.dir", "local", "When the saver backend is 'local', place files in this directory")
 
 	flag.StringVar(&project, "project", "", "GCP project id")
@@ -191,19 +184,7 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 func mustStandardTracker() *tracker.Tracker {
-	var saver tracker.Saver
-	dsKey := datastore.NameKey("tracker", "jobs", nil)
-	dsKey.Namespace = "gardener"
-
-	switch saverType.Value {
-	case "datastore":
-		client, err := datastore.NewClient(context.Background(), env.Project)
-		rtx.Must(err, "datastore client")
-		saver = tracker.NewDatastoreSaver(dsiface.AdaptClient(client), dsKey)
-	case "local":
-		saver = tracker.NewLocalSaver(saverDir, dsKey)
-	}
-
+	saver := tracker.NewLocalSaver(saverDir)
 	tk, err := tracker.InitTracker(
 		context.Background(), saver,
 		time.Minute, *jobExpirationTime, *jobCleanupDelay)
@@ -216,17 +197,10 @@ func mustStandardTracker() *tracker.Tracker {
 }
 
 func mustCreateJobService(ctx context.Context, g *config.Gardener) *job.Service {
-	var saver persistence.Saver
 	storageClient, err := storage.NewClient(ctx)
 	rtx.Must(err, "Could not create storage client for job service")
 
-	switch saverType.Value {
-	case "datastore":
-		saver, err = persistence.NewDatastoreSaver(context.Background(), project)
-		rtx.Must(err, "Could not initialize datastore saver")
-	case "local":
-		saver = persistence.NewLocalSaver(saverDir)
-	}
+	saver := persistence.NewLocalSaver(saverDir)
 	svc, err := job.NewJobService(
 		ctx, globalTracker, g.Start(),
 		project, g.Sources, saver,

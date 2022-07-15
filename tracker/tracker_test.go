@@ -10,12 +10,8 @@ import (
 
 	"github.com/m-lab/go/timex"
 
-	"cloud.google.com/go/datastore"
-	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
-
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/etl-gardener/tracker/jobtest"
-	"github.com/m-lab/go/cloudtest/dsfake"
 	"github.com/m-lab/go/logx"
 )
 
@@ -70,21 +66,6 @@ func completeJobs(t *testing.T, tk *tracker.Tracker, exp string, typ string, n i
 	}
 }
 
-func cleanup(client dsiface.Client, key *datastore.Key) error {
-	ctx, cf := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cf()
-	err := client.Delete(ctx, key)
-	if err != nil && err != datastore.ErrNoSuchEntity {
-		tc, ok := client.(*dsfake.Client)
-		if ok {
-			keys := tc.GetKeys()
-			log.Println(keys)
-		}
-		return err
-	}
-	return nil
-}
-
 func TestJobPath(t *testing.T) {
 	withType := tracker.Job{
 		Bucket: "bucket", Experiment: "exp", Datatype: "type", Date: startDate, Filter: "",
@@ -104,9 +85,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	ctx := context.Background()
 	logx.LogxDebug.Set("true")
 
-	dsKey := datastore.NameKey("TestTrackerAddDelete", "jobs", nil)
-	dsKey.Namespace = "gardener"
-	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
+	saver := tracker.NewLocalSaver(t.TempDir())
 
 	tk, err := tracker.InitTracker(ctx, saver, 0, 0, time.Second)
 	must(t, err)
@@ -171,9 +150,7 @@ func TestTrackerAddDelete(t *testing.T) {
 }
 
 func TestUpdates(t *testing.T) {
-	dsKey := datastore.NameKey("TestUpdate", "jobs", nil)
-	dsKey.Namespace = "gardener"
-	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
+	saver := tracker.NewLocalSaver(t.TempDir())
 
 	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 	must(t, err)
@@ -220,9 +197,7 @@ func TestUpdates(t *testing.T) {
 // This tests whether AddJob and SetStatus generate appropriate
 // errors when job doesn't exist.
 func TestNonexistentJobAccess(t *testing.T) {
-	dsKey := datastore.NameKey("TestNonexistentJobAccess", "jobs", nil)
-	dsKey.Namespace = "gardener"
-	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
+	saver := tracker.NewLocalSaver(t.TempDir())
 
 	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 	must(t, err)
@@ -256,9 +231,7 @@ func TestNonexistentJobAccess(t *testing.T) {
 }
 
 func TestJobMapHTML(t *testing.T) {
-	dsKey := datastore.NameKey("TestJobMapHTML", "jobs", nil)
-	dsKey.Namespace = "gardener"
-	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
+	saver := tracker.NewLocalSaver(t.TempDir())
 
 	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 	must(t, err)
@@ -279,9 +252,7 @@ func TestJobMapHTML(t *testing.T) {
 }
 
 func TestExpiration(t *testing.T) {
-	dsKey := datastore.NameKey("TestExpiration", "jobs", nil)
-	dsKey.Namespace = "gardener"
-	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
+	saver := tracker.NewLocalSaver(t.TempDir())
 
 	ctx, cancel := context.WithCancel(context.Background())
 

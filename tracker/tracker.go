@@ -22,9 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"cloud.google.com/go/datastore"
-	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
-
 	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/go/logx"
 )
@@ -64,45 +61,27 @@ type Saver interface {
 	Load(ctx context.Context) (JobMap, Job, error)
 }
 
-type DatastoreSaver struct {
-	client dsiface.Client
-	key    *datastore.Key
-}
-
-func NewDatastoreSaver(client dsiface.Client, key *datastore.Key) *DatastoreSaver {
-	return &DatastoreSaver{
-		client: client,
-		key:    key,
-	}
-}
-
-func (ds *DatastoreSaver) Save(ctx context.Context, state interface{}) error {
-	_, err := ds.client.Put(ctx, ds.key, state)
-	return err
-}
-
-func (ds *DatastoreSaver) Load(ctx context.Context) (JobMap, Job, error) {
-	return loadJobMap(ctx, ds.client, ds.key)
-}
-
+// TODO(soltesz): move LocalSaver to persistence package.
 type LocalSaver struct {
 	dir  string
-	key  *datastore.Key
 	lock sync.Mutex
 }
 
-func NewLocalSaver(dir string, dsKey *datastore.Key) *LocalSaver {
+func NewLocalSaver(dir string) *LocalSaver {
 	return &LocalSaver{
 		dir: dir,
-		key: dsKey,
 	}
 }
 
 func (ls *LocalSaver) fname() string {
-	if ls.key == nil {
-		return "nil-localsaver.txt"
-	}
-	return path.Join(ls.dir, ls.key.Namespace+"-"+ls.key.Kind+"-"+ls.key.Name)
+	return path.Join(ls.dir, "gardener-tracker-jobs")
+}
+
+// saverStruct is used only for saving and loading from persistent storage.
+type saverStruct struct {
+	SaveTime time.Time
+	LastInit Job
+	Jobs     []byte
 }
 
 func (ls *LocalSaver) Save(ctx context.Context, state interface{}) error {
@@ -135,6 +114,25 @@ func (ls *LocalSaver) Load(ctx context.Context) (JobMap, Job, error) {
 		return nil, Job{}, err
 	}
 	return loadJobMapFromState(state)
+}
+
+// loadJobMapFromState completes unmarshalling a saverStruct.
+func loadJobMapFromState(state saverStruct) (JobMap, Job, error) {
+	log.Println("Last save:", state.SaveTime.Format("01/02T15:04"))
+	log.Println(string(state.Jobs))
+
+	jobMap := make(JobMap, 100)
+	log.Println("Unmarshalling", len(state.Jobs))
+	err := json.Unmarshal(state.Jobs, &jobMap)
+	if err != nil {
+		log.Fatal("loadJobMap failed", err)
+	}
+	for j, s := range jobMap {
+		if len(s.History) < 1 {
+			log.Fatalf("Empty State history %+v : %+v\n", j, s)
+		}
+	}
+	return jobMap, state.LastInit, nil
 }
 
 func (ls *LocalSaver) Delete(ctx context.Context) error {
@@ -200,7 +198,7 @@ func (tr *Tracker) NumFailed() int {
 	return counts[Failed]
 }
 
-// Sync snapshots the full job state and saves it to the datastore client IFF it has changed.
+// Sync snapshots the full job state and saves it to persistent storage IFF it has changed.
 // Returns time last saved, which may or may not be updated.
 func (tr *Tracker) Sync(ctx context.Context, lastSave time.Time) (time.Time, error) {
 	jobs, lastInit, lastMod := tr.GetState()

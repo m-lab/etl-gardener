@@ -89,7 +89,7 @@ func initYesterday(ctx context.Context, saver persistence.Saver, delay time.Dura
 		nextIndex: 0,
 	}
 
-	// Recover the date from datastore.
+	// Recover the date from previously persisted state.
 	ctx, cf := context.WithTimeout(ctx, 5*time.Second)
 	defer cf()
 	err := saver.Fetch(ctx, &src)
@@ -231,7 +231,6 @@ func (svc *Service) recoverDate(ctx context.Context) {
 var ErrInvalidStartDate = errors.New("invalid start date")
 
 // NewJobService creates the default job service.
-// Context is used for retrieving state from datastore.
 func NewJobService(ctx context.Context, tk jobAdder, startDate time.Time,
 	targetBase string, sources []config.SourceConfig,
 	saver persistence.Saver,

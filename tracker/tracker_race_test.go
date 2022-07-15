@@ -1,3 +1,4 @@
+//go:build race
 // +build race
 
 package tracker_test
@@ -11,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"cloud.google.com/go/datastore"
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
@@ -26,9 +26,7 @@ func TestConcurrentUpdates(t *testing.T) {
 
 	ctx := context.Background()
 
-	dsKey := datastore.NameKey("TestConcurrentUpdates", "jobs", nil)
-	dsKey.Namespace = "gardener"
-	saver := tracker.NewLocalSaver(t.TempDir(), dsKey)
+	saver := tracker.NewLocalSaver(t.TempDir())
 
 	// For testing, push to the saver every 5 milliseconds.
 	saverInterval := 5 * time.Millisecond

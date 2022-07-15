@@ -113,7 +113,7 @@ func TestResume(t *testing.T) {
 	ctx := context.Background()
 
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
-	saver := tracker.NewLocalSaver(t.TempDir(), nil)
+	saver := tracker.NewLocalSaver(t.TempDir())
 	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0) // Only using jobmap.
 	if err != nil {
 		t.Fatal(err)
@@ -269,7 +269,7 @@ func TestEarlyWrapping(t *testing.T) {
 	})
 	defer monkey.Unpatch(time.Now)
 	start := time.Date(2011, 2, 3, 0, 0, 0, 0, time.UTC)
-	saver := tracker.NewLocalSaver(t.TempDir(), nil)
+	saver := tracker.NewLocalSaver(t.TempDir())
 	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0) // Only using jobmap.
 	if err != nil {
 		t.Fatal(err)
