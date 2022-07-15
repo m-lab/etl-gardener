@@ -78,7 +78,7 @@ func TestLocalNamedSaver(t *testing.T) {
 		name        string
 		input       any
 		output      any
-		removePerm  bool
+		removeDir   bool
 		wantSaveErr bool
 		removeFile  bool
 		wantLoadErr bool
@@ -96,7 +96,7 @@ func TestLocalNamedSaver(t *testing.T) {
 		{
 			name:        "save-error-no-write-permission",
 			input:       &foo{A: 10},
-			removePerm:  true,
+			removeDir:   true,
 			wantSaveErr: true,
 		},
 		{
@@ -117,8 +117,8 @@ func TestLocalNamedSaver(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			file := dir + "/output.json"
-			if tt.removePerm {
-				os.Chmod(dir, 0000) // make directory unwritable.
+			if tt.removeDir {
+				os.Remove(dir) // make directory unwritable.
 			}
 			// save to named saver.
 			ls := persistence.NewLocalNamedSaver(file)
