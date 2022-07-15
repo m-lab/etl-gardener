@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"path"
 	"reflect"
 	"testing"
 
@@ -116,7 +117,7 @@ func TestLocalNamedSaver(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
-			file := dir + "/output.json"
+			file := path.Join(dir, "output.json")
 			if tt.removeDir {
 				os.Remove(dir) // make directory unwritable.
 			}
