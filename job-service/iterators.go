@@ -95,7 +95,7 @@ func NewHistoricalIterator(start time.Time, saver namedSaver) *HistoricalIterato
 		saver: saver,
 	}
 	// Attempt to load Date from previously saved data.
-	tmp := &DailyIterator{}
+	tmp := &HistoricalIterator{}
 	err := h.saver.Load(tmp)
 	if err == nil && !tmp.Date.IsZero() {
 		// Ignore load errors.
