@@ -130,7 +130,7 @@ func TestResume(t *testing.T) {
 	must(t, err)
 	j := svc.NextJob(ctx)
 	if j.Job.Date != last.Date {
-		t.Error(j, last)
+		t.Errorf("NextJob() Job date does not match; got %s, want %s", j.Job.Date, last.Date)
 	}
 }
 
