@@ -10,9 +10,6 @@ import (
 var (
 	// ErrNoDateAvailable is returned if a DateIterator does not have a date available.
 	ErrNoDateAvailable = errors.New("no date is available")
-
-	// ErrBadDate is returned if a bad date is returned by a date iterator.
-	ErrBadDate = errors.New("bad date")
 )
 
 type namedSaver interface {
@@ -28,7 +25,7 @@ type namedSaver interface {
 // roughly follow: filter, save, read, update, return. By saving the current
 // date before updating, we ensure that a mid-process restart would pickup where
 // it left off, possibly at the expense of some reprocessing, but with assurance
-// that no dates were skipped.
+// that no date data was skipped.
 type DateIterator interface {
 	Next() (time.Time, error)
 }
@@ -68,7 +65,7 @@ func NewDailyIterator(delay time.Duration, saver namedSaver) *DailyIterator {
 
 // Next returns the next "daily" date. Until 'delay' after UTC midnight, Next will
 // return ErrNoDateAvailable. If err is nil, then the returned time is the next
-// daily date. After every update, the new date is saved.
+// daily date. The current date is saved before every update.
 func (d *DailyIterator) Next() (time.Time, error) {
 	// Do not proceed until after midnight+delay the next day.
 	if time.Since(d.Date) < 24*time.Hour+d.delay {
@@ -112,8 +109,8 @@ func NewHistoricalIterator(start time.Time, saver namedSaver) *HistoricalIterato
 }
 
 // Next returns the next "historical" date. If this date is within 36h of
-// current, real world date, then the historical cycle restarts. After every
-// update, the new date is saved.
+// current, real world date, then the historical cycle restarts. The current
+// date is saved before every update.
 func (h *HistoricalIterator) Next() (time.Time, error) {
 	// Start over when we reach yesterday.
 	if time.Since(h.Date) < 36*time.Hour {
