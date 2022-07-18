@@ -33,9 +33,6 @@ type DateIterator interface {
 	Next() (time.Time, error)
 }
 
-// old: load, update, filter, save - may skip data.
-// new: load, filter, save, update - may reprocess data.
-
 // DailyIterator tracks state and dates for "daily" processing events.
 type DailyIterator struct {
 	Date  time.Time     // The next date to process.
