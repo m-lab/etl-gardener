@@ -99,7 +99,17 @@ func TestHistoricalIterator(t *testing.T) {
 			},
 		},
 		{
-			name:  "success-reload-with-alternate-start",
+			name:  "success-reload-continue",
+			start: time.Date(2019, time.July, 2, 0, 0, 0, 0, time.UTC),
+			saver: persistence.NewLocalNamedSaver(path.Join(dir, "success.json")),
+			want: []time.Time{
+				time.Date(2019, time.July, 2, 0, 0, 0, 0, time.UTC),
+				time.Date(2019, time.July, 3, 0, 0, 0, 0, time.UTC),
+				time.Date(2019, time.July, 4, 0, 0, 0, 0, time.UTC),
+			},
+		},
+		{
+			name:  "success-reload-with-later-start",
 			start: time.Date(2020, time.June, 30, 0, 0, 0, 0, time.UTC),
 			saver: persistence.NewLocalNamedSaver(path.Join(dir, "success.json")),
 			want: []time.Time{
