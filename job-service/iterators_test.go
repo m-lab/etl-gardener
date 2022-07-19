@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"bou.ke/monkey"
 	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
 )
@@ -20,60 +21,77 @@ func (f *noopSaver) Load(v any) error {
 	return nil
 }
 
-type failSaver struct{}
+type failSaver struct {
+	err error
+}
 
 func (f *failSaver) Save(v any) error {
-	return errors.New("save failed")
+	return f.err
 }
 func (f *failSaver) Load(v any) error {
-	return errors.New("load failed")
+	return f.err
 }
 
 func TestDailyIterator(t *testing.T) {
+	type timeOrErr struct {
+		date time.Time
+		err  error
+	}
+	failErr := errors.New("any error")
 	dir := t.TempDir()
 	tests := []struct {
-		name    string
-		saver   namedSaver
-		want    time.Time
-		wantErr bool
+		name  string
+		now   time.Time // fake "now".
+		saver namedSaver
+		want  []timeOrErr
 	}{
 		{
 			// The first time we create the DailyIterator, the success.json will be empty, but it will be saved.
 			name:  "success-create",
+			now:   time.Date(2022, time.July, 2, 0, 0, 0, 0, time.UTC),
 			saver: persistence.NewLocalNamedSaver(path.Join(dir, "success.json")),
-			want:  tracker.YesterdayDate(),
+			want: []timeOrErr{
+				{time.Date(2022, time.July, 1, 0, 0, 0, 0, time.UTC), nil},
+				{time.Time{}, ErrNoDateAvailable},
+			},
 		},
 		{
 			// The second time we create the DailyIterator, the success.json will successfully load a value.
 			name:  "success-reload",
+			now:   time.Date(2022, time.July, 4, 0, 0, 0, 0, time.UTC),
 			saver: persistence.NewLocalNamedSaver(path.Join(dir, "success.json")),
-			want:  tracker.YesterdayDate(),
+			want: []timeOrErr{
+				{time.Date(2022, time.July, 1, 0, 0, 0, 0, time.UTC), nil},
+				{time.Date(2022, time.July, 2, 0, 0, 0, 0, time.UTC), nil},
+				{time.Date(2022, time.July, 3, 0, 0, 0, 0, time.UTC), nil},
+				{time.Time{}, ErrNoDateAvailable},
+			},
 		},
 		{
-			name:    "error",
-			saver:   &failSaver{},
-			wantErr: true,
+			name:  "error",
+			now:   time.Now(),
+			saver: &failSaver{err: failErr},
+			want: []timeOrErr{
+				{time.Time{}, failErr}, // doesn't matter, it will fail.
+			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			monkey.Patch(time.Now, func() time.Time {
+				return tt.now
+			})
+			defer monkey.Unpatch(time.Now)
 			d := NewDailyIterator(0, tt.saver)
 
-			n, err := d.Next()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("DailyIterator.Next returned error; got %v, wantErr %t", err, tt.wantErr)
-			}
-			if n != tt.want {
-				t.Errorf("DailyIterator.Next returned wrong date; got %q, want %q", n, tt.want)
-			}
-			if tt.wantErr {
-				return
-			}
-
-			// Calling next again, should fail.
-			_, err = d.Next()
-			if err != ErrNoDateAvailable {
-				t.Errorf("DailyIterator.Next returned non-nil error; %v", err)
+			for i := 0; i < len(tt.want); i++ {
+				n, err := d.Next()
+				if err != tt.want[i].err {
+					t.Errorf("DailyIterator.Next returned error; got %v, want %v", err, tt.want[i].err)
+				}
+				if n != tt.want[i].date {
+					t.Errorf("DailyIterator.Next returned wrong date; got %q, want %q", n, tt.want[i].date)
+				}
 			}
 		})
 	}
@@ -83,6 +101,7 @@ func TestHistoricalIterator(t *testing.T) {
 	dir := t.TempDir()
 	tests := []struct {
 		name    string
+		now     time.Time // fake "now".
 		start   time.Time
 		saver   namedSaver
 		want    []time.Time
@@ -90,6 +109,7 @@ func TestHistoricalIterator(t *testing.T) {
 	}{
 		{
 			name:  "success",
+			now:   time.Now(),
 			start: time.Date(2019, time.June, 30, 0, 0, 0, 0, time.UTC),
 			saver: persistence.NewLocalNamedSaver(path.Join(dir, "success.json")),
 			want: []time.Time{
@@ -100,6 +120,7 @@ func TestHistoricalIterator(t *testing.T) {
 		},
 		{
 			name:  "success-reload-continue",
+			now:   time.Now(),
 			start: time.Date(2019, time.July, 2, 0, 0, 0, 0, time.UTC),
 			saver: persistence.NewLocalNamedSaver(path.Join(dir, "success.json")),
 			want: []time.Time{
@@ -110,6 +131,7 @@ func TestHistoricalIterator(t *testing.T) {
 		},
 		{
 			name:  "success-reload-with-later-start",
+			now:   time.Now(),
 			start: time.Date(2020, time.June, 30, 0, 0, 0, 0, time.UTC),
 			saver: persistence.NewLocalNamedSaver(path.Join(dir, "success.json")),
 			want: []time.Time{
@@ -119,24 +141,41 @@ func TestHistoricalIterator(t *testing.T) {
 			},
 		},
 		{
-			name:  "success-restart-wrap",
-			start: time.Now().UTC().Add(-48 * time.Hour).Truncate(24 * time.Hour),
+			name:  "success-restart-wrap-before-12hours",
+			now:   time.Date(2022, time.July, 19, 0, 5, 0, 0, time.UTC), // 00:05-after UTC midnight.
+			start: time.Date(2022, time.July, 17, 0, 0, 0, 0, time.UTC),
 			saver: &noopSaver{},
 			want: []time.Time{
-				time.Now().UTC().Add(-48 * time.Hour).Truncate(24 * time.Hour),
-				time.Now().UTC().Add(-24 * time.Hour).Truncate(24 * time.Hour),
-				time.Now().UTC().Add(-48 * time.Hour).Truncate(24 * time.Hour),
+				time.Date(2022, time.July, 17, 0, 0, 0, 0, time.UTC),
+				time.Date(2022, time.July, 17, 0, 0, 0, 0, time.UTC), // We never reach the 18th.
+				time.Date(2022, time.July, 17, 0, 0, 0, 0, time.UTC),
+			},
+		},
+		{
+			name:  "success-restart-wrap-after-12hours",
+			now:   time.Date(2022, time.July, 19, 12, 5, 0, 0, time.UTC), // 12:05-after UTC midnight.
+			start: time.Date(2022, time.July, 17, 0, 0, 0, 0, time.UTC),
+			saver: &noopSaver{},
+			want: []time.Time{
+				time.Date(2022, time.July, 17, 0, 0, 0, 0, time.UTC),
+				time.Date(2022, time.July, 18, 0, 0, 0, 0, time.UTC), // We reach the 18th, but reset on next attempt.
+				time.Date(2022, time.July, 17, 0, 0, 0, 0, time.UTC),
 			},
 		},
 		{
 			name:    "error-failsave",
+			now:     time.Now(),
 			start:   time.Date(2019, time.June, 30, 0, 0, 0, 0, time.UTC),
-			saver:   &failSaver{},
+			saver:   &failSaver{err: errors.New("any error")},
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			monkey.Patch(time.Now, func() time.Time {
+				return tt.now
+			})
+			defer monkey.Unpatch(time.Now)
 			h := NewHistoricalIterator(tt.start, tt.saver)
 
 			times := []time.Time{}
