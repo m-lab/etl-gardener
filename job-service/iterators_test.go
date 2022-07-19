@@ -166,7 +166,7 @@ func TestHistoricalIterator(t *testing.T) {
 			name:    "error-failsave",
 			now:     time.Now(),
 			start:   time.Date(2019, time.June, 30, 0, 0, 0, 0, time.UTC),
-			saver:   &failSaver{},
+			saver:   &failSaver{err: errors.New("any error")},
 			wantErr: true,
 		},
 	}
