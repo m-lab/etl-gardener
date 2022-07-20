@@ -1,4 +1,4 @@
-package job
+package job_test
 
 import (
 	"errors"
@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"bou.ke/monkey"
+	"github.com/m-lab/etl-gardener/job-service"
 	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
 )
@@ -52,7 +53,7 @@ func TestDailyIterator(t *testing.T) {
 			saver: persistence.NewLocalNamedSaver(path.Join(dir, "success.json")),
 			want: []timeOrErr{
 				{time.Date(2022, time.July, 1, 0, 0, 0, 0, time.UTC), nil},
-				{time.Time{}, ErrNoDateAvailable},
+				{time.Time{}, job.ErrNoDateAvailable},
 			},
 		},
 		{
@@ -64,7 +65,7 @@ func TestDailyIterator(t *testing.T) {
 				{time.Date(2022, time.July, 1, 0, 0, 0, 0, time.UTC), nil},
 				{time.Date(2022, time.July, 2, 0, 0, 0, 0, time.UTC), nil},
 				{time.Date(2022, time.July, 3, 0, 0, 0, 0, time.UTC), nil},
-				{time.Time{}, ErrNoDateAvailable},
+				{time.Time{}, job.ErrNoDateAvailable},
 			},
 		},
 		{
@@ -82,7 +83,7 @@ func TestDailyIterator(t *testing.T) {
 				return tt.now
 			})
 			defer monkey.Unpatch(time.Now)
-			d := NewDailyIterator(0, tt.saver)
+			d := job.NewDailyIterator(0, tt.saver)
 
 			for i := 0; i < len(tt.want); i++ {
 				n, err := d.Next()
@@ -176,7 +177,7 @@ func TestHistoricalIterator(t *testing.T) {
 				return tt.now
 			})
 			defer monkey.Unpatch(time.Now)
-			h := NewHistoricalIterator(tt.start, tt.saver)
+			h := job.NewHistoricalIterator(tt.start, tt.saver)
 
 			times := []time.Time{}
 			for i := 0; i < 3; i++ {
@@ -216,7 +217,7 @@ func (f *errAfter2DateIterator) Next() (time.Time, error) {
 	f.Date = f.Date.AddDate(0, 0, 1)
 	f.i++
 	if f.i > 2 {
-		return time.Time{}, ErrNoDateAvailable
+		return time.Time{}, job.ErrNoDateAvailable
 	}
 	return d, nil
 }
@@ -228,7 +229,7 @@ func TestNewJobIterator(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		date    DateIterator
+		date    job.DateIterator
 		specs   []tracker.JobWithTarget
 		expect  []idOrErr
 		wantErr bool
@@ -258,14 +259,14 @@ func TestNewJobIterator(t *testing.T) {
 			expect: []idOrErr{
 				{ID: tracker.Key("bucket1/exp1/dt1/20200701")},
 				{ID: tracker.Key("bucket1/exp1/dt1/20200702")},
-				{err: ErrNoDateAvailable},
-				{err: ErrNoDateAvailable},
+				{err: job.ErrNoDateAvailable},
+				{err: job.ErrNoDateAvailable},
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			j := NewJobIterator(tt.date, tt.specs)
+			j := job.NewJobIterator(tt.date, tt.specs)
 
 			if j.Len() != len(tt.specs) {
 				t.Errorf("JobIterator.Len() returned wrong length; got %d, want %d", j.Len(), len(tt.specs))
