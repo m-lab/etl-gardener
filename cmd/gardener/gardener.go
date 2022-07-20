@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"runtime"
 	"time"
 
@@ -200,11 +201,12 @@ func mustCreateJobService(ctx context.Context, g *config.Gardener) *job.Service 
 	storageClient, err := storage.NewClient(ctx)
 	rtx.Must(err, "Could not create storage client for job service")
 
-	saver := persistence.NewLocalSaver(saverDir)
+	// TODO(soltesz): replace legacy filenames.
+	dailyS := persistence.NewLocalNamedSaver(path.Join(saverDir, "gardener-job.YesterdaySource-singleton"))
+	histS := persistence.NewLocalNamedSaver(path.Join(saverDir, "gardener-job.Service-singleton"))
 	svc, err := job.NewJobService(
-		ctx, globalTracker, g.Start(),
-		project, g.Sources, saver,
-		stiface.AdaptClient(storageClient))
+		g.Start(), g.Sources,
+		stiface.AdaptClient(storageClient), dailyS, histS)
 	rtx.Must(err, "Could not initialize job service")
 	return svc
 }
