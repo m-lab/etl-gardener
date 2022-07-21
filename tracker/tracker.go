@@ -130,23 +130,30 @@ func readSaverStructV2(saver GenericSaver) (time.Time, jobStateMap, jobStatusMap
 	return s.SaveTime, s.Jobs, s.Statuses, nil
 }
 
+// Migrating to v2 saver struct:
+// * initially, the v2 file does not exist, but the v1 file does.
+// * because the tracker will save in v2 format, on the next restart the v2 load will succeed.
+// * the v2 last saved time will be more recent than the v1 last saved time.
+// * we can now safely delete the v1 code and state files; they have been replaced by the v2 data.
 func loadJobMaps(newSaver, origSaver GenericSaver) (jobStateMap, jobStatusMap, error) {
+	// Attempt to read both the v1 and v2 saver structs.
 	tv1, jobMap, _, err1 := readSaverStructV1(origSaver)
 	tv2, jobs, statuses, err2 := readSaverStructV2(newSaver)
 
-	// First run, v2 file does not exist, returns an error. v1 file does exist.
-	// Second run, v2 file exists, and is newer than v1 file.
+	// Only use the v2 data if the last saved time is more recent than the v1 time.
 	if tv2.After(tv1) && err2 == nil {
-		// This means, an v1 file is present, but v2 is newer. So, use the newer one.
+		// This means v2 was saved more recently. So, use the newer data.
 		return jobs, statuses, nil
 	}
 
-	// The v2 data is not yet available, and we failed to read from the v1 file. Give up.
+	// At this point, it means the v2 data is not yet available. If we also
+	// failed to read from the v1 file, return empty sets.
 	if err1 != nil {
 		return make(jobStateMap), make(jobStatusMap), nil
 	}
 
-	// The v1 data was read successfully. Transform JobMap into statuses and jobs maps.
+	// Now, v2 was not yet available, but the v1 was read successfully.
+	// Transform the v1 JobMap into separate statuses and jobs maps.
 	statusesV1 := make(jobStatusMap)
 	jobsV1 := make(jobStateMap)
 	for j, s := range jobMap {
