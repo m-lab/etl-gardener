@@ -286,7 +286,7 @@ func TestExpiration(t *testing.T) {
 	time.Sleep(40 * time.Millisecond)
 }
 
-func xTestStructSaverLoading(t *testing.T) {
+func TestStructSaverLoading(t *testing.T) {
 	// Cases:
 	// * missing files for both.
 	// * v1 only
