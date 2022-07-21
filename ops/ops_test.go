@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/m-lab/go/rtx"
-
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/ops"
+	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/etl-gardener/tracker/jobtest"
+	"github.com/m-lab/go/rtx"
 )
 
 func init() {
@@ -36,8 +36,8 @@ func newStateFunc(detail string) ops.ActionFunc {
 
 func TestMonitor_Watch(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	saver := tracker.NewLocalSaver(t.TempDir())
-	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
+	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), "junk.json")
+	tk, err := tracker.InitTracker(ctx, saver, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
 	tk.AddJob(jobtest.NewJob("bucket", "exp", "type", time.Now()))
 	tk.AddJob(jobtest.NewJob("bucket", "exp2", "type", time.Now()))
@@ -80,8 +80,8 @@ func TestMonitor_Watch(t *testing.T) {
 func TestOutcomeUpdate(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	saver := tracker.NewLocalSaver(t.TempDir())
-	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
+	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), "junk.json")
+	tk, err := tracker.InitTracker(ctx, saver, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
 	job := jobtest.NewJob("bucket", "exp", "type", time.Now())
 	tk.AddJob(job)

@@ -8,13 +8,12 @@ import (
 	"testing"
 	"time"
 
+
 	"github.com/m-lab/etl-gardener/persistence"
-
-	"github.com/m-lab/go/timex"
-
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/etl-gardener/tracker/jobtest"
 	"github.com/m-lab/go/logx"
+	"github.com/m-lab/go/timex"
 )
 
 func init() {
@@ -293,16 +292,16 @@ func TestStructSaverLoading(t *testing.T) {
 	// * v1 and v2 (v2 is later)
 	// * v2 only
 	tests := []struct {
- 		name        string
- 		saverV1 namedSaver
- 		saverV2 namedSaver
- 		want        int
+ 		name    string
+ 		saverV1 tracker.GenericSaver
+ 		saverV2 tracker.GenericSaver
+ 		want    int
  	}{
  		{
- 			name:       "successful-both-files-missing",
- 			saverV1 : persistence.NewLocalNamedSaver(t.TempDir() + "/file-not-found.json"),
+ 			name:     "successful-both-files-missing",
+ 			saverV1:  persistence.NewLocalNamedSaver(t.TempDir() + "/file-not-found.json"),
  			saverV2:  persistence.NewLocalNamedSaver(t.TempDir() + "/file-not-found.json"),
- 			want:       0,
+ 			want:     0,
  		},
  		{
  			name:    "successful-v1-only",
@@ -317,7 +316,7 @@ func TestStructSaverLoading(t *testing.T) {
 			want:    0,
  		},
  		{
- 			name:      "successful-v2-only",
+ 			name:    "successful-v2-only",
  			saverV1: persistence.NewLocalNamedSaver(t.TempDir() + "/file-not-found.json"),
  			saverV2: persistence.NewLocalNamedSaver("testdata/saver-struct-v2.json"),
 			want:    0,
