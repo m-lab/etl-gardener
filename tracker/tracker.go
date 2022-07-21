@@ -34,7 +34,7 @@ type jobStateMap map[Key]Job
 // Tracker keeps track of all the jobs in flight.
 // Only tracker functions should access any of the fields.
 type Tracker struct {
-	stateSaver GenericSaver
+	saver GenericSaver
 
 	// The lock should be held whenever accessing the jobs maps.
 	lock         sync.Mutex
@@ -188,7 +188,7 @@ func InitTracker(
 	}
 
 	t := Tracker{
-		stateSaver:     saverV2,
+		saver:          saverV2,
 		lastModified:   time.Now(),
 		jobs:           jobs,
 		statuses:       statuses,
@@ -229,7 +229,7 @@ func (tr *Tracker) Sync(ctx context.Context, lastSave time.Time) (time.Time, err
 		logx.Debug.Println("Skipping save", lastMod, lastSave)
 		return lastSave, nil
 	}
-	err := tr.writeSaverStructV2(tr.stateSaver)
+	err := tr.writeSaverStructV2(tr.saver)
 	if err != nil {
 		return time.Time{}, err
 	}
