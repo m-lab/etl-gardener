@@ -171,8 +171,7 @@ func InitTracker(
 	expirationTime time.Duration,
 	cleanupDelay time.Duration) (*Tracker, error) {
 
-	// Attempt to load from both savers. This will only succeed the first time.
-	// After the newSaver writes its structure data, the origSaver load will fail.
+	// Attempt to load from both savers. The newest one wins.
 	jobs, statuses, err := loadJobMaps(saverV2, saverV1)
 	if err != nil {
 		return nil, err
@@ -189,13 +188,13 @@ func InitTracker(
 	}
 
 	t := Tracker{
-		stateSaver:     newSaver,
+		stateSaver:     saverV2,
 		lastModified:   time.Now(),
 		jobs:           jobs,
 		statuses:       statuses,
 		expirationTime: expirationTime, cleanupDelay: cleanupDelay}
 
-	if newSaver != nil && saveInterval > 0 {
+	if saverV2 != nil && saveInterval > 0 {
 		go t.saveEvery(ctx, saveInterval)
 	}
 	return &t, nil
