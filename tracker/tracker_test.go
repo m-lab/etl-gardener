@@ -335,8 +335,8 @@ func TestStructSaverLoading(t *testing.T) {
  			}
  			// Assert expected state.
  			count := tk.NumJobs()
- 			if count != 0 {
- 				t.Errorf("InitTracker().NumJobs wrong count; got %d, want 0", count)
+ 			if count != tt.want  {
+ 				t.Errorf("InitTracker().NumJobs wrong count; got %d, want %d", count, tt.want)
  				return
  			}
  		})
