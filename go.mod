@@ -5,11 +5,8 @@ go 1.18
 require (
 	bou.ke/monkey v1.0.2
 	cloud.google.com/go/bigquery v1.32.0
-	cloud.google.com/go/datastore v1.6.0
 	cloud.google.com/go/storage v1.22.1
-	github.com/go-test/deep v1.0.8
 	github.com/googleapis/google-cloud-go-testing v0.0.0-20210719221736-1c9a4c676720
-	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/m-lab/go v0.1.52
 	github.com/prometheus/client_golang v1.12.2
 	golang.org/x/net v0.0.0-20220615171555-694bf12d69de
@@ -25,6 +22,7 @@ require (
 	github.com/araddon/dateparse v0.0.0-20200409225146-d820a6159ab1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
+	github.com/go-test/deep v1.0.8 // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/go-cmp v0.5.8 // indirect
