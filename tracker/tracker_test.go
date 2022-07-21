@@ -3,9 +3,7 @@ package tracker_test
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"log"
-	"os"
 	"sync"
 	"testing"
 	"time"
