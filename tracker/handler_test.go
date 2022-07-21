@@ -12,6 +12,7 @@ import (
 
 	"github.com/m-lab/go/logx"
 
+	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/etl-gardener/tracker/jobtest"
 )
@@ -34,8 +35,8 @@ func (f *fakeJobService) NextJob(ctx context.Context) *tracker.JobWithTarget {
 }
 
 func testSetup(t *testing.T, jobs []tracker.Job) (url.URL, *tracker.Tracker) {
-	saver := tracker.NewLocalSaver(t.TempDir())
-	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
+	saver := persistence.NewLocalNamedSaver(t.TempDir() + "/tmp.json")
+	tk, err := tracker.InitTracker(context.Background(), saver, saver, 0, 0, 0)
 	must(t, err)
 	if tk == nil {
 		t.Fatal("nil Tracker")

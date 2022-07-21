@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/m-lab/etl-gardener/persistence"
+
 	"github.com/m-lab/go/timex"
 
 	"github.com/m-lab/etl-gardener/tracker"
@@ -85,9 +87,9 @@ func TestTrackerAddDelete(t *testing.T) {
 	ctx := context.Background()
 	logx.LogxDebug.Set("true")
 
-	saver := tracker.NewLocalSaver(t.TempDir())
+	saver := persistence.NewLocalNamedSaver(t.TempDir() + "/tmp.json")
 
-	tk, err := tracker.InitTracker(ctx, saver, 0, 0, time.Second)
+	tk, err := tracker.InitTracker(ctx, saver, saver, 0, 0, time.Second)
 	must(t, err)
 	if tk == nil {
 		t.Fatal("nil Tracker")
@@ -105,7 +107,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	}
 	// Check that the sync (and InitTracker) work.
 	// Jobs will be removed by GetStatus 50 milliseconds after Complete.
-	restore, err := tracker.InitTracker(context.Background(), saver, 0, 0, 50*time.Millisecond)
+	restore, err := tracker.InitTracker(context.Background(), saver, saver, 0, 0, 50*time.Millisecond)
 	must(t, err)
 
 	if restore.NumJobs() != 100 {
@@ -150,9 +152,9 @@ func TestTrackerAddDelete(t *testing.T) {
 }
 
 func TestUpdates(t *testing.T) {
-	saver := tracker.NewLocalSaver(t.TempDir())
+	saver := persistence.NewLocalNamedSaver(t.TempDir() + "/tmp.json")
 
-	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
+	tk, err := tracker.InitTracker(context.Background(), saver, saver, 0, 0, 0)
 	must(t, err)
 
 	createJobs(t, tk, "JobToUpdate", "type", 1)
@@ -197,9 +199,9 @@ func TestUpdates(t *testing.T) {
 // This tests whether AddJob and SetStatus generate appropriate
 // errors when job doesn't exist.
 func TestNonexistentJobAccess(t *testing.T) {
-	saver := tracker.NewLocalSaver(t.TempDir())
+	saver := persistence.NewLocalNamedSaver(t.TempDir() + "/tmp.json")
 
-	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
+	tk, err := tracker.InitTracker(context.Background(), saver, saver, 0, 0, 0)
 	must(t, err)
 
 	job := tracker.Job{}
@@ -231,9 +233,9 @@ func TestNonexistentJobAccess(t *testing.T) {
 }
 
 func TestJobMapHTML(t *testing.T) {
-	saver := tracker.NewLocalSaver(t.TempDir())
+	saver := persistence.NewLocalNamedSaver(t.TempDir() + "/tmp.json")
 
-	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
+	tk, err := tracker.InitTracker(context.Background(), saver, saver, 0, 0, 0)
 	must(t, err)
 
 	job := tracker.Job{}
@@ -252,12 +254,12 @@ func TestJobMapHTML(t *testing.T) {
 }
 
 func TestExpiration(t *testing.T) {
-	saver := tracker.NewLocalSaver(t.TempDir())
+	saver := persistence.NewLocalNamedSaver(t.TempDir() + "/tmp.json")
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Expire jobs after 1 second of monkey time.
-	tk, err := tracker.InitTracker(ctx, saver, 5*time.Millisecond, 10*time.Millisecond, 1*time.Millisecond)
+	tk, err := tracker.InitTracker(ctx, saver, saver, 5*time.Millisecond, 10*time.Millisecond, 1*time.Millisecond)
 	must(t, err)
 
 	job := jobtest.NewJob("bucket", "exp", "type", startDate)
@@ -274,6 +276,7 @@ func TestExpiration(t *testing.T) {
 
 	// Let enough time go by that expirationTime passes, and saver runs.
 	time.Sleep(40 * time.Millisecond)
+	tk.GetState() // TODO(soltesz): manage "clean" directly rather via side effects.
 
 	// Job should have been removed by saveEvery, so this should succeed.
 	must(t, tk.AddJob(job))
