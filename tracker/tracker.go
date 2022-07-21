@@ -58,23 +58,23 @@ type GenericSaver interface {
 	Load(dst any) error
 }
 
-// saverStateV2 is used to save and load all Job status and state to persistent storage.
-type saverStateV2 struct {
+// saverStructV2 is used to save and load all Job status and state to persistent storage.
+type saverStructV2 struct {
 	SaveTime time.Time
 	Statuses jobStatusMap
 	Jobs     jobStateMap
 }
 
-// saverStruct is used only for saving and loading from persistent storage.
-type saverStruct struct {
+// saverStructV1 is used only for saving and loading from persistent storage.
+type saverStructV1 struct {
 	SaveTime time.Time
 	LastInit Job
 	Jobs     []byte
 }
 
 // TODO(soltesz): delete as soon as possible.
-func readSaverV1(saver GenericSaver) (time.Time, JobMap, Job, error) {
-	state := &saverStruct{}
+func readSaverStructV1(saver GenericSaver) (time.Time, JobMap, Job, error) {
+	state := &saverStructV1{}
 	err := saver.Load(state)
 	if err != nil {
 		return time.Time{}, nil, Job{}, err
@@ -83,8 +83,8 @@ func readSaverV1(saver GenericSaver) (time.Time, JobMap, Job, error) {
 	return state.SaveTime, jm, j, nil
 }
 
-// loadJobMapFromState completes unmarshalling a saverStruct.
-func loadJobMapFromState(state *saverStruct) (JobMap, Job, error) {
+// loadJobMapFromState completes unmarshalling a saverStructV1.
+func loadJobMapFromState(state *saverStructV1) (JobMap, Job, error) {
 	log.Println("Last save:", state.SaveTime.Format("01/02T15:04"))
 	log.Println(string(state.Jobs))
 
@@ -102,9 +102,37 @@ func loadJobMapFromState(state *saverStruct) (JobMap, Job, error) {
 	return jobMap, state.LastInit, nil
 }
 
+func (tr *Tracker) writeSaverStructV2(saver GenericSaver) error {
+	tr.lock.Lock()
+	defer tr.lock.Unlock()
+	statuses := jobStatusMap{} // statuses contains all tracked Job statuses.
+	jobs := jobStateMap{}      // jobs contains all tracked Jobs.
+	// copy Statuses and Jobs
+	for k, j := range tr.jobs {
+		statuses[k] = tr.statuses[k]
+		jobs[k] = j
+	}
+	s := &saverStructV2{
+		SaveTime: time.Now(),
+		Statuses: statuses,
+		Jobs:     jobs,
+	}
+	return saver.Save(s)
+}
+
+func readSaverStructV2(saver GenericSaver) (time.Time, jobStateMap, jobStatusMap, error) {
+	s := &saverStructV2{}
+	err := saver.Load(s)
+	if err != nil {
+		return time.Time{}, nil, nil, err
+	}
+	log.Println("loading jobs previously saved from:", s.SaveTime)
+	return s.SaveTime, s.Jobs, s.Statuses, nil
+}
+
 func loadJobMaps(newSaver, origSaver GenericSaver) (jobStateMap, jobStatusMap, error) {
 	tv1, jobMap, _, err1 := readSaverV1(origSaver)
-	tv2, jobs, statuses, err2 := readSaverStateV2(newSaver)
+	tv2, jobs, statuses, err2 := readSaverStructV2(newSaver)
 
 	// First run, v2 file does not exist, returns an error. v1 file does exist.
 	// Second run, v2 file exists, and is newer than v1 file.
@@ -195,7 +223,7 @@ func (tr *Tracker) Sync(ctx context.Context, lastSave time.Time) (time.Time, err
 		logx.Debug.Println("Skipping save", lastMod, lastSave)
 		return lastSave, nil
 	}
-	err := tr.writeSaverState(tr.stateSaver)
+	err := tr.writeSaverStructV2(tr.stateSaver)
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -365,33 +393,6 @@ func (tr *Tracker) SetJobError(key Key, errString string) error {
 	return tr.UpdateJob(key, status)
 }
 
-func (tr *Tracker) writeSaverState(saver GenericSaver) error {
-	tr.lock.Lock()
-	defer tr.lock.Unlock()
-	statuses := jobStatusMap{} // statuses contains all tracked Job statuses.
-	jobs := jobStateMap{}      // jobs contains all tracked Jobs.
-	// copy Statuses and Jobs
-	for k, j := range tr.jobs {
-		statuses[k] = tr.statuses[k]
-		jobs[k] = j
-	}
-	s := &saverStateV2{
-		SaveTime: time.Now(),
-		Statuses: statuses,
-		Jobs:     jobs,
-	}
-	return saver.Save(s)
-}
-
-func readSaverStateV2(saver GenericSaver) (time.Time, jobStateMap, jobStatusMap, error) {
-	s := &saverStateV2{}
-	err := saver.Load(s)
-	if err != nil {
-		return time.Time{}, nil, nil, err
-	}
-	log.Println("loading jobs previously saved from:", s.SaveTime)
-	return s.SaveTime, s.Jobs, s.Statuses, nil
-}
 
 // GetState returns the full job map, last initialized Job, and last mod time.
 // It also cleans up any expired jobs from the tracker.
