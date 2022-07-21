@@ -84,12 +84,11 @@ func readSaverStructV1(saver GenericSaver) (time.Time, JobMap, Job, error) {
 }
 
 func (tk *Tracker) GenerateTestdata(saver GenericSaver) error {
-	jobs, _, _ := tr.GetState()
+	jobs, _, _ := tk.GetState()
 	jsonJobs, _ := jobs.MarshalJSON()
 
 	// Save the full state.
-	lastTry := time.Now()
-	state := saverStruct{time.Now(), lastInit, jsonJobs}
+	state := saverStructV1{time.Now(), Job{}, jsonJobs}
 	return saver.Save(&state)
 }
 
