@@ -341,3 +341,4 @@ func TestStructSaverLoading(t *testing.T) {
  			}
  		})
  	}
+}
