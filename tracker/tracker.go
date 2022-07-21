@@ -133,10 +133,10 @@ func readSaverStructV2(saver GenericSaver) (time.Time, jobStateMap, jobStatusMap
 // * because the tracker will save in v2 format, on the next restart the v2 load will succeed.
 // * the v2 last saved time will be more recent than the v1 last saved time.
 // * we can now safely delete the v1 code and state files; they have been replaced by the v2 data.
-func loadJobMaps(newSaver, origSaver GenericSaver) (jobStateMap, jobStatusMap, error) {
+func loadJobMaps(saverV2, saverV1 GenericSaver) (jobStateMap, jobStatusMap, error) {
 	// Attempt to read both the v1 and v2 saver structs.
-	tv1, jobMap, _, err1 := readSaverStructV1(origSaver)
-	tv2, jobs, statuses, err2 := readSaverStructV2(newSaver)
+	tv1, jobMap, _, err1 := readSaverStructV1(saverV1)
+	tv2, jobs, statuses, err2 := readSaverStructV2(saverV2)
 
 	// Only use the v2 data if the last saved time is more recent than the v1 time.
 	if tv2.After(tv1) && err2 == nil {
@@ -165,15 +165,15 @@ func loadJobMaps(newSaver, origSaver GenericSaver) (jobStateMap, jobStatusMap, e
 // May return error if recovery fails.
 func InitTracker(
 	ctx context.Context,
-	origSaver GenericSaver,
-	newSaver GenericSaver,
+	saverV1 GenericSaver,
+	saverV2 GenericSaver,
 	saveInterval time.Duration,
 	expirationTime time.Duration,
 	cleanupDelay time.Duration) (*Tracker, error) {
 
 	// Attempt to load from both savers. This will only succeed the first time.
 	// After the newSaver writes its structure data, the origSaver load will fail.
-	jobs, statuses, err := loadJobMaps(newSaver, origSaver)
+	jobs, statuses, err := loadJobMaps(saverV2, saverV1)
 	if err != nil {
 		return nil, err
 	}
