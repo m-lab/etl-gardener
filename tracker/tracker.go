@@ -131,7 +131,7 @@ func readSaverStructV2(saver GenericSaver) (time.Time, jobStateMap, jobStatusMap
 }
 
 func loadJobMaps(newSaver, origSaver GenericSaver) (jobStateMap, jobStatusMap, error) {
-	tv1, jobMap, _, err1 := readSaverV1(origSaver)
+	tv1, jobMap, _, err1 := readSaverStructV1(origSaver)
 	tv2, jobs, statuses, err2 := readSaverStructV2(newSaver)
 
 	// First run, v2 file does not exist, returns an error. v1 file does exist.
