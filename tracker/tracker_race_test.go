@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/m-lab/etl-gardener/tracker"
+	"github.com/m-lab/etl-gardener/persistence"
 )
 
 func TestConcurrentUpdates(t *testing.T) {
@@ -26,11 +27,11 @@ func TestConcurrentUpdates(t *testing.T) {
 
 	ctx := context.Background()
 
-	saver := tracker.NewLocalSaver(t.TempDir())
+	saver := persistence.NewLocalNamedSaver(t.TempDir() + "/tmp.json")
 
 	// For testing, push to the saver every 5 milliseconds.
 	saverInterval := 5 * time.Millisecond
-	tk, err := tracker.InitTracker(ctx, saver, saverInterval, 0, 0)
+	tk, err := tracker.InitTracker(ctx, saver, saver, saverInterval, 0, 0)
 	must(t, err)
 
 	jobs := 20
@@ -74,7 +75,7 @@ func TestConcurrentUpdates(t *testing.T) {
 	if testing.Verbose() {
 		_, err := tk.Sync(ctx, time.Time{})
 		must(t, err)
-		restore, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
+		restore, err := tracker.InitTracker(context.Background(), saver, saver, 0, 0, 0)
 		must(t, err)
 
 		status, _, _ := restore.GetState()
