@@ -220,11 +220,6 @@ func TestNonexistentJobAccess(t *testing.T) {
 	js := jobtest.NewJob("bucket", "exp", "type", startDate)
 	must(t, tk.AddJob(js))
 
-	// TODO: remove.
-	tk.GenerateTestdata(saver)
-	b, _ := os.ReadFile(file)
-	fmt.Println(string(b))
-
 	err = tk.AddJob(js)
 	if err != tracker.ErrJobAlreadyExists {
 		t.Error("Should be ErrJobAlreadyExists", err)

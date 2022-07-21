@@ -83,15 +83,6 @@ func readSaverStructV1(saver GenericSaver) (time.Time, JobMap, Job, error) {
 	return state.SaveTime, jm, j, nil
 }
 
-func (tk *Tracker) GenerateTestdata(saver GenericSaver) error {
-	jobs, _, _ := tk.GetState()
-	jsonJobs, _ := jobs.MarshalJSON()
-
-	// Save the full state.
-	state := saverStructV1{time.Now(), Job{}, jsonJobs}
-	return saver.Save(&state)
-}
-
 // loadJobMapFromState completes unmarshalling a saverStructV1.
 func loadJobMapFromState(state *saverStructV1) (JobMap, Job, error) {
 	log.Println("Last save:", state.SaveTime.Format("01/02T15:04"))
@@ -112,8 +103,6 @@ func loadJobMapFromState(state *saverStructV1) (JobMap, Job, error) {
 }
 
 func (tr *Tracker) writeSaverStructV2(saver GenericSaver) error {
-	tr.lock.Lock()
-	defer tr.lock.Unlock()
 	statuses := jobStatusMap{} // statuses contains all tracked Job statuses.
 	jobs := jobStateMap{}      // jobs contains all tracked Jobs.
 	// copy Statuses and Jobs
@@ -234,6 +223,8 @@ func (tr *Tracker) NumFailed() int {
 // Sync snapshots the full job state and saves it to persistent storage IFF it has changed.
 // Returns time last saved, which may or may not be updated.
 func (tr *Tracker) Sync(ctx context.Context, lastSave time.Time) (time.Time, error) {
+	tr.lock.Lock()
+	defer tr.lock.Unlock()
 	lastMod := tr.lastModified
 	if lastMod.Before(lastSave) {
 		logx.Debug.Println("Skipping save", lastMod, lastSave)
