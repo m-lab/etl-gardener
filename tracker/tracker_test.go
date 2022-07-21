@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -220,7 +221,7 @@ func TestNonexistentJobAccess(t *testing.T) {
 
 	// TODO: remove.
 	tk.GenerateTestdata(saver)
-	b, _ := ioutil.ReadAll(file)
+	b, _ := os.ReadFile(file)
 	fmt.Println(string(b))
 
 	err = tk.AddJob(js)
