@@ -71,7 +71,7 @@ func TestStandardMonitor(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	saver := persistence.NewLocalNamedSaver(t.TempDir() + "/tmp.json")
-	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
+	tk, err := tracker.InitTracker(ctx, saver, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
 
 	// Add jobs to the tracker.
