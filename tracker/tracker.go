@@ -83,6 +83,16 @@ func readSaverStructV1(saver GenericSaver) (time.Time, JobMap, Job, error) {
 	return state.SaveTime, jm, j, nil
 }
 
+func (tk *Tracker) GenerateTestdata(saver GenericSaver) error {
+	jobs, _, _ := tr.GetState()
+	jsonJobs, _ := jobs.MarshalJSON()
+
+	// Save the full state.
+	lastTry := time.Now()
+	state := saverStruct{time.Now(), lastInit, jsonJobs}
+	return saver.Save(&state)
+}
+
 // loadJobMapFromState completes unmarshalling a saverStructV1.
 func loadJobMapFromState(state *saverStructV1) (JobMap, Job, error) {
 	log.Println("Last save:", state.SaveTime.Format("01/02T15:04"))

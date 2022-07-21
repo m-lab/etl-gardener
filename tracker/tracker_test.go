@@ -198,7 +198,8 @@ func TestUpdates(t *testing.T) {
 // This tests whether AddJob and SetStatus generate appropriate
 // errors when job doesn't exist.
 func TestNonexistentJobAccess(t *testing.T) {
-	saver := persistence.NewLocalNamedSaver(t.TempDir() + "/tmp.json")
+	file := t.TempDir() + "/tmp.json"
+	saver := persistence.NewLocalNamedSaver(file)
 
 	tk, err := tracker.InitTracker(context.Background(), saver, saver, 0, 0, 0)
 	must(t, err)
@@ -216,6 +217,11 @@ func TestNonexistentJobAccess(t *testing.T) {
 
 	js := jobtest.NewJob("bucket", "exp", "type", startDate)
 	must(t, tk.AddJob(js))
+
+	// TODO: remove.
+	tk.GenerateTestdata(saver)
+	b, _ := ioutil.ReadAll(file)
+	fmt.Println(string(b))
 
 	err = tk.AddJob(js)
 	if err != tracker.ErrJobAlreadyExists {
