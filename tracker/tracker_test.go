@@ -87,8 +87,9 @@ func TestTrackerAddDelete(t *testing.T) {
 	logx.LogxDebug.Set("true")
 
 	saver := persistence.NewLocalNamedSaver(t.TempDir() + "/tmp.json")
+	saver2 := persistence.NewLocalNamedSaver(t.TempDir() + "/tmp2.json")
 
-	tk, err := tracker.InitTracker(ctx, saver, saver, 0, 0, time.Second)
+	tk, err := tracker.InitTracker(ctx, saver, saver2, 0, 0, time.Second)
 	must(t, err)
 	if tk == nil {
 		t.Fatal("nil Tracker")
@@ -106,7 +107,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	}
 	// Check that the sync (and InitTracker) work.
 	// Jobs will be removed by GetStatus 50 milliseconds after Complete.
-	restore, err := tracker.InitTracker(context.Background(), saver, saver, 0, 0, 50*time.Millisecond)
+	restore, err := tracker.InitTracker(context.Background(), saver, saver2, 0, 0, 50*time.Millisecond)
 	must(t, err)
 
 	if restore.NumJobs() != 100 {
