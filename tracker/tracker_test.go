@@ -285,3 +285,59 @@ func TestExpiration(t *testing.T) {
 	cancel()
 	time.Sleep(40 * time.Millisecond)
 }
+
+func TestStructSaverLoading(t *testing.T) {
+	// Cases:
+	// * missing files for both.
+	// * v1 only
+	// * v1 and v2 (v2 is later)
+	// * v2 only
+	tests := []struct {
+ 		name        string
+ 		saverV1 namedSaver
+ 		saverV2 namedSaver
+ 		want        int
+ 	}{
+ 		{
+ 			name:       "successful-both-files-missing",
+ 			saverV1 : persistence.NewLocalNamedSaver(t.TempDir() + "/file-not-found.json"),
+ 			saverV2:  persistence.NewLocalNamedSaver(t.TempDir() + "/file-not-found.json"),
+ 			want:       0,
+ 		},
+ 		{
+ 			name:    "successful-v1-only",
+ 			saverV1: persistence.NewLocalNamedSaver("testdata/saver-struct-v1.json"),
+ 			saverV2: persistence.NewLocalNamedSaver(t.TempDir() + "/file-not-found.json"),
+			want:    0,
+ 		},
+ 		{
+ 			name:    "successful-v2-with-v1-present",
+ 			saverV1: persistence.NewLocalNamedSaver("testdata/saver-struct-v1.json"),
+ 			saverV2: persistence.NewLocalNamedSaver("testdata/saver-struct-v2.json"),
+			want:    0,
+ 		},
+ 		{
+ 			name:      "successful-v2-only",
+ 			saverV1: persistence.NewLocalNamedSaver(t.TempDir() + "/file-not-found.json"),
+ 			saverV2: persistence.NewLocalNamedSaver("testdata/saver-struct-v2.json"),
+			want:    0,
+ 		},
+ 	}
+ 	for _, tt := range tests {
+ 		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+ 			tk, err := tracker.InitTracker(ctx, tt.saverV1, tt.saverV2, 0, 0, time.Second)
+ 			if err != nil {
+ 				t.Errorf("NewJobService() error = %v, want nil", err)
+ 				return
+ 			}
+ 			// Assert expected state.
+ 			count := tk.NumJobs()
+ 			if count != 0 {
+ 				t.Errorf("InitTracker().NumJobs wrong count; got %d, want 0", count)
+ 				return
+ 			}
+ 		})
+ 	}
