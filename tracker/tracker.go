@@ -73,14 +73,21 @@ type saverStructV1 struct {
 }
 
 // TODO(soltesz): delete as soon as possible.
-func readSaverStructV1(saver GenericSaver) (time.Time, JobMap, Job, error) {
+func readSaverStructV1(saver GenericSaver) (time.Time, jobStateMap, jobStatusMap, error) {
 	state := &saverStructV1{}
 	err := saver.Load(state)
 	if err != nil {
-		return time.Time{}, nil, Job{}, err
+		return time.Time{}, nil, nil, err
 	}
-	jm, j := loadJobMapFromState(state)
-	return state.SaveTime, jm, j, nil
+	jobMap, _ := loadJobMapFromState(state)
+
+	statusesV1 := make(jobStatusMap)
+	jobsV1 := make(jobStateMap)
+	for j, s := range jobMap {
+		statusesV1[j.Key()] = s
+		jobsV1[j.Key()] = j
+	}
+	return state.SaveTime, jobsV1, statusesV1, nil
 }
 
 // loadJobMapFromState completes unmarshalling a saverStructV1.
@@ -135,7 +142,7 @@ func readSaverStructV2(saver GenericSaver) (time.Time, jobStateMap, jobStatusMap
 // * then we can now safely delete the v1 code and state files; they have been replaced by the v2 data.
 func loadJobMaps(saverV2, saverV1 GenericSaver) (jobStateMap, jobStatusMap) {
 	// Attempt to read both the v1 and v2 saver structs.
-	tv1, jobMap, _, err1 := readSaverStructV1(saverV1)
+	tv1, jobsV1, statusesV1, err1 := readSaverStructV1(saverV1)
 	tv2, jobs, statuses, err2 := readSaverStructV2(saverV2)
 
 	// Only use the v2 data if the last saved time is more recent than the v1 time.
@@ -151,13 +158,6 @@ func loadJobMaps(saverV2, saverV1 GenericSaver) (jobStateMap, jobStatusMap) {
 	}
 
 	// Now, v2 was not yet available, but the v1 was read successfully.
-	// Transform the v1 JobMap into separate statuses and jobs maps.
-	statusesV1 := make(jobStatusMap)
-	jobsV1 := make(jobStateMap)
-	for j, s := range jobMap {
-		statusesV1[j.Key()] = s
-		jobsV1[j.Key()] = j
-	}
 	return jobsV1, statusesV1
 }
 
