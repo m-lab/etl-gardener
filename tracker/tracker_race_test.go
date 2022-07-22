@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
+	"path"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/etl-gardener/persistence"
+	"github.com/m-lab/etl-gardener/tracker"
 )
 
 func TestConcurrentUpdates(t *testing.T) {
@@ -27,7 +29,10 @@ func TestConcurrentUpdates(t *testing.T) {
 
 	ctx := context.Background()
 
-	saver := persistence.NewLocalNamedSaver(t.TempDir() + "/tmp.json")
+	// NOTE: we use os.MkdirTemp instead of t.TempDir() because during -race
+	// tests the directory is removed mid test, corrupting behavior of the test.
+	dir, _ := os.MkdirTemp("tmp", "*")
+	saver := persistence.NewLocalNamedSaver(path.Join(dir, t.Name()+".json"))
 
 	// For testing, push to the saver every 5 milliseconds.
 	saverInterval := 5 * time.Millisecond
