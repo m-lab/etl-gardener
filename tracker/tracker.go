@@ -100,13 +100,13 @@ func loadJobMapFromState(state *saverStructV1) (JobMap, Job, error) {
 // * the tracker will begin saving in v2 format, so on the next restart the v2 file will exist and v2 load will succeed.
 // * the v2 last saved time will be more recent than the v1 last saved time.
 // * then we can now safely delete the v1 code and state files; they have been replaced by the v2 data.
-func loadJobMaps(saverV1 GenericSaver) (jobStateMap, jobStatusMap, error) {
+func loadJobMaps(saverV1 GenericSaver) (jobStateMap, jobStatusMap) {
 	// Attempt to read the v1 saver structs.
 	_, jobMap, _, err1 := readSaverStructV1(saverV1)
 
 	// If we failed to read from the v1 file, return empty sets.
 	if err1 != nil {
-		return make(jobStateMap), make(jobStatusMap), nil
+		return make(jobStateMap), make(jobStatusMap)
 	}
 
 	// Transform the v1 JobMap into separate statuses and jobs maps.
@@ -116,7 +116,7 @@ func loadJobMaps(saverV1 GenericSaver) (jobStateMap, jobStatusMap, error) {
 		statusesV1[j.Key()] = s
 		jobsV1[j.Key()] = j
 	}
-	return jobsV1, statusesV1, nil
+	return jobsV1, statusesV1
 }
 
 // InitTracker recovers the Tracker state from a Client object.
@@ -128,11 +128,8 @@ func InitTracker(
 	expirationTime time.Duration,
 	cleanupDelay time.Duration) (*Tracker, error) {
 
-	// Attempt to load from both savers. The newest one wins.
-	jobs, statuses, err := loadJobMaps(saverV1)
-	if err != nil {
-		return nil, err
-	}
+	// Attempt to load from savers.
+	jobs, statuses := loadJobMaps(saverV1)
 
 	// Update the metrics for all jobs still in flight or failed.
 	for k := range jobs {
