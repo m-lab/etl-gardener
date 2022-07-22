@@ -1,4 +1,18 @@
-{"SaveTime":"2022-07-21T18:05:52.976334351Z",
- "Jobs":{},
- "Statuses":{}
+{
+    "SaveTime":"2022-07-22T16:56:00.586307-04:00",
+    "Statuses":{
+        "bucket/exp/type/20110101":{
+            "HeartbeatTime":"0001-01-01T00:00:00Z",
+            "UpdateCount":0,
+            "History":[{"State":"init","Start":"2022-07-22T16:56:00.577268-04:00","DetailTime":"2022-07-22T16:56:00.577268-04:00","Detail":""}]
+        }
+    },
+    "Jobs":{
+        "bucket/exp/type/20110101":{
+            "Bucket":"bucket",
+            "Experiment":"exp",
+            "Datatype":"type",
+            "Date":"2011-01-01T00:00:00Z"
+        }
+    }
 }
