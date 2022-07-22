@@ -96,10 +96,10 @@ func loadJobMapFromState(state *saverStructV1) (JobMap, Job, error) {
 }
 
 // TODO(soltesz): Migrating to v2 saver struct:
-// * initially, the v2 file does not exist, but the v1 file does.
-// * because the tracker will save in v2 format, on the next restart the v2 load will succeed.
+// * initially, the v2 file does not exist, but the v1 file does, so read state from v1 saver.
+// * the tracker will begin saving in v2 format, so on the next restart the v2 file will exist and v2 load will succeed.
 // * the v2 last saved time will be more recent than the v1 last saved time.
-// * we can now safely delete the v1 code and state files; they have been replaced by the v2 data.
+// * then we can now safely delete the v1 code and state files; they have been replaced by the v2 data.
 func loadJobMaps(saverV1 GenericSaver) (jobStateMap, jobStatusMap, error) {
 	// Attempt to read the v1 saver structs.
 	_, jobMap, _, err1 := readSaverStructV1(saverV1)
@@ -180,7 +180,6 @@ func (tr *Tracker) NumFailed() int {
 // Returns time last saved, which may or may not be updated.
 func (tr *Tracker) Sync(ctx context.Context, lastSave time.Time) (time.Time, error) {
 	jobs, lastInit, lastMod := tr.GetState()
-
 	if lastMod.Before(lastSave) {
 		logx.Debug.Println("Skipping save", lastMod, lastSave)
 		return lastSave, nil
@@ -199,7 +198,6 @@ func (tr *Tracker) Sync(ctx context.Context, lastSave time.Time) (time.Time, err
 		return lastSave, err
 	}
 	return lastTry, nil
-
 }
 
 func (tr *Tracker) saveEvery(ctx context.Context, interval time.Duration) {
@@ -276,7 +274,6 @@ func (tr *Tracker) UpdateJob(key Key, new Status) error {
 	}
 
 	if old.State() != new.State() {
-		//log.Println(key, old.LastStateInfo(), "->", new.State())
 		new.updateMetrics(job)
 	}
 
