@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"context"
 	"log"
+	"path"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/m-lab/go/timex"
-
+	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/etl-gardener/tracker/jobtest"
 	"github.com/m-lab/go/logx"
+	"github.com/m-lab/go/timex"
 )
 
 func init() {
@@ -85,7 +86,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	ctx := context.Background()
 	logx.LogxDebug.Set("true")
 
-	saver := tracker.NewLocalSaver(t.TempDir())
+	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), t.Name()+".json"))
 
 	tk, err := tracker.InitTracker(ctx, saver, 0, 0, time.Second)
 	must(t, err)
@@ -150,7 +151,7 @@ func TestTrackerAddDelete(t *testing.T) {
 }
 
 func TestUpdates(t *testing.T) {
-	saver := tracker.NewLocalSaver(t.TempDir())
+	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), t.Name()+".json"))
 
 	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 	must(t, err)
@@ -197,7 +198,8 @@ func TestUpdates(t *testing.T) {
 // This tests whether AddJob and SetStatus generate appropriate
 // errors when job doesn't exist.
 func TestNonexistentJobAccess(t *testing.T) {
-	saver := tracker.NewLocalSaver(t.TempDir())
+	file := path.Join(t.TempDir(), t.Name()+".json")
+	saver := persistence.NewLocalNamedSaver(file)
 
 	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 	must(t, err)
@@ -231,7 +233,7 @@ func TestNonexistentJobAccess(t *testing.T) {
 }
 
 func TestJobMapHTML(t *testing.T) {
-	saver := tracker.NewLocalSaver(t.TempDir())
+	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), t.Name()+".json"))
 
 	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 	must(t, err)
@@ -252,7 +254,7 @@ func TestJobMapHTML(t *testing.T) {
 }
 
 func TestExpiration(t *testing.T) {
-	saver := tracker.NewLocalSaver(t.TempDir())
+	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), t.Name()+".json"))
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -274,6 +276,7 @@ func TestExpiration(t *testing.T) {
 
 	// Let enough time go by that expirationTime passes, and saver runs.
 	time.Sleep(40 * time.Millisecond)
+	tk.GetState() // TODO(soltesz): manage "clean" directly rather via side effects.
 
 	// Job should have been removed by saveEvery, so this should succeed.
 	must(t, tk.AddJob(job))
@@ -281,4 +284,46 @@ func TestExpiration(t *testing.T) {
 	// Stop saveEvery go routine, so cleanup will remove file.
 	cancel()
 	time.Sleep(40 * time.Millisecond)
+}
+
+func TestStructSaverLoading(t *testing.T) {
+	// Cases:
+	// * missing files for both.
+	// * v1 only
+	// * v1 and v2 (v2 is later)
+	// * v2 only
+	tests := []struct {
+		name    string
+		saverV1 tracker.GenericSaver
+		want    int
+	}{
+		{
+			name:    "successful-files-missing",
+			saverV1: persistence.NewLocalNamedSaver(path.Join(t.TempDir(), "file-not-found.json")),
+			want:    0,
+		},
+		{
+			name:    "successful-v1-only",
+			saverV1: persistence.NewLocalNamedSaver("testdata/saver-struct-v1.json"),
+			want:    1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			tk, err := tracker.InitTracker(ctx, tt.saverV1, 0, 0, time.Second)
+			if err != nil {
+				t.Errorf("NewJobService() error = %v, want nil", err)
+				return
+			}
+			// Assert expected state.
+			count := tk.NumJobs()
+			if count != tt.want {
+				t.Errorf("InitTracker().NumJobs wrong count; got %d, want %d", count, tt.want)
+				return
+			}
+		})
+	}
 }

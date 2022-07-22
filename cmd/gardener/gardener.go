@@ -185,10 +185,11 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 func mustStandardTracker() *tracker.Tracker {
-	saver := tracker.NewLocalSaver(saverDir)
+	// TODO(soltesz): remove saverV1 loading.
+	saverV1 := persistence.NewLocalNamedSaver(path.Join(saverDir, "gardener-tracker-jobs"))
 	tk, err := tracker.InitTracker(
-		context.Background(), saver,
-		time.Minute, *jobExpirationTime, *jobCleanupDelay)
+		context.Background(),
+		saverV1, time.Minute, *jobExpirationTime, *jobCleanupDelay)
 	rtx.Must(err, "tracker init")
 	if tk == nil {
 		log.Fatal("nil tracker")

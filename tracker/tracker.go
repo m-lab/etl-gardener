@@ -15,10 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
-	"os"
-	"path"
 	"sync"
 	"time"
 
@@ -37,7 +34,7 @@ type jobStateMap map[Key]Job
 // Tracker keeps track of all the jobs in flight.
 // Only tracker functions should access any of the fields.
 type Tracker struct {
-	saver Saver
+	saver GenericSaver
 
 	// The lock should be held whenever accessing the jobs maps.
 	lock         sync.Mutex
@@ -56,68 +53,31 @@ type Tracker struct {
 	cleanupDelay time.Duration
 }
 
-type Saver interface {
-	Save(ctx context.Context, src interface{}) error
-	Load(ctx context.Context) (JobMap, Job, error)
+type GenericSaver interface {
+	Save(src any) error
+	Load(dst any) error
 }
 
-// TODO(soltesz): move LocalSaver to persistence package.
-type LocalSaver struct {
-	dir  string
-	lock sync.Mutex
-}
-
-func NewLocalSaver(dir string) *LocalSaver {
-	return &LocalSaver{
-		dir: dir,
-	}
-}
-
-func (ls *LocalSaver) fname() string {
-	return path.Join(ls.dir, "gardener-tracker-jobs")
-}
-
-// saverStruct is used only for saving and loading from persistent storage.
-type saverStruct struct {
+// saverStructV1 is used only for saving and loading from persistent storage.
+type saverStructV1 struct {
 	SaveTime time.Time
 	LastInit Job
 	Jobs     []byte
 }
 
-func (ls *LocalSaver) Save(ctx context.Context, state interface{}) error {
-	ls.lock.Lock()
-	defer ls.lock.Unlock()
-	f, err := os.OpenFile(ls.fname(), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+// TODO(soltesz): delete as soon as possible.
+func readSaverStructV1(saver GenericSaver) (time.Time, JobMap, Job, error) {
+	state := &saverStructV1{}
+	err := saver.Load(state)
 	if err != nil {
-		return err
+		return time.Time{}, nil, Job{}, err
 	}
-	defer f.Close()
-	b, err := json.Marshal(state)
-	if err != nil {
-		return err
-	}
-	_, err = f.Write(b)
-	return err
+	jm, j := loadJobMapFromState(state)
+	return state.SaveTime, jm, j, nil
 }
 
-func (ls *LocalSaver) Load(ctx context.Context) (JobMap, Job, error) {
-	ls.lock.Lock()
-	defer ls.lock.Unlock()
-	b, err := ioutil.ReadFile(ls.fname())
-	if err != nil {
-		return nil, Job{}, err
-	}
-
-	state := saverStruct{}
-	err = json.Unmarshal(b, &state)
-	if err != nil {
-		return nil, Job{}, err
-	}
-	return loadJobMapFromState(state)
-}
-
-// loadJobMapFromState completes unmarshalling a saverStruct.
-func loadJobMapFromState(state saverStruct) (JobMap, Job, error) {
+// loadJobMapFromState completes unmarshalling a saverStructV1.
+func loadJobMapFromState(state *saverStructV1) (JobMap, Job) {
 	log.Println("Last save:", state.SaveTime.Format("01/02T15:04"))
 	log.Println(string(state.Jobs))
 
@@ -132,48 +92,63 @@ func loadJobMapFromState(state saverStruct) (JobMap, Job, error) {
 			log.Fatalf("Empty State history %+v : %+v\n", j, s)
 		}
 	}
-	return jobMap, state.LastInit, nil
+	return jobMap, state.LastInit
 }
 
-func (ls *LocalSaver) Delete(ctx context.Context) error {
-	ls.lock.Lock()
-	defer ls.lock.Unlock()
-	return os.Remove(ls.fname())
+// TODO(soltesz): Migrating to v2 saver struct:
+// * initially, the v2 file does not exist, but the v1 file does, so read state from v1 saver.
+// * the tracker will begin saving in v2 format, so on the next restart the v2 file will exist and v2 load will succeed.
+// * the v2 last saved time will be more recent than the v1 last saved time.
+// * then we can now safely delete the v1 code and state files; they have been replaced by the v2 data.
+func loadJobMaps(saverV1 GenericSaver) (jobStateMap, jobStatusMap) {
+	// Attempt to read the v1 saver structs.
+	_, jobMap, _, err1 := readSaverStructV1(saverV1)
+
+	// If we failed to read from the v1 file, return empty sets.
+	if err1 != nil {
+		return make(jobStateMap), make(jobStatusMap)
+	}
+
+	// Transform the v1 JobMap into separate statuses and jobs maps.
+	statusesV1 := make(jobStatusMap)
+	jobsV1 := make(jobStateMap)
+	for j, s := range jobMap {
+		statusesV1[j.Key()] = s
+		jobsV1[j.Key()] = j
+	}
+	return jobsV1, statusesV1
 }
 
 // InitTracker recovers the Tracker state from a Client object.
 // May return error if recovery fails.
 func InitTracker(
 	ctx context.Context,
-	saver Saver,
-	saveInterval time.Duration, expirationTime time.Duration, cleanupDelay time.Duration) (*Tracker, error) {
+	saverV1 GenericSaver,
+	saveInterval time.Duration,
+	expirationTime time.Duration,
+	cleanupDelay time.Duration) (*Tracker, error) {
 
-	jobMap, lastJob, err := saver.Load(ctx)
-	if err != nil {
-		jobMap = make(JobMap)
-	}
-	for j, s := range jobMap {
-		// Update the metrics for all jobs still in flight or failed.
+	// Attempt to load from savers.
+	jobs, statuses := loadJobMaps(saverV1)
+
+	// Update the metrics for all jobs still in flight or failed.
+	for k := range jobs {
+		j := jobs[k]
+		s := statuses[k]
 		if !s.isDone() {
 			metrics.StartedCount.WithLabelValues(j.Experiment, j.Datatype).Inc()
 			metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype, s.Label()).Inc()
 		}
 	}
 
-	// Load the statuses and jobs from the loaded jobMap.
-	statuses := make(jobStatusMap)
-	jobs := make(jobStateMap)
-	for j, s := range jobMap {
-		statuses[j.Key()] = s
-		jobs[j.Key()] = j
-	}
 	t := Tracker{
-		saver: saver, lastModified: time.Now(),
-		lastJob:        lastJob,
+		saver:          saverV1,
+		lastModified:   time.Now(),
 		jobs:           jobs,
 		statuses:       statuses,
 		expirationTime: expirationTime, cleanupDelay: cleanupDelay}
-	if saver != nil && saveInterval > 0 {
+
+	if saverV1 != nil && saveInterval > 0 {
 		go t.saveEvery(ctx, saveInterval)
 	}
 	return &t, nil
@@ -214,11 +189,8 @@ func (tr *Tracker) Sync(ctx context.Context, lastSave time.Time) (time.Time, err
 
 	// Save the full state.
 	lastTry := time.Now()
-	state := saverStruct{time.Now(), lastInit, jsonJobs}
-	ctx, cf := context.WithTimeout(ctx, 10*time.Second)
-	defer cf()
-	err = tr.saver.Save(ctx, &state)
-
+	state := saverStructV1{time.Now(), lastInit, jsonJobs}
+	err = tr.saver.Save(&state)
 	if err != nil {
 		return lastSave, err
 	}
@@ -299,7 +271,6 @@ func (tr *Tracker) UpdateJob(key Key, new Status) error {
 	}
 
 	if old.State() != new.State() {
-		log.Println(key, old.LastStateInfo(), "->", new.State())
 		new.updateMetrics(job)
 	}
 
@@ -426,9 +397,4 @@ func (tr *Tracker) WriteHTMLStatusTo(ctx context.Context, w io.Writer) error {
 	fmt.Fprint(w, "<div>Tracker State</div>\n")
 
 	return jobs.WriteHTML(w)
-}
-
-// LastJob returns the last Job successfully added with AddJob
-func (tr *Tracker) LastJob() Job {
-	return tr.lastJob
 }
