@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"log"
+	"path"
 	"sync"
 	"testing"
 	"time"
-
 
 	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
@@ -86,8 +86,8 @@ func TestTrackerAddDelete(t *testing.T) {
 	ctx := context.Background()
 	logx.LogxDebug.Set("true")
 
-	saver := persistence.NewLocalNamedSaver(t.TempDir() + "/tmp.json")
-	saver2 := persistence.NewLocalNamedSaver(t.TempDir() + "/tmp2.json")
+	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), t.Name()+".json"))
+	saver2 := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), t.Name()+".json"))
 
 	tk, err := tracker.InitTracker(ctx, saver, saver2, 0, 0, time.Second)
 	must(t, err)
@@ -152,7 +152,7 @@ func TestTrackerAddDelete(t *testing.T) {
 }
 
 func TestUpdates(t *testing.T) {
-	saver := persistence.NewLocalNamedSaver(t.TempDir() + "/tmp.json")
+	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), t.Name()+".json"))
 
 	tk, err := tracker.InitTracker(context.Background(), saver, saver, 0, 0, 0)
 	must(t, err)
@@ -199,7 +199,7 @@ func TestUpdates(t *testing.T) {
 // This tests whether AddJob and SetStatus generate appropriate
 // errors when job doesn't exist.
 func TestNonexistentJobAccess(t *testing.T) {
-	file := t.TempDir() + "/tmp.json"
+	file := path.Join(t.TempDir(), t.Name()+".json")
 	saver := persistence.NewLocalNamedSaver(file)
 
 	tk, err := tracker.InitTracker(context.Background(), saver, saver, 0, 0, 0)
@@ -234,7 +234,7 @@ func TestNonexistentJobAccess(t *testing.T) {
 }
 
 func TestJobMapHTML(t *testing.T) {
-	saver := persistence.NewLocalNamedSaver(t.TempDir() + "/tmp.json")
+	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), t.Name()+".json"))
 
 	tk, err := tracker.InitTracker(context.Background(), saver, saver, 0, 0, 0)
 	must(t, err)
@@ -255,7 +255,7 @@ func TestJobMapHTML(t *testing.T) {
 }
 
 func TestExpiration(t *testing.T) {
-	saver := persistence.NewLocalNamedSaver(t.TempDir() + "/tmp.json")
+	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), t.Name()+".json"))
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -294,52 +294,52 @@ func TestStructSaverLoading(t *testing.T) {
 	// * v1 and v2 (v2 is later)
 	// * v2 only
 	tests := []struct {
- 		name    string
- 		saverV1 tracker.GenericSaver
- 		saverV2 tracker.GenericSaver
- 		want    int
- 	}{
- 		{
- 			name:     "successful-both-files-missing",
- 			saverV1:  persistence.NewLocalNamedSaver(t.TempDir() + "/file-not-found.json"),
- 			saverV2:  persistence.NewLocalNamedSaver(t.TempDir() + "/file-not-found.json"),
- 			want:     0,
- 		},
- 		{
- 			name:    "successful-v1-only",
- 			saverV1: persistence.NewLocalNamedSaver("testdata/saver-struct-v1.json"),
- 			saverV2: persistence.NewLocalNamedSaver(t.TempDir() + "/file-not-found.json"),
+		name    string
+		saverV1 tracker.GenericSaver
+		saverV2 tracker.GenericSaver
+		want    int
+	}{
+		{
+			name:    "successful-both-files-missing",
+			saverV1: persistence.NewLocalNamedSaver(path.Join(t.TempDir(), "file-not-found.json")),
+			saverV2: persistence.NewLocalNamedSaver(path.Join(t.TempDir(), "file-not-found.json")),
+			want:    0,
+		},
+		{
+			name:    "successful-v1-only",
+			saverV1: persistence.NewLocalNamedSaver("testdata/saver-struct-v1.json"),
+			saverV2: persistence.NewLocalNamedSaver(path.Join(t.TempDir(), "file-not-found.json")),
 			want:    1,
- 		},
- 		{
- 			name:    "successful-v2-with-v1-present",
- 			saverV1: persistence.NewLocalNamedSaver("testdata/saver-struct-v1.json"),
- 			saverV2: persistence.NewLocalNamedSaver("testdata/saver-struct-v2.json"),
+		},
+		{
+			name:    "successful-v2-with-v1-present",
+			saverV1: persistence.NewLocalNamedSaver("testdata/saver-struct-v1.json"),
+			saverV2: persistence.NewLocalNamedSaver("testdata/saver-struct-v2.json"),
 			want:    0, // TODO(soltesz): add actual jobs to v2 format.
- 		},
- 		{
- 			name:    "successful-v2-only",
- 			saverV1: persistence.NewLocalNamedSaver(t.TempDir() + "/file-not-found.json"),
- 			saverV2: persistence.NewLocalNamedSaver("testdata/saver-struct-v2.json"),
+		},
+		{
+			name:    "successful-v2-only",
+			saverV1: persistence.NewLocalNamedSaver(path.Join(t.TempDir(), "file-not-found.json")),
+			saverV2: persistence.NewLocalNamedSaver("testdata/saver-struct-v2.json"),
 			want:    0, // TODO(soltesz): add actual jobs to v2 format.
- 		},
- 	}
- 	for _, tt := range tests {
- 		t.Run(tt.name, func(t *testing.T) {
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
- 			tk, err := tracker.InitTracker(ctx, tt.saverV1, tt.saverV2, 0, 0, time.Second)
- 			if err != nil {
- 				t.Errorf("NewJobService() error = %v, want nil", err)
- 				return
- 			}
- 			// Assert expected state.
- 			count := tk.NumJobs()
- 			if count != tt.want  {
- 				t.Errorf("InitTracker().NumJobs wrong count; got %d, want %d", count, tt.want)
- 				return
- 			}
- 		})
- 	}
+			tk, err := tracker.InitTracker(ctx, tt.saverV1, tt.saverV2, 0, 0, time.Second)
+			if err != nil {
+				t.Errorf("NewJobService() error = %v, want nil", err)
+				return
+			}
+			// Assert expected state.
+			count := tk.NumJobs()
+			if count != tt.want {
+				t.Errorf("InitTracker().NumJobs wrong count; got %d, want %d", count, tt.want)
+				return
+			}
+		})
+	}
 }
