@@ -394,22 +394,6 @@ func NewStatus() Status {
 // It defines the map from Job to Status.
 type JobMap map[Job]Status
 
-// MarshalJSON implements json.Marshal
-func (jobs JobMap) MarshalJSON() ([]byte, error) {
-	type Pair struct {
-		Job   Job
-		State Status
-	}
-	pairs := make([]Pair, len(jobs))
-	i := 0
-	for k, v := range jobs {
-		pairs[i].Job = k
-		pairs[i].State = v
-		i++
-	}
-	return json.Marshal(&pairs)
-}
-
 // UnmarshalJSON implements json.UnmarshalJSON
 // jobs and data should be non-nil.
 func (jobs *JobMap) UnmarshalJSON(data []byte) error {
