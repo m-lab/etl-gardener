@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path"
 	"testing"
 	"time"
 
@@ -35,7 +36,7 @@ func (f *fakeJobService) NextJob(ctx context.Context) *tracker.JobWithTarget {
 }
 
 func testSetup(t *testing.T, jobs []tracker.Job) (url.URL, *tracker.Tracker) {
-	saver := persistence.NewLocalNamedSaver(t.TempDir() + "/tmp.json")
+	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), t.Name()+".json"))
 	tk, err := tracker.InitTracker(context.Background(), saver, saver, 0, 0, 0)
 	must(t, err)
 	if tk == nil {
