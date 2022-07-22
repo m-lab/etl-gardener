@@ -315,13 +315,13 @@ func TestStructSaverLoading(t *testing.T) {
 			name:    "successful-v2-with-v1-present",
 			saverV1: persistence.NewLocalNamedSaver("testdata/saver-struct-v1.json"),
 			saverV2: persistence.NewLocalNamedSaver("testdata/saver-struct-v2.json"),
-			want:    0, // TODO(soltesz): add actual jobs to v2 format.
+			want:    1,
 		},
 		{
 			name:    "successful-v2-only",
 			saverV1: persistence.NewLocalNamedSaver(path.Join(t.TempDir(), "file-not-found.json")),
 			saverV2: persistence.NewLocalNamedSaver("testdata/saver-struct-v2.json"),
-			want:    0, // TODO(soltesz): add actual jobs to v2 format.
+			want:    1,
 		},
 	}
 	for _, tt := range tests {
