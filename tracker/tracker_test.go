@@ -144,6 +144,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	if _, err := tk.Sync(ctx, time.Time{}); err != nil {
 		must(t, err)
 	}
+	tk.GetState() // TODO(soltesz): manage "clean" directly rather via side effects.
 
 	if tk.NumJobs() != 0 {
 		t.Error("Job cleanup failed", tk.NumJobs())
