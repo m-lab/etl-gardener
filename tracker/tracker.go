@@ -72,12 +72,12 @@ func readSaverStructV1(saver GenericSaver) (time.Time, JobMap, Job, error) {
 	if err != nil {
 		return time.Time{}, nil, Job{}, err
 	}
-	jm, j, _ := loadJobMapFromState(state)
+	jm, j := loadJobMapFromState(state)
 	return state.SaveTime, jm, j, nil
 }
 
 // loadJobMapFromState completes unmarshalling a saverStructV1.
-func loadJobMapFromState(state *saverStructV1) (JobMap, Job, error) {
+func loadJobMapFromState(state *saverStructV1) (JobMap, Job) {
 	log.Println("Last save:", state.SaveTime.Format("01/02T15:04"))
 	log.Println(string(state.Jobs))
 
@@ -92,7 +92,7 @@ func loadJobMapFromState(state *saverStructV1) (JobMap, Job, error) {
 			log.Fatalf("Empty State history %+v : %+v\n", j, s)
 		}
 	}
-	return jobMap, state.LastInit, nil
+	return jobMap, state.LastInit
 }
 
 // TODO(soltesz): Migrating to v2 saver struct:
