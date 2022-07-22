@@ -128,6 +128,11 @@ func readSaverStructV2(saver GenericSaver) (time.Time, jobStateMap, jobStatusMap
 	return s.SaveTime, s.Jobs, s.Statuses, nil
 }
 
+// TODO(soltesz): Migrating to v2 saver struct:
+// * initially, the v2 file does not exist, but the v1 file does, so read state from v1 saver.
+// * the tracker will begin saving in v2 format, so on the next restart the v2 file will exist and v2 load will succeed.
+// * the v2 last saved time will be more recent than the v1 last saved time.
+// * then we can now safely delete the v1 code and state files; they have been replaced by the v2 data.
 func loadJobMaps(saverV2, saverV1 GenericSaver) (jobStateMap, jobStatusMap) {
 	// Attempt to read both the v1 and v2 saver structs.
 	tv1, jobMap, _, err1 := readSaverStructV1(saverV1)
