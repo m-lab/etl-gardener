@@ -6,6 +6,7 @@ package ops_test
 import (
 	"context"
 	"fmt"
+	"path"
 	"testing"
 	"time"
 
@@ -70,7 +71,7 @@ func TestStandardMonitor(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	saver := persistence.NewLocalNamedSaver(t.TempDir() + "/tmp.json")
+	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), "tmp.json"))
 	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
 
