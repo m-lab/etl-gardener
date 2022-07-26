@@ -112,7 +112,7 @@ func loadJobMapFromState(state *saverStructV1) (JobMap, Job) {
 func (tr *Tracker) writeSaverStructV2(saver GenericSaver) error {
 	statuses := jobStatusMap{} // statuses contains all tracked Job statuses.
 	jobs := jobStateMap{}      // jobs contains all tracked Jobs.
-	// copy Statuses and Jobs
+	// copy Statuses and Jobs.
 	for k, j := range tr.jobs {
 		statuses[k] = tr.statuses[k]
 		jobs[k] = j
