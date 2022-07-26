@@ -152,7 +152,7 @@ func InitTracker(
 		go t.saveEvery(ctx, saveInterval)
 	}
 	// Initialize the jobs total metric on startup, to allow for longer processing times and fast alerts.
-	metrics.JobsTotal.WithLabelValues("", "", "", "starting").Inc()
+	metrics.JobsTotal.WithLabelValues("", "", "", "starting").Add(0)
 	return &t, nil
 }
 
