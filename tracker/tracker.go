@@ -58,6 +58,13 @@ type GenericSaver interface {
 	Load(dst any) error
 }
 
+// saverStructV2 is used to save and load all Job status and state to persistent storage.
+type saverStructV2 struct {
+	SaveTime time.Time
+	Statuses jobStatusMap
+	Jobs     jobStateMap
+}
+
 // saverStructV1 is used only for saving and loading from persistent storage.
 type saverStructV1 struct {
 	SaveTime time.Time
@@ -66,14 +73,21 @@ type saverStructV1 struct {
 }
 
 // TODO(soltesz): delete as soon as possible.
-func readSaverStructV1(saver GenericSaver) (time.Time, JobMap, Job, error) {
+func readSaverStructV1(saver GenericSaver) (time.Time, jobStateMap, jobStatusMap, error) {
 	state := &saverStructV1{}
 	err := saver.Load(state)
 	if err != nil {
-		return time.Time{}, nil, Job{}, err
+		return time.Time{}, nil, nil, err
 	}
-	jm, j := loadJobMapFromState(state)
-	return state.SaveTime, jm, j, nil
+	jobMap, _ := loadJobMapFromState(state)
+
+	statusesV1 := make(jobStatusMap)
+	jobsV1 := make(jobStateMap)
+	for j, s := range jobMap {
+		statusesV1[j.Key()] = s
+		jobsV1[j.Key()] = j
+	}
+	return state.SaveTime, jobsV1, statusesV1, nil
 }
 
 // loadJobMapFromState completes unmarshalling a saverStructV1.
@@ -95,27 +109,55 @@ func loadJobMapFromState(state *saverStructV1) (JobMap, Job) {
 	return jobMap, state.LastInit
 }
 
+func (tr *Tracker) writeSaverStructV2(saver GenericSaver) error {
+	statuses := jobStatusMap{} // statuses contains all tracked Job statuses.
+	jobs := jobStateMap{}      // jobs contains all tracked Jobs.
+	// copy Statuses and Jobs.
+	for k, j := range tr.jobs {
+		statuses[k] = tr.statuses[k]
+		jobs[k] = j
+	}
+	s := &saverStructV2{
+		SaveTime: time.Now(),
+		Statuses: statuses,
+		Jobs:     jobs,
+	}
+	return saver.Save(s)
+}
+
+func readSaverStructV2(saver GenericSaver) (time.Time, jobStateMap, jobStatusMap, error) {
+	s := &saverStructV2{}
+	err := saver.Load(s)
+	if err != nil {
+		return time.Time{}, nil, nil, err
+	}
+	log.Println("loading jobs previously saved from:", s.SaveTime)
+	return s.SaveTime, s.Jobs, s.Statuses, nil
+}
+
 // TODO(soltesz): Migrating to v2 saver struct:
 // * initially, the v2 file does not exist, but the v1 file does, so read state from v1 saver.
 // * the tracker will begin saving in v2 format, so on the next restart the v2 file will exist and v2 load will succeed.
 // * the v2 last saved time will be more recent than the v1 last saved time.
 // * then we can now safely delete the v1 code and state files; they have been replaced by the v2 data.
-func loadJobMaps(saverV1 GenericSaver) (jobStateMap, jobStatusMap) {
-	// Attempt to read the v1 saver structs.
-	_, jobMap, _, err1 := readSaverStructV1(saverV1)
+func loadJobMaps(saverV2, saverV1 GenericSaver) (jobStateMap, jobStatusMap) {
+	// Attempt to read both the v1 and v2 saver structs.
+	tv1, jobsV1, statusesV1, err1 := readSaverStructV1(saverV1)
+	tv2, jobs, statuses, err2 := readSaverStructV2(saverV2)
 
-	// If we failed to read from the v1 file, return empty sets.
+	// Only use the v2 data if the last saved time is more recent than the v1 time.
+	if tv2.After(tv1) && err2 == nil {
+		// This means v2 was saved more recently. So, use the newer data.
+		return jobs, statuses
+	}
+
+	// At this point, it means the v2 data is not yet available. If we also
+	// failed to read from the v1 file, return empty sets.
 	if err1 != nil {
 		return make(jobStateMap), make(jobStatusMap)
 	}
 
-	// Transform the v1 JobMap into separate statuses and jobs maps.
-	statusesV1 := make(jobStatusMap)
-	jobsV1 := make(jobStateMap)
-	for j, s := range jobMap {
-		statusesV1[j.Key()] = s
-		jobsV1[j.Key()] = j
-	}
+	// Now, v2 was not yet available, but the v1 was read successfully.
 	return jobsV1, statusesV1
 }
 
@@ -124,12 +166,13 @@ func loadJobMaps(saverV1 GenericSaver) (jobStateMap, jobStatusMap) {
 func InitTracker(
 	ctx context.Context,
 	saverV1 GenericSaver,
+	saverV2 GenericSaver,
 	saveInterval time.Duration,
 	expirationTime time.Duration,
 	cleanupDelay time.Duration) (*Tracker, error) {
 
 	// Attempt to load from savers.
-	jobs, statuses := loadJobMaps(saverV1)
+	jobs, statuses := loadJobMaps(saverV2, saverV1)
 
 	// Update the metrics for all jobs still in flight or failed.
 	for k := range jobs {
@@ -142,13 +185,13 @@ func InitTracker(
 	}
 
 	t := Tracker{
-		saver:          saverV1,
+		saver:          saverV2,
 		lastModified:   time.Now(),
 		jobs:           jobs,
 		statuses:       statuses,
 		expirationTime: expirationTime, cleanupDelay: cleanupDelay}
 
-	if saverV1 != nil && saveInterval > 0 {
+	if saverV2 != nil && saveInterval > 0 {
 		go t.saveEvery(ctx, saveInterval)
 	}
 	// Initialize the jobs total metric on startup, to allow for longer processing times and fast alerts.
@@ -178,25 +221,18 @@ func (tr *Tracker) NumFailed() int {
 // Sync snapshots the full job state and saves it to persistent storage IFF it has changed.
 // Returns time last saved, which may or may not be updated.
 func (tr *Tracker) Sync(ctx context.Context, lastSave time.Time) (time.Time, error) {
-	jobs, lastInit, lastMod := tr.GetState()
+	tr.lock.Lock()
+	defer tr.lock.Unlock()
+	lastMod := tr.lastModified
 	if lastMod.Before(lastSave) {
 		logx.Debug.Println("Skipping save", lastMod, lastSave)
 		return lastSave, nil
 	}
-
-	jsonJobs, err := jobs.MarshalJSON()
+	err := tr.writeSaverStructV2(tr.saver)
 	if err != nil {
-		return lastSave, err
+		return time.Time{}, err
 	}
-
-	// Save the full state.
-	lastTry := time.Now()
-	state := saverStructV1{time.Now(), lastInit, jsonJobs}
-	err = tr.saver.Save(&state)
-	if err != nil {
-		return lastSave, err
-	}
-	return lastTry, nil
+	return lastMod, nil
 }
 
 func (tr *Tracker) saveEvery(ctx context.Context, interval time.Duration) {
