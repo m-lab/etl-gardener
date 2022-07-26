@@ -151,6 +151,8 @@ func InitTracker(
 	if saverV1 != nil && saveInterval > 0 {
 		go t.saveEvery(ctx, saveInterval)
 	}
+	// Initialize the jobs total metric on startup, to allow for longer processing times and fast alerts.
+	metrics.JobsTotal.WithLabelValues("", "", "", "starting").Inc()
 	return &t, nil
 }
 
