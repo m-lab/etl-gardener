@@ -29,24 +29,4 @@ pushd testfiles
 ./sync.sh
 popd
 
-# Remove boto config; recommended for datastore emulator.
-rm -f /etc/boto.cfg || :
-
-# Start datastore emulator.
-gcloud beta emulators datastore start --no-store-on-disk &
-
-t1=$( date +%s )
-until nc -z localhost 8081 ; do
-  sleep 1
-  t2=$( date +%s )
-  # Allow up to a minute for emulator to start up.
-  if [[ $t2 -gt $(( $t1 + 60 )) ]] ; then
-    echo "ERROR: failed to start or detect datastore emulator"
-    break
-  fi
-done
-$(gcloud beta emulators datastore env-init)
 go test -v -tags=integration -coverprofile=_integration.cov ./...
-
-# Shutdown datastore emulator.
-kill %1
