@@ -93,40 +93,24 @@ the `./output` directory.
 Some of the gardener packages depend on complex, third-party services. To
 accommodate these the gardener unit tests are split into three categories:
 
-* Standard unit tests
+* Run standard unit tests
 
   ```sh
   go test -v ./...
   ```
 
-* Integration unit tests
+* Run integration unit tests
 
-  Many integration tests depend on datastore, so be sure the datastore emulator
-  is installed:
-
-  ```sh
-  gcloud components install beta
-  gcloud components install cloud-datastore-emulator
-  ```
-
-  And, then start the emulator, and set environment variables to make it
-  discoverable:
-
-  ```sh
-  gcloud beta emulators datastore start --project mlab-testing --no-store-on-disk &
-  sleep 2
-  $(gcloud beta emulators datastore env-init)
-  ```
-
-  Finally, run the integration tests, and optionally unset the datastore
-  environment variables:
+  Integration unit tests depend on state in the mlab-testing GCP project, and
+  require credentials to access this project. Members of M-Lab staff should be
+  able to use their existing cloud credentials and application default
+  credentials.
 
   ```sh
   go test -v -tags=integration -coverprofile=_integration.cov ./...
-  $(gcloud beta emulators datastore env-unset)
   ```
 
-* Race unit tests
+* Run race unit tests
 
   ```sh
   go test -race -v ./...
