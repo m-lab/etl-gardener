@@ -37,7 +37,7 @@ func (f *fakeJobService) NextJob(ctx context.Context) *tracker.JobWithTarget {
 
 func testSetup(t *testing.T, jobs []tracker.Job) (url.URL, *tracker.Tracker) {
 	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), t.Name()+".json"))
-	tk, err := tracker.InitTracker(context.Background(), saver, saver, 0, 0, 0)
+	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 	must(t, err)
 	if tk == nil {
 		t.Fatal("nil Tracker")

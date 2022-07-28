@@ -38,7 +38,7 @@ func newStateFunc(detail string) ops.ActionFunc {
 func TestMonitor_Watch(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), "junk.json"))
-	tk, err := tracker.InitTracker(ctx, saver, saver, 0, 0, 0)
+	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
 	tk.AddJob(jobtest.NewJob("bucket", "exp", "type", time.Now()))
 	tk.AddJob(jobtest.NewJob("bucket", "exp2", "type", time.Now()))
@@ -82,7 +82,7 @@ func TestOutcomeUpdate(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), "junk.json"))
-	tk, err := tracker.InitTracker(ctx, saver, saver, 0, 0, 0)
+	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
 	job := jobtest.NewJob("bucket", "exp", "type", time.Now())
 	tk.AddJob(job)

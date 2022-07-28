@@ -86,10 +86,9 @@ func TestTrackerAddDelete(t *testing.T) {
 	ctx := context.Background()
 	logx.LogxDebug.Set("true")
 
-	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), t.Name()+".json"))
 	saver2 := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), t.Name()+".json"))
 
-	tk, err := tracker.InitTracker(ctx, saver, saver2, 0, 0, time.Second)
+	tk, err := tracker.InitTracker(ctx, saver2, 0, 0, time.Second)
 	must(t, err)
 	if tk == nil {
 		t.Fatal("nil Tracker")
@@ -107,7 +106,7 @@ func TestTrackerAddDelete(t *testing.T) {
 	}
 	// Check that the sync (and InitTracker) work.
 	// Jobs will be removed by GetStatus 50 milliseconds after Complete.
-	restore, err := tracker.InitTracker(context.Background(), saver, saver2, 0, 0, 50*time.Millisecond)
+	restore, err := tracker.InitTracker(context.Background(), saver2, 0, 0, 50*time.Millisecond)
 	must(t, err)
 
 	if restore.NumJobs() != 100 {
@@ -155,7 +154,7 @@ func TestTrackerAddDelete(t *testing.T) {
 func TestUpdates(t *testing.T) {
 	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), t.Name()+".json"))
 
-	tk, err := tracker.InitTracker(context.Background(), saver, saver, 0, 0, 0)
+	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 	must(t, err)
 
 	createJobs(t, tk, "JobToUpdate", "type", 1)
@@ -203,7 +202,7 @@ func TestNonexistentJobAccess(t *testing.T) {
 	file := path.Join(t.TempDir(), t.Name()+".json")
 	saver := persistence.NewLocalNamedSaver(file)
 
-	tk, err := tracker.InitTracker(context.Background(), saver, saver, 0, 0, 0)
+	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 	must(t, err)
 
 	job := tracker.Job{}
@@ -237,7 +236,7 @@ func TestNonexistentJobAccess(t *testing.T) {
 func TestJobMapHTML(t *testing.T) {
 	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), t.Name()+".json"))
 
-	tk, err := tracker.InitTracker(context.Background(), saver, saver, 0, 0, 0)
+	tk, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 	must(t, err)
 
 	job := tracker.Job{}
@@ -261,7 +260,7 @@ func TestExpiration(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Expire jobs after 1 second of monkey time.
-	tk, err := tracker.InitTracker(ctx, saver, saver, 5*time.Millisecond, 10*time.Millisecond, 1*time.Millisecond)
+	tk, err := tracker.InitTracker(ctx, saver, 5*time.Millisecond, 10*time.Millisecond, 1*time.Millisecond)
 	must(t, err)
 
 	job := jobtest.NewJob("bucket", "exp", "type", startDate)
@@ -289,38 +288,18 @@ func TestExpiration(t *testing.T) {
 }
 
 func TestStructSaverLoading(t *testing.T) {
-	// Cases:
-	// * missing files for both.
-	// * v1 only
-	// * v1 and v2 (v2 is later)
-	// * v2 only
 	tests := []struct {
 		name    string
-		saverV1 tracker.GenericSaver
 		saverV2 tracker.GenericSaver
 		want    int
 	}{
 		{
-			name:    "successful-both-files-missing",
-			saverV1: persistence.NewLocalNamedSaver(path.Join(t.TempDir(), "file-not-found.json")),
+			name:    "successful-file-missing",
 			saverV2: persistence.NewLocalNamedSaver(path.Join(t.TempDir(), "file-not-found.json")),
 			want:    0,
 		},
 		{
-			name:    "successful-v1-only",
-			saverV1: persistence.NewLocalNamedSaver("testdata/saver-struct-v1.json"),
-			saverV2: persistence.NewLocalNamedSaver(path.Join(t.TempDir(), "file-not-found.json")),
-			want:    1,
-		},
-		{
-			name:    "successful-v2-with-v1-present",
-			saverV1: persistence.NewLocalNamedSaver("testdata/saver-struct-v1.json"),
-			saverV2: persistence.NewLocalNamedSaver("testdata/saver-struct-v2.json"),
-			want:    1,
-		},
-		{
-			name:    "successful-v2-only",
-			saverV1: persistence.NewLocalNamedSaver(path.Join(t.TempDir(), "file-not-found.json")),
+			name:    "successful-v2-present",
 			saverV2: persistence.NewLocalNamedSaver("testdata/saver-struct-v2.json"),
 			want:    1,
 		},
@@ -330,7 +309,7 @@ func TestStructSaverLoading(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			tk, err := tracker.InitTracker(ctx, tt.saverV1, tt.saverV2, 0, 0, time.Second)
+			tk, err := tracker.InitTracker(ctx, tt.saverV2, 0, 0, time.Second)
 			if err != nil {
 				t.Errorf("NewJobService() error = %v, want nil", err)
 				return
