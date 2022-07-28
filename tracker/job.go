@@ -394,26 +394,6 @@ func NewStatus() Status {
 // It defines the map from Job to Status.
 type JobMap map[Job]Status
 
-// UnmarshalJSON implements json.UnmarshalJSON
-// jobs and data should be non-nil.
-func (jobs *JobMap) UnmarshalJSON(data []byte) error {
-	type Pair struct {
-		Job   Job
-		State Status
-	}
-	pairs := make([]Pair, 0, 100)
-	err := json.Unmarshal(data, &pairs)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("Unmarshalling %d job/status pairs.\n", len(pairs))
-	for i := range pairs {
-		(*jobs)[pairs[i].Job] = pairs[i].State
-	}
-	return nil
-}
-
 var jobsTemplate = template.Must(template.New("").Parse(
 	fmt.Sprintf(`
 	<h1>{{.Title}}</h1>
