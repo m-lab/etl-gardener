@@ -91,18 +91,25 @@ func TestUpdateHandler(t *testing.T) {
 	ctx := context.Background()
 	c := gardener.NewJobClient(server)
 
-	// Attempt to update job that is not yet in tracker.
+	// Wrong method.
+	u := server
+	u.Path = "/v2/job/update"
+	getAndExpect(t, &u, http.StatusMethodNotAllowed)
+
+	// Attempt to update job that is not yet in tracker, expect error.
 	err := c.Update(ctx, job.Key(), tracker.Init, "foo")
 	if err == nil {
-		t.Fatal(err)
+		t.Fatal("Handler.Update() unknown job; got nil, want error")
 	}
+	// Attempt empty state, expect error.
 	err = c.Update(ctx, job.Key(), "", "foo")
 	if err == nil {
-		t.Fatal(err)
+		t.Fatal("Handler.Update() empty state; got nil, want error")
 	}
+	// Attempt empty job ID, expect error.
 	err = c.Update(ctx, "", tracker.Init, "foo")
 	if err == nil {
-		t.Fatal(err)
+		t.Fatal("Handler.Update() empty job id; got nil, want error")
 	}
 
 	// Add job to tracker.
@@ -111,26 +118,26 @@ func TestUpdateHandler(t *testing.T) {
 	// Update job state.
 	err = c.Update(ctx, job.Key(), tracker.Parsing, "foo")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Handler.Update() job to Parsing error; got %v, want nil", err)
 	}
 
 	// Confirm status.
 	stat, err := tk.GetStatus(job.Key())
 	must(t, err)
 	if stat.State() != tracker.Parsing {
-		t.Fatal("update failed", stat)
+		t.Fatalf("Handler.Update() status mismatch; got %q, want %q", stat.State(), tracker.Parsing)
 	}
 
-	// Update job again as complete.
+	// Update job again as Complete.
 	err = c.Update(ctx, job.Key(), tracker.Complete, "")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Handler.Update() job to Complete error; got %v, want nil", err)
 	}
 
 	// Verify job is no longer present.
 	_, err = tk.GetStatus(job.Key())
 	if err != tracker.ErrJobNotFound {
-		t.Fatal("Expected JobNotFound", err)
+		t.Fatalf("Handler.Update() wrong GetStatus error; got %v, want %v", err, tracker.ErrJobNotFound)
 	}
 }
 
@@ -143,14 +150,20 @@ func TestHeartbeatHandler(t *testing.T) {
 	ctx := context.Background()
 	c := gardener.NewJobClient(server)
 
-	// Attempt to send heartbeat for job that is not yet in tracker.
+	// Wrong method.
+	u := server
+	u.Path = "/v2/job/heartbeat"
+	getAndExpect(t, &u, http.StatusMethodNotAllowed)
+
+	// Attempt to send heartbeat for job that is not yet in tracker, expect error.
 	err := c.Heartbeat(ctx, job.Key())
 	if err == nil {
-		t.Fatal(err)
+		t.Fatal("Handler.Heartbeat() unknown job; got nil, want error")
 	}
+	// Attempt with empty job id, expect error.
 	err = c.Heartbeat(ctx, "")
 	if err == nil {
-		t.Fatal(err)
+		t.Fatal("Handler.Heartbeat() empty id; got nil, want error")
 	}
 
 	// Add job to tracker.
@@ -159,28 +172,28 @@ func TestHeartbeatHandler(t *testing.T) {
 	// Send heartbeat for job.
 	err = c.Heartbeat(ctx, job.Key())
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Handler.Heartbeat() got error; got %v, want nil", err)
 	}
 
 	// Get job status.
 	stat, err := tk.GetStatus(job.Key())
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Handler.Heartbeat() get status error; got %v, want nil", err)
 	}
 	if time.Since(stat.HeartbeatTime) > 1*time.Second {
-		t.Fatal("heartbeat failed", stat)
+		t.Fatalf("Handler.Heartbeat() heartbeat late; got %s, want less than %s", time.Since(stat.HeartbeatTime), time.Second)
 	}
 
 	// Update job again as complete.
 	err = c.Update(ctx, job.Key(), tracker.Complete, "")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Handler.Heartbeat() update job to Complete error; got %v, want nil", err)
 	}
 
 	// Verify job is no longer present.
 	_, err = tk.GetStatus(job.Key())
 	if err != tracker.ErrJobNotFound {
-		t.Fatal("Expected JobNotFound", err)
+		t.Fatalf("Handler.Heartbeat() wrong GetStatus error; got %v, want %v", err, tracker.ErrJobNotFound)
 	}
 }
 
@@ -192,20 +205,25 @@ func TestErrorHandler(t *testing.T) {
 	ctx := context.Background()
 	c := gardener.NewJobClient(server)
 
+	// Wrong method.
+	u := server
+	u.Path = "/v2/job/error"
+	getAndExpect(t, &u, http.StatusMethodNotAllowed)
+
 	// Job should not yet exist.
 	err := c.Error(ctx, job.Key(), "no such job")
 	if err == nil {
-		t.Fatal(err)
+		t.Fatal("Handler.Error() unknown job; got nil, want error")
 	}
 	// ID is empty.
 	err = c.Error(ctx, "", "")
 	if err == nil {
-		t.Fatal(err)
+		t.Fatal("Handler.Error() empty job id; got nil, want error")
 	}
 	// error message is empty.
 	err = c.Error(ctx, job.Key(), "")
 	if err == nil {
-		t.Fatal(err)
+		t.Fatal("Handler.Error() empty error string; got nil, want error")
 	}
 
 	// Add job to tracker.
@@ -214,29 +232,29 @@ func TestErrorHandler(t *testing.T) {
 	// should successfully update state to Failed
 	err = c.Error(ctx, job.Key(), "error")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Handler.Error() update job error; got %v, want nil", err)
 	}
 
 	// Verify error is updated in tracker.
 	stat, err := tk.GetStatus(job.Key())
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Handler.Error() GetStatus error; got %v, want nil", err)
 	}
 	if stat.Detail() != "error" {
-		t.Error("Expected error:", stat.Detail())
+		t.Errorf("Handler.Error() status detail does not match; got %q, want %q", stat.Detail(), "error")
 	}
 	if stat.State() != tracker.ParseError {
-		t.Error("Wrong state:", stat)
+		t.Errorf("Handler.Error() wrong status state; got %q, want %q", stat.State(), tracker.ParseError)
 	}
 
 	err = c.Update(ctx, job.Key(), tracker.Complete, "")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Handler.Error() update job to Complete error; got %v, want nil", err)
 	}
 
 	_, err = tk.GetStatus(job.Key())
 	if err != tracker.ErrJobNotFound {
-		t.Fatal("Expected JobNotFound", err)
+		t.Fatalf("Handler.Error() wrong GetStatus error; got %v, want %v", err, tracker.ErrJobNotFound)
 	}
 }
 
