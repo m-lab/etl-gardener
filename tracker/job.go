@@ -106,14 +106,6 @@ func (j Job) Path() string {
 		j.Bucket, j.Experiment, j.Date.Format(timex.YYYYMMDDWithSlash))
 }
 
-// Marshal marshals the Job to json. If the Job type ever includes fields that
-// cannot be marshalled, then Marshal will panic.
-func (j Job) Marshal() []byte {
-	b, err := json.Marshal(j)
-	rtx.PanicOnError(err, "failed to marshal Job: %s", j)
-	return b
-}
-
 func (j Job) String() string {
 	return fmt.Sprintf("%s:%s/%s", j.Date.Format(timex.YYYYMMDD), j.Experiment, j.Datatype)
 }
