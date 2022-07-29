@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/m-lab/etl-gardener/cloud/bq"
-	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/go/flagx"
 	"github.com/m-lab/go/rtx"
@@ -52,7 +51,7 @@ func main() {
 	}
 	j := tracker.Job{
 		Bucket: "unused-bucket", Experiment: "ndt", Datatype: *datatype, Date: d,
-		Datasets: config.Datasets{
+		Datasets: tracker.Datasets{
 			Tmp: "tmp_ndt",
 			Raw: "raw_ndt",
 		},

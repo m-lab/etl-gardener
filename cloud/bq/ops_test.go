@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/m-lab/etl-gardener/cloud/bq"
-	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/etl-gardener/tracker/jobtest"
 	"github.com/m-lab/go/rtx"
@@ -47,35 +46,35 @@ func TestValidateQueries(t *testing.T) {
 			Experiment: "ndt",
 			Datatype:   "annotation",
 			Date:       d,
-			Datasets:   config.Datasets{Tmp: "tmp_ndt", Raw: "raw_ndt"},
+			Datasets:   tracker.Datasets{Tmp: "tmp_ndt", Raw: "raw_ndt"},
 		},
 		{
 			Bucket:     "bucket",
 			Experiment: "ndt",
 			Datatype:   "ndt7",
 			Date:       d,
-			Datasets:   config.Datasets{Tmp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"},
+			Datasets:   tracker.Datasets{Tmp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"},
 		},
 		{
 			Bucket:     "bucket",
 			Experiment: "ndt",
 			Datatype:   "pcap",
 			Date:       d,
-			Datasets:   config.Datasets{Tmp: "tmp_ndt", Raw: "raw_ndt"},
+			Datasets:   tracker.Datasets{Tmp: "tmp_ndt", Raw: "raw_ndt"},
 		},
 		{
 			Bucket:     "bucket",
 			Experiment: "ndt",
 			Datatype:   "hopannotation1",
 			Date:       d,
-			Datasets:   config.Datasets{Tmp: "tmp_ndt", Raw: "raw_ndt"},
+			Datasets:   tracker.Datasets{Tmp: "tmp_ndt", Raw: "raw_ndt"},
 		},
 		{
 			Bucket:     "bucket",
 			Experiment: "ndt",
 			Datatype:   "scamper1",
 			Date:       d,
-			Datasets:   config.Datasets{Tmp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"},
+			Datasets:   tracker.Datasets{Tmp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"},
 		},
 	}
 

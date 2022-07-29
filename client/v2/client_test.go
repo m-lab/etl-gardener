@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/etl-gardener/tracker/jobtest"
 	"github.com/m-lab/go/testingx"
@@ -51,7 +50,7 @@ func TestJobClient_Next(t *testing.T) {
 					Experiment: "experiment",
 					Datatype:   "datatype",
 					Date:       start,
-					Datasets: config.Datasets{
+					Datasets: tracker.Datasets{
 						Tmp: "tmp_experiment",
 						Raw: "raw_experiment",
 					},

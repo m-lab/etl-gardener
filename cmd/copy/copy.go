@@ -7,8 +7,6 @@ import (
 	"log"
 	"time"
 
-	"github.com/m-lab/etl-gardener/config"
-
 	"github.com/googleapis/google-cloud-go-testing/bigquery/bqiface"
 	"github.com/m-lab/etl-gardener/cloud/bq"
 	"github.com/m-lab/etl-gardener/tracker"
@@ -85,7 +83,7 @@ func main() {
 	}
 	j := tracker.Job{
 		Bucket: "unused-bucket", Experiment: *exp, Datatype: *dataType, Date: d,
-		Datasets: config.Datasets{
+		Datasets: tracker.Datasets{
 			Tmp: "tmp_" + *exp,
 			Raw: "raw_" + *exp,
 		},
