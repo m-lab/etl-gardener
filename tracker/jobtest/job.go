@@ -3,6 +3,7 @@ package jobtest
 import (
 	"time"
 
+	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
@@ -13,5 +14,9 @@ func NewJob(bucket, exp, typ string, date time.Time) tracker.Job {
 		Experiment: exp,
 		Datatype:   typ,
 		Date:       date.UTC().Truncate(24 * time.Hour),
+		Datasets: config.Datasets{
+			Tmp: "tmp_" + exp,
+			Raw: "raw_" + exp,
+		},
 	}
 }

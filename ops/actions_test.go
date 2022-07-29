@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/m-lab/etl-gardener/cloud"
+	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/ops"
 	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
@@ -35,6 +36,7 @@ func TestStandardMonitor(t *testing.T) {
 			Experiment: "exp",
 			Datatype:   "type",
 			Date:       d,
+			Datasets:   config.Datasets{Tmp: "tmp_exp", Raw: "raw_exp"},
 		},
 		// Valid experiment and datatype
 		// This does an actual dedup, so we need to allow enough time.
@@ -43,30 +45,35 @@ func TestStandardMonitor(t *testing.T) {
 			Experiment: "ndt",
 			Datatype:   "ndt7",
 			Date:       d,
+			Datasets:   config.Datasets{Tmp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"},
 		},
 		{
 			Bucket:     "bucket",
 			Experiment: "ndt",
 			Datatype:   "annotation",
 			Date:       d,
+			Datasets:   config.Datasets{Tmp: "tmp_ndt", Raw: "raw_ndt"},
 		},
 		{
 			Bucket:     "bucket",
 			Experiment: "ndt",
 			Datatype:   "pcap",
 			Date:       d,
+			Datasets:   config.Datasets{Tmp: "tmp_ndt", Raw: "raw_ndt"},
 		},
 		{
 			Bucket:     "bucket",
 			Experiment: "ndt",
 			Datatype:   "hopannotation1",
 			Date:       d,
+			Datasets:   config.Datasets{Tmp: "tmp_ndt", Raw: "raw_ndt"},
 		},
 		{
 			Bucket:     "bucket",
 			Experiment: "ndt",
 			Datatype:   "scamper1",
 			Date:       d,
+			Datasets:   config.Datasets{Tmp: "tmp_ndt", Raw: "raw_ndt", Join: "ndt"},
 		},
 	}
 

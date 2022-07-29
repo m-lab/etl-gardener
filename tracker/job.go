@@ -14,16 +14,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/m-lab/go/timex"
-
-	"github.com/m-lab/go/rtx"
-
 	"cloud.google.com/go/storage"
 	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
 
-	"github.com/m-lab/go/cloud/gcs"
-
+	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/metrics"
+	"github.com/m-lab/go/cloud/gcs"
+	"github.com/m-lab/go/rtx"
+	"github.com/m-lab/go/timex"
 )
 
 // Job describes a reprocessing "Job", which includes
@@ -35,7 +33,13 @@ type Job struct {
 	Date       time.Time
 	// Filter is an optional regex to apply to ArchiveURL names
 	// Note that HasFiles does not use this, so ETL may process no files.
-	Filter string `json:",omitempty"`
+	Filter   string          `json:",omitempty"`
+	Datasets config.Datasets `json:",omitempty"` // TODO: does this belong here?
+}
+
+// TablePartition returns the BigQuery table partition for this Job's Date.
+func (j *Job) TablePartition() string {
+	return j.Datatype + "$" + j.Date.Format(timex.YYYYMMDD)
 }
 
 // JobWithTarget specifies a type/date job, and a destination
@@ -58,18 +62,6 @@ func (j JobWithTarget) Marshal() []byte {
 	// NOTE: marshaling a struct with primitive types should never fail.
 	rtx.PanicOnError(err, "failed to marshal JobWithTarget: %s", j)
 	return b
-}
-
-// NewJob creates a new job object.
-// DEPRECATED
-// NB:  The date will be converted to UTC and truncated to day boundary!
-func NewJob(bucket, exp, typ string, date time.Time) Job {
-	return Job{
-		Bucket:     bucket,
-		Experiment: exp,
-		Datatype:   typ,
-		Date:       date.UTC().Truncate(24 * time.Hour),
-	}
 }
 
 // These are used to limit the number of unique error strings in the FailCount metric.

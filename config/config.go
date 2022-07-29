@@ -25,12 +25,20 @@ type MonitorConfig struct {
 
 // SourceConfig holds the config that defines all data sources to be processed.
 type SourceConfig struct {
-	Bucket     string `yaml:"bucket"`
-	Experiment string `yaml:"experiment"`
-	Datatype   string `yaml:"datatype"`
-	Filter     string `yaml:"filter"`
-	Target     string `yaml:"target"`
-	DailyOnly  bool   `yaml:"daily_only"`
+	Bucket     string   `yaml:"bucket"`
+	Experiment string   `yaml:"experiment"`
+	Datatype   string   `yaml:"datatype"`
+	Filter     string   `yaml:"filter"`
+	Datasets   Datasets `yaml:"target_datasets"`
+	DailyOnly  bool     `yaml:"daily_only"`
+}
+
+// Datasets contains the name of BigQuery datasets used for temporary, raw, or
+// joined tables.
+type Datasets struct {
+	Tmp  string `yaml:"tmp"`
+	Raw  string `yaml:"raw"`
+	Join string `yaml:"join"`
 }
 
 // Gardener is the full config for a Gardener instance.

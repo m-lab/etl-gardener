@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
@@ -28,6 +29,10 @@ func TestNewJob(t *testing.T) {
 				Experiment: "exp",
 				Datatype:   "typ",
 				Date:       time.Date(2019, time.February, 03, 00, 00, 00, 00, time.UTC),
+				Datasets: config.Datasets{
+					Tmp: "tmp_exp",
+					Raw: "raw_exp",
+				},
 			},
 		},
 		{
@@ -41,6 +46,10 @@ func TestNewJob(t *testing.T) {
 				Experiment: "exp",
 				Datatype:   "typ",
 				Date:       time.Date(2019, time.February, 03, 00, 00, 00, 00, time.UTC),
+				Datasets: config.Datasets{
+					Tmp: "tmp_exp",
+					Raw: "raw_exp",
+				},
 			},
 		},
 	}

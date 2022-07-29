@@ -100,10 +100,11 @@ func NewJobService(startDate time.Time,
 			Datatype:   s.Datatype,
 			Filter:     s.Filter,
 			Date:       time.Time{}, // This is not used.
+			Datasets:   s.Datasets,
 		}
 		// TODO - handle gs:// targets
 		jt := tracker.JobWithTarget{
-			ID:        job.Key(),
+			// NOTE: JobWithTarget.ID is assigned after Job.Date is set.
 			Job:       job,
 			DailyOnly: s.DailyOnly,
 		}
