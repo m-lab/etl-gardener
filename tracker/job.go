@@ -17,7 +17,6 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
 
-	"github.com/m-lab/etl-gardener/config"
 	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/go/cloud/gcs"
 	"github.com/m-lab/go/rtx"
@@ -33,8 +32,16 @@ type Job struct {
 	Date       time.Time
 	// Filter is an optional regex to apply to ArchiveURL names
 	// Note that HasFiles does not use this, so ETL may process no files.
-	Filter   string          `json:",omitempty"`
-	Datasets config.Datasets `json:",omitempty"` // TODO: does this belong here?
+	Filter   string   `json:",omitempty"`
+	Datasets Datasets `json:",omitempty"`
+}
+
+// Datasets contains the name of BigQuery datasets used for temporary, raw, and
+// joined tables.
+type Datasets struct {
+	Tmp  string
+	Raw  string
+	Join string
 }
 
 // TablePartition returns the BigQuery table partition for this Job's Date.
