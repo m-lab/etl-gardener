@@ -357,14 +357,6 @@ func (s *Status) NewState(state State) StateInfo {
 	return old
 }
 
-func (s Status) String() string {
-	last := s.LastStateInfo()
-	return fmt.Sprintf("%s %s (%s)",
-		s.DetailTime().Format("01/02~15:04:05"),
-		last.State,
-		last.Detail)
-}
-
 func (s *Status) isDone() bool {
 	return s.LastStateInfo().State == Complete
 }
