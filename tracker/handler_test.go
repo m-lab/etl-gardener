@@ -11,8 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/m-lab/go/logx"
-
 	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/etl-gardener/tracker/jobtest"
@@ -80,128 +78,6 @@ func postAndExpect(t *testing.T, url *url.URL, code int) string {
 	}
 	resp.Body.Close()
 	return string(b)
-}
-
-func TestUpdateHandler(t *testing.T) {
-	date := time.Date(2019, 01, 02, 0, 0, 0, 0, time.UTC)
-	job := jobtest.NewJob("bucket", "exp", "type", date)
-	server, tk := testSetup(t, []tracker.Job{job})
-
-	url := tracker.UpdateURL(server, job, tracker.Parsing, "foobar")
-
-	getAndExpect(t, url, http.StatusMethodNotAllowed)
-
-	// Fail if job doesn't exist.
-	postAndExpect(t, url, http.StatusGone)
-
-	tk.AddJob(job)
-
-	// should update state to Parsing
-	postAndExpect(t, url, http.StatusOK)
-	stat, err := tk.GetStatus(job.Key())
-	must(t, err)
-	if stat.State() != tracker.Parsing {
-		t.Fatal("update failed", stat)
-	}
-
-	url = tracker.UpdateURL(server, job, tracker.Complete, "")
-	postAndExpect(t, url, http.StatusOK)
-
-	_, err = tk.GetStatus(job.Key())
-	if err != tracker.ErrJobNotFound {
-		t.Fatal("Expected JobNotFound", err)
-	}
-}
-
-func TestHeartbeatHandler(t *testing.T) {
-	logx.LogxDebug.Set("true")
-	date := time.Date(2019, 01, 02, 0, 0, 0, 0, time.UTC)
-	job := jobtest.NewJob("bucket", "exp", "type", date)
-	server, tk := testSetup(t, []tracker.Job{job})
-
-	url := tracker.HeartbeatURL(server, job)
-
-	getAndExpect(t, url, http.StatusMethodNotAllowed)
-
-	// Fail if job doesn't exist.
-	postAndExpect(t, url, http.StatusGone)
-
-	tk.AddJob(job)
-
-	// should update state to Parsing
-	postAndExpect(t, url, http.StatusOK)
-	stat, err := tk.GetStatus(job.Key())
-	must(t, err)
-	if time.Since(stat.HeartbeatTime) > 1*time.Second {
-		t.Fatal("heartbeat failed", stat)
-	}
-	t.Log(stat)
-
-	url = tracker.UpdateURL(server, job, tracker.Complete, "")
-	postAndExpect(t, url, http.StatusOK)
-
-	_, err = tk.GetStatus(job.Key())
-	if err != tracker.ErrJobNotFound {
-		t.Fatal("Expected JobNotFound", err)
-	}
-}
-
-func TestErrorHandler(t *testing.T) {
-	date := time.Date(2019, 01, 02, 0, 0, 0, 0, time.UTC)
-	job := jobtest.NewJob("bucket", "exp", "type", date)
-	server, tk := testSetup(t, []tracker.Job{job})
-
-	url := tracker.ErrorURL(server, job, "error")
-
-	getAndExpect(t, url, http.StatusMethodNotAllowed)
-
-	// Job should not yet exist.
-	postAndExpect(t, url, http.StatusGone)
-
-	tk.AddJob(job)
-
-	// should successfully update state to Failed
-	postAndExpect(t, url, http.StatusOK)
-	stat, err := tk.GetStatus(job.Key())
-	must(t, err)
-	if stat.Detail() != "error" {
-		t.Error("Expected error:", stat.Detail())
-	}
-	if stat.State() != tracker.ParseError {
-		t.Error("Wrong state:", stat)
-	}
-
-	url = tracker.UpdateURL(server, job, tracker.Complete, "")
-	postAndExpect(t, url, http.StatusOK)
-
-	_, err = tk.GetStatus(job.Key())
-	if err != tracker.ErrJobNotFound {
-		t.Fatal("Expected JobNotFound", err)
-	}
-}
-
-func TestNextJobHandler(t *testing.T) {
-	date := time.Date(2019, 01, 02, 0, 0, 0, 0, time.UTC)
-	job := jobtest.NewJob("bucket", "exp", "type", date)
-	// Add job, empty, and duplicate job.
-	url, _ := testSetup(t, []tracker.Job{job, tracker.Job{}, job})
-	url.Path = "job"
-
-	// Wrong method.
-	getAndExpect(t, &url, http.StatusMethodNotAllowed)
-
-	// This should succeed, because the fakeJobService returns its job.
-	r := postAndExpect(t, &url, http.StatusOK)
-	want := `{"Bucket":"bucket","Experiment":"exp","Datatype":"type","Date":"2019-01-02T00:00:00Z"}`
-	if want != r {
-		t.Fatalf("/job returned wrong result: got %q, want %q", r, want)
-	}
-
-	// This one should fail because the fakeJobService returns empty results.
-	postAndExpect(t, &url, http.StatusInternalServerError)
-
-	// This one should fail because the fakeJobService returns a duplicate job.
-	postAndExpect(t, &url, http.StatusInternalServerError)
 }
 
 func TestNextJobV2Handler(t *testing.T) {
