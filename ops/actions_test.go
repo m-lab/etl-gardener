@@ -80,7 +80,7 @@ func TestStandardMonitor(t *testing.T) {
 		tk.AddJob(jobs[i])
 	}
 
-	m, err := ops.NewStandardMonitor(context.Background(), "mlab-testing", cloud.BQConfig{}, tk)
+	m, err := ops.NewStandardMonitor(context.Background(), "mlab-testing", "etl-mlab-testing", cloud.BQConfig{}, tk)
 	rtx.Must(err, "NewMonitor failure")
 	// We override some actions in place of the default Parser activity.
 	// The resulting sequence should be:

@@ -58,12 +58,13 @@ func newJoinConditionFunc(tk *tracker.Tracker, detail string) ConditionFunc {
 }
 
 type actionEnv struct {
-	project string
+	project     string
+	inputBucket string
 }
 
 // NewStandardMonitor creates the standard monitor that handles several state transitions.
-func NewStandardMonitor(ctx context.Context, project string, config cloud.BQConfig, tk *tracker.Tracker) (*Monitor, error) {
-	a := actionEnv{project: project}
+func NewStandardMonitor(ctx context.Context, project, inputBucket string, config cloud.BQConfig, tk *tracker.Tracker) (*Monitor, error) {
+	a := actionEnv{project: project, inputBucket: inputBucket}
 	m, err := NewMonitor(ctx, config, tk)
 	if err != nil {
 		return nil, err
@@ -145,8 +146,8 @@ func waitAndCheck(ctx context.Context, bqJob bqiface.Job, j tracker.Job, label s
 // would be a good place for the TableOps object.
 func (a *actionEnv) tableOps(ctx context.Context, j tracker.Job) (*bq.TableOps, error) {
 	// TODO pass in the JobWithTarget, and get this info from Target.
-	loadSource := fmt.Sprintf("gs://etl-%s/%s/%s/%s/%s/*",
-		a.project, j.Bucket, j.Experiment, j.Datatype, j.Date.Format(timex.YYYYMMDDWithSlash))
+	loadSource := fmt.Sprintf("gs://%s/%s/%s/%s/%s/*",
+		a.inputBucket, j.Bucket, j.Experiment, j.Datatype, j.Date.Format(timex.YYYYMMDDWithSlash))
 	return bq.NewTableOps(ctx, j, a.project, loadSource)
 }
 
