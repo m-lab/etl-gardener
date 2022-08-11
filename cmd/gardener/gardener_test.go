@@ -1,5 +1,3 @@
-// +build integration
-
 // Package main defines a service for handling various post-processing
 // and house-keeping tasks associated with the pipelines.
 // Most tasks will be run periodically, but some may be triggered
@@ -36,47 +34,15 @@ func waitFor(url string) (resp *http.Response, err error) {
 // TODO - these tests currently fail with count=10
 // Would have to use :0 for all servers to allow count > 1
 
-func TestLegacyModeSetup(t *testing.T) {
-	mainCtx, mainCancel = context.WithCancel(context.Background())
-
-	vars := map[string]string{
-		"PROJECT":         "mlab-testing",
-		"QUEUE_BASE":      "fake-queue-",
-		"NUM_QUEUES":      "3",
-		"EXPERIMENT":      "ndt",
-		"TASKFILE_BUCKET": "archive-mlab-testing",
-		"START_DATE":      "20090220",
-	}
-	for k, v := range vars {
-		cleanup := osx.MustSetenv(k, v)
-		defer cleanup()
-	}
-
-	go func() {
-		defer mainCancel()
-		resp, err := waitFor("http://localhost:8080/ready")
-		if err != nil {
-			t.Fatal(err)
-		}
-		// For now, the service comes up immediately serving "ok" for /ready
-		data, err := ioutil.ReadAll(resp.Body)
-		if string(data) != "ok" {
-			t.Fatal(string(data))
-		}
-		resp.Body.Close()
-	}()
-
-	main()
-}
-
 func TestManagerMode(t *testing.T) {
 	flag.Set("config_path", "testdata/config.yml")
 	mainCtx, mainCancel = context.WithCancel(context.Background())
 
 	vars := map[string]string{
-		"SERVICE_MODE": "manager",
-		"PROJECT":      "mlab-testing",
-		"STATUS_PORT":  ":0",
+		"SERVICE_MODE":  "manager",
+		"PROJECT":       "mlab-testing",
+		"STATUS_PORT":   ":0",
+		"GARDENER_ADDR": ":8888", // any number other than default.
 	}
 	for k, v := range vars {
 		cleanup := osx.MustSetenv(k, v)
@@ -85,7 +51,7 @@ func TestManagerMode(t *testing.T) {
 
 	go func(t *testing.T) {
 		defer mainCancel()
-		resp, err := waitFor("http://localhost:8080/ready")
+		resp, err := waitFor("http://localhost:8888/ready")
 		if err != nil {
 			t.Fatal(err)
 		}

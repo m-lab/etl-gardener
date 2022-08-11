@@ -5,15 +5,16 @@ import (
 	"context"
 	"errors"
 	"log"
+	"path"
 	"testing"
 	"time"
 
-	"github.com/m-lab/go/logx"
-	"github.com/m-lab/go/rtx"
-
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/ops"
+	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
+	"github.com/m-lab/etl-gardener/tracker/jobtest"
+	"github.com/m-lab/go/rtx"
 )
 
 func init() {
@@ -35,14 +36,13 @@ func newStateFunc(detail string) ops.ActionFunc {
 }
 
 func TestMonitor_Watch(t *testing.T) {
-	logx.LogxDebug.Set("true")
-
 	ctx, cancel := context.WithCancel(context.Background())
-	tk, err := tracker.InitTracker(ctx, nil, nil, 0, 0, 0)
+	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), "junk.json"))
+	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
-	tk.AddJob(tracker.NewJob("bucket", "exp", "type", time.Now()))
-	tk.AddJob(tracker.NewJob("bucket", "exp2", "type", time.Now()))
-	tk.AddJob(tracker.NewJob("bucket", "exp2", "type2", time.Now()))
+	tk.AddJob(jobtest.NewJob("bucket", "exp", "type", time.Now()))
+	tk.AddJob(jobtest.NewJob("bucket", "exp2", "type", time.Now()))
+	tk.AddJob(jobtest.NewJob("bucket", "exp2", "type2", time.Now()))
 
 	m, err := ops.NewMonitor(context.Background(), cloud.BQConfig{}, tk)
 	rtx.Must(err, "NewMonitor failure")
@@ -79,13 +79,12 @@ func TestMonitor_Watch(t *testing.T) {
 }
 
 func TestOutcomeUpdate(t *testing.T) {
-	logx.LogxDebug.Set("true")
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	tk, err := tracker.InitTracker(ctx, nil, nil, 0, 0, 0)
+	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), "junk.json"))
+	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
-	job := tracker.NewJob("bucket", "exp", "type", time.Now())
+	job := jobtest.NewJob("bucket", "exp", "type", time.Now())
 	tk.AddJob(job)
 
 	m, err := ops.NewMonitor(context.Background(), cloud.BQConfig{}, tk)
@@ -94,7 +93,7 @@ func TestOutcomeUpdate(t *testing.T) {
 	retry := ops.Retry(job, errors.New("error"), "foobar")
 	m.UpdateJob(retry, tracker.Joining)
 
-	status, err := tk.GetStatus(job)
+	status, err := tk.GetStatus(job.Key())
 	must(t, err)
 	if status.Detail() != "foobar" {
 		t.Error(status.Detail())

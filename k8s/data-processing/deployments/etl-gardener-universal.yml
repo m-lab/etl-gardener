@@ -36,19 +36,16 @@ spec:
       containers:
       - image: gcr.io/{{GCLOUD_PROJECT}}/etl-gardener:{{GIT_COMMIT}}
         name: etl-gardener
-        args: ["--prometheusx.listen-address=:9090", "--config_path=/etc/config.yml"]
-        env:
-        - name: SERVICE_MODE # Whether to use task-queues or run as manager.
-          value: "manager"
-        - name: PROJECT
-          value: "{{GCLOUD_PROJECT}}"
-        - name: STATUS_PORT
-          value: ":8081"
-        - name: JOB_EXPIRATION_TIME
-          value: "6h"
-        - name: SHUTDOWN_TIMEOUT
-          value: "5m"
-
+        args: [
+          "-prometheusx.listen-address=:9090",
+          "-config_path=/etc/config.yml",
+          "-saver.dir=/singleton",
+          "-status_port=:8081",
+          "-project={{GCLOUD_PROJECT}}",
+          "-shutdown_timeout=5m",
+          "-job_expiration_time=6h",
+          "-input_location=etl-{{GCLOUD_PROJECT}}", # must correspond to -output_location from etl parser.
+        ]
         ports:
         - name: prometheus-port
           containerPort: 9090

@@ -5,123 +5,26 @@ import (
 	"context"
 	"errors"
 	"log"
-	"net/http"
-	"reflect"
 	"sync"
 	"time"
 
 	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
 
 	"github.com/m-lab/etl-gardener/config"
-	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
 // ErrMoreJSON is returned when response from gardener has unknown fields.
 var ErrMoreJSON = errors.New("JSON body not completely consumed")
 
-// ErrNilParameter is returned on disallowed nil parameter.
-var ErrNilParameter = errors.New("nil parameter not allowed")
-
-type jobAdder interface {
-	AddJob(job tracker.Job) error
-	LastJob() tracker.Job // temporary
-}
-
-// YesterdaySource provides pending jobs for yesterday's data.
-// When the scheduled delay has passed, it cycles through all the
-// job specs, then advances to the next date.
-type YesterdaySource struct {
-	saver persistence.Saver
-
-	jobSpecs  []tracker.JobWithTarget // The job prefixes to be iterated through.
-	Date      time.Time               // The next "yesterday" date to be processed.
-	delay     time.Duration           // time after UTC to process yesterday.
-	nextIndex int
-}
-
-// nextJob returns a yesterday Job if appropriate
-// Not thread-safe.
-func (y *YesterdaySource) nextJob(ctx context.Context) *tracker.JobWithTarget {
-	// Defer until "delay" after midnight next day.
-	if time.Since(y.Date) < 24*time.Hour+y.delay {
-		return nil
-	}
-
-	// Copy the jobspec and set the date.
-	job := y.jobSpecs[y.nextIndex]
-	job.Date = y.Date
-
-	// Advance to the next jobSpec for next call.
-	y.nextIndex++
-	// When we have dispatched all jobs, advance yesterdayDate to next day
-	// and reset the index.
-	if y.nextIndex >= len(y.jobSpecs) {
-		y.nextIndex = 0
-		y.Date = y.Date.AddDate(0, 0, 1).UTC().Truncate(24 * time.Hour)
-
-		ctx, cf := context.WithTimeout(ctx, 5*time.Second)
-		defer cf()
-		log.Println("Saving", y.GetName(), y.GetKind(), y.Date.Format("2006-01-02"))
-		err := y.saver.Save(ctx, y)
-		if err != nil {
-			log.Println(err)
-		}
-	}
-
-	return &job
-}
-
-func initYesterday(ctx context.Context, saver persistence.Saver, delay time.Duration, specs []tracker.JobWithTarget) (*YesterdaySource, error) {
-	if saver == nil {
-		return nil, ErrNilParameter
-	}
-	// This is the fallback start date.
-	date := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -1)
-
-	src := YesterdaySource{
-		saver:     saver,
-		jobSpecs:  specs,
-		Date:      date,
-		delay:     delay,
-		nextIndex: 0,
-	}
-
-	// Recover the date from datastore.
-	ctx, cf := context.WithTimeout(ctx, 5*time.Second)
-	defer cf()
-	err := saver.Fetch(ctx, &src)
-	if err != nil {
-		log.Println(err)
-	}
-
-	log.Println("Yesterday starting at", src.Date)
-	return &src, nil
-}
-
-// GetName implements StateObject.GetName
-func (y YesterdaySource) GetName() string {
-	return "singleton" // There is only one job service.
-}
-
-// GetKind implements StateObject.GetKind
-func (y YesterdaySource) GetKind() string {
-	return reflect.TypeOf(y).String()
-}
+// ErrNoConfiguredJobs is returned when a new Job Service cannot be created
+// because there are no configured jobs.
+var ErrNoConfiguredJobs = errors.New("no configured jobs")
 
 // Service contains all information needed to provide a job service.
 // It iterates through successive dates, processing that date from
 // all TypeSources in the source bucket.
 type Service struct {
-	jobSpecs []tracker.JobWithTarget // The job prefixes to be iterated through.
-
-	saver persistence.Saver // This injected to implement persistence.
-
-	startDate time.Time // The date to restart at.
-
-	// Optional jobAdder to add jobs to, e.g. a Tracker
-	jobAdder jobAdder
-
 	// Storage client used to get source lists.
 	sClient stiface.Client
 
@@ -129,143 +32,66 @@ type Service struct {
 	// All fields below are protected by *lock*
 	lock *sync.Mutex
 
-	// The Date is exported for persistence.  It is the only field
-	// that is recovered after restart.  All others are injected
-	// from config.
-	Date      time.Time // The date currently being dispatched.
-	nextIndex int       // index of TypeSource to dispatch next.
-
-	yesterday *YesterdaySource // Provides jobs for high priority yesterday
-}
-
-func (svc *Service) advanceDate() {
-	date := svc.Date.UTC().AddDate(0, 0, 1).Truncate(24 * time.Hour)
-	// Start over when we reach yesterday.
-	if time.Since(date) < 36*time.Hour {
-		date = svc.startDate
-	}
-	svc.Date = date
-	svc.nextIndex = 0
+	dailyJobs *JobIterator // for daily jobs.
+	histJobs  *JobIterator // for historical jobs.
 }
 
 // NextJob returns a tracker.Job to dispatch.
-func (svc *Service) NextJob(ctx context.Context) tracker.JobWithTarget {
+func (svc *Service) NextJob(ctx context.Context) *tracker.JobWithTarget {
 	svc.lock.Lock()
 	defer svc.lock.Unlock()
 
 	// Check whether there is yesterday work to do.
-	if j := svc.yesterday.nextJob(ctx); j != nil {
-		log.Println("Yesterday job:", j.Job)
-		return *j
+	if jt, _ := svc.dailyJobs.Next(); jt != nil {
+		log.Println("Yesterday job:", jt.Job)
+		return svc.ifHasFiles(ctx, jt)
 	}
 
-	job := svc.jobSpecs[svc.nextIndex]
-	job.Date = svc.Date
-	svc.nextIndex++
-
-	if svc.nextIndex >= len(svc.jobSpecs) {
-		svc.advanceDate()
-		// Note that this will block other calls to NextJob
-		ctx, cf := context.WithTimeout(ctx, 5*time.Second)
-		defer cf()
-		log.Println("Saving", svc.GetName(), svc.GetKind(), svc.Date.Format("2006-01-02"))
-		err := svc.saver.Save(ctx, svc)
+	// Since some jobs may be configured as dailyOnly, or have no files for a
+	// given date, we check for these conditions, and skip the job if
+	// appropriate. We try up to histJobs.Len() times to find the next job.
+	for attempts := 0; attempts < svc.histJobs.Len(); attempts++ {
+		jt, err := svc.histJobs.Next()
 		if err != nil {
 			log.Println(err)
+			continue
 		}
+		return svc.ifHasFiles(ctx, jt)
 	}
-	return job
+	return nil
 }
 
-// JobHandler handle requests for new jobs.
-// TODO - should update tracker instance.
-func (svc *Service) JobHandler(resp http.ResponseWriter, req *http.Request) {
-	// Must be a post because it changes state.
-	if req.Method != http.MethodPost {
-		resp.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	job := svc.NextJob(req.Context())
-
-	// Check whether there are any files
+func (svc *Service) ifHasFiles(ctx context.Context, jt *tracker.JobWithTarget) *tracker.JobWithTarget {
 	if svc.sClient != nil {
-		ok, err := job.Job.HasFiles(req.Context(), svc.sClient)
+		ok, err := jt.Job.HasFiles(ctx, svc.sClient)
 		if err != nil {
 			log.Println(err)
 		}
 		if !ok {
-			log.Println(job, "has no files", job.Bucket)
-			resp.WriteHeader(http.StatusInternalServerError)
-			_, err = resp.Write([]byte("Job has no files.  Try again."))
-			if err != nil {
-				log.Println(err)
-			}
-			return
+			log.Println(jt, "has no files", jt.Job.Bucket)
+			return nil
 		}
 	}
-
-	err := svc.jobAdder.AddJob(job.Job)
-	if err != nil {
-		log.Println(err, job)
-		resp.WriteHeader(http.StatusInternalServerError)
-		_, err = resp.Write([]byte("Job already exists.  Try again."))
-		if err != nil {
-			log.Println(err)
-		}
-		return
-	}
-
-	log.Printf("Dispatching %s\n", job.Job)
-	_, err = resp.Write(job.Marshal())
-	if err != nil {
-		log.Println(err)
-		// This should precede the Write(), but the Write failed, so this
-		// is likely ok.
-		resp.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-}
-
-// Recover the processing date.
-// Not thread-safe - should be called before activating service.
-func (svc *Service) recoverDate(ctx context.Context) {
-	// Default to tracker.LastJob date.
-	// Deprecated
-	svc.Date = svc.jobAdder.LastJob().Date
-
-	// try to recover date from saver.
-	ctx, cf := context.WithTimeout(ctx, 5*time.Second)
-	defer cf()
-	err := svc.saver.Fetch(ctx, svc)
-	if err != nil {
-		log.Println(err, svc)
-	}
-
-	// Adjust if Date is too early.
-	if svc.Date.Before(svc.startDate) {
-		svc.Date = svc.startDate
-	}
+	return jt
 }
 
 // ErrInvalidStartDate is returned if startDate is time.Time{}
-var ErrInvalidStartDate = errors.New("Invalid start date")
+var ErrInvalidStartDate = errors.New("invalid start date")
 
 // NewJobService creates the default job service.
-// Context is used for retrieving state from datastore.
-func NewJobService(ctx context.Context, tk jobAdder, startDate time.Time,
-	targetBase string, sources []config.SourceConfig,
-	saver persistence.Saver,
+func NewJobService(startDate time.Time,
+	sources []config.SourceConfig,
 	statsClient stiface.Client, // May be nil
+	dailySaver namedSaver,
+	histSaver namedSaver,
 ) (*Service, error) {
 	if startDate.Equal(time.Time{}) {
 		return nil, ErrInvalidStartDate
 	}
-	if tk == nil || ctx == nil || saver == nil {
-		return nil, ErrNilParameter
-	}
 
 	// The service cycles through the jobSpecs.  Each spec is a job (bucket/exp/type) and a target GCS bucket or BQ table.
-	specs := make([]tracker.JobWithTarget, 0)
+	dailySpecs := make([]tracker.JobWithTarget, 0)
+	histSpecs := make([]tracker.JobWithTarget, 0)
 	for _, s := range sources {
 		log.Println(s)
 		job := tracker.Job{
@@ -276,46 +102,33 @@ func NewJobService(ctx context.Context, tk jobAdder, startDate time.Time,
 			Date:       time.Time{}, // This is not used.
 		}
 		// TODO - handle gs:// targets
-		jt, err := job.Target(targetBase + "." + s.Target)
-		if err != nil {
-			log.Println(err, targetBase+s.Target)
-			continue
+		jt := tracker.JobWithTarget{
+			ID:        job.Key(),
+			Job:       job,
+			DailyOnly: s.DailyOnly,
 		}
-		specs = append(specs, jt)
+		dailySpecs = append(dailySpecs, jt)
+		if !s.DailyOnly {
+			histSpecs = append(histSpecs, jt)
+		}
 	}
-	if len(specs) < 1 {
-		log.Fatal("No jobs specified")
+	if len(dailySpecs) == 0 {
+		// NOTE: the set of historical specs may be empty.
+		return nil, ErrNoConfiguredJobs
 	}
 
-	yesterday, err := initYesterday(ctx, saver, 10*time.Hour+30*time.Minute, specs)
-	if err != nil {
-		return nil, err
-	}
+	di := NewDailyIterator(10*time.Hour+30*time.Minute, dailySaver)
+	hi := NewHistoricalIterator(startDate, histSaver)
+
+	dailyJobs := NewJobIterator(di, dailySpecs)
+	histJobs := NewJobIterator(hi, histSpecs)
 
 	svc := Service{
-		jobAdder:  tk,
-		saver:     saver,
-		jobSpecs:  specs,
-		startDate: startDate,
+		dailyJobs: dailyJobs,
+		histJobs:  histJobs,
 		sClient:   statsClient,
 		lock:      &sync.Mutex{},
-		nextIndex: 0,
-		yesterday: yesterday,
 	}
 
-	svc.recoverDate(ctx)
-
 	return &svc, nil
-}
-
-// ---------- Implement persistence.StateObject -------------
-
-// GetName implements StateObject.GetName
-func (svc Service) GetName() string {
-	return "singleton" // There is only one job service.
-}
-
-// GetKind implements StateObject.GetKind
-func (svc Service) GetKind() string {
-	return reflect.TypeOf(svc).String()
 }

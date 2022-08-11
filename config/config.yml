@@ -1,20 +1,43 @@
 ---
-start_date: 2020-02-01
+start_date: 2015-11-19 # Earliest date for v2 platform datatypes.
 tracker:
   timeout: 5h
 monitor:
   polling_interval: 1m
 sources:
 # NOTE: It now matters what order these are in.
-- bucket: archive-measurement-lab
+- bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
   experiment: ndt
   datatype: annotation
   target: tmp_ndt.annotation
-- bucket: archive-measurement-lab
+- bucket: archive-{{NDT_SOURCE_PROJECT}}
+  experiment: ndt
+  datatype: ndt5
+  target: tmp_ndt.ndt5
+- bucket: archive-{{NDT_SOURCE_PROJECT}}
   experiment: ndt
   datatype: ndt7
   target: tmp_ndt.ndt7
-#- bucket: archive-measurement-lab
-#  experiment: ndt
-#  datatype: tcpinfo
-#  target: tmp_ndt.tcpinfo
+- bucket: archive-{{NDT_SOURCE_PROJECT}}
+  experiment: ndt
+  datatype: pcap
+  target: tmp_ndt.pcap
+  # TODO(github.com/m-lab/etl-gardener/issues/389): Enable after pcap historical
+  # reprocessing completes once.
+  # daily_only: true
+- bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
+  experiment: ndt
+  datatype: hopannotation1
+  target: tmp_ndt.hopannotation1
+- bucket: archive-measurement-lab
+  experiment: ndt
+  datatype: scamper1
+  target: tmp_ndt.scamper1
+- bucket: archive-measurement-lab
+  experiment: utilization
+  datatype: switch
+  target: tmp_utilization.switch
+- bucket: archive-{{NDT_SOURCE_PROJECT}}
+  experiment: ndt
+  datatype: tcpinfo
+  target: tmp_ndt.tcpinfo

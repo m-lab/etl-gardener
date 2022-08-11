@@ -2,7 +2,6 @@
 // and house-keeping tasks associated with the pipelines.
 // Most tasks will be run periodically, but some may be triggered
 // by URL requests from authorized sources.
-// Design doc is here: https://docs.google.com/document/d/1503gojY_bVZy1iHlxdDqszADtCt7vFNbT7ZuympRd8A
 package main
 
 import (
@@ -13,14 +12,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"runtime"
-	"strconv"
-	"strings"
 	"time"
 
-	"cloud.google.com/go/datastore"
 	"cloud.google.com/go/storage"
-	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
 	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
 	"golang.org/x/sync/errgroup"
 
@@ -32,11 +28,9 @@ import (
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/config"
 	job "github.com/m-lab/etl-gardener/job-service"
+	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/etl-gardener/ops"
 	"github.com/m-lab/etl-gardener/persistence"
-	"github.com/m-lab/etl-gardener/reproc"
-	"github.com/m-lab/etl-gardener/rex"
-	"github.com/m-lab/etl-gardener/state"
 	"github.com/m-lab/etl-gardener/tracker"
 
 	// Enable exported debug vars.  See https://golang.org/pkg/expvar/
@@ -56,10 +50,16 @@ var (
 )
 
 var (
+	saverDir string
+	project  string
+
 	jobExpirationTime = flag.Duration("job_expiration_time", 24*time.Hour, "Time after which stale jobs will be purged")
 	jobCleanupDelay   = flag.Duration("job_cleanup_delay", 3*time.Hour, "Time after which completed jobs will be removed from tracker")
 	shutdownTimeout   = flag.Duration("shutdown_timeout", 1*time.Minute, "Graceful shutdown time allowance")
 	statusPort        = flag.String("status_port", ":0", "The public interface port where status (and pprof) will be published")
+	gardenerAddr      = flag.String("gardener_addr", ":8080", "The listen address for the gardener jobs service")
+	configPath        = flag.String("config_path", "config.yml", "Path to the config file.")
+	inputLocation     = flag.String("input_location", "", "Load from this GCS bucket.")
 
 	// Context and injected variables to allow smoke testing of main()
 	mainCtx, mainCancel = context.WithCancel(context.Background())
@@ -68,6 +68,10 @@ var (
 func init() {
 	// Always prepend the filename and line number.
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	flag.StringVar(&saverDir, "saver.dir", "local", "When the saver backend is 'local', place files in this directory")
+
+	flag.StringVar(&project, "project", "", "GCP project id")
 }
 
 // Environment provides "global" variables.
@@ -79,22 +83,6 @@ type environment struct {
 	// Vars for Status()
 	Commit  string
 	Version string
-
-	// Determines what kind of service to run.
-	// "manager" will cause loading of config, and passive management.
-	// "legacy" will cause legacy behavior based on additional environment variables.
-	ServiceMode string
-
-	Bucket string
-
-	// These are only used for the "legacy" service mode.
-	BatchDataset string // All working data is written to the batch data set.
-	FinalDataset string // Ultimate deduplicated, partitioned output dataset.
-	QueueBase    string // Base of the queue names.  Will append -0, -1, ...
-	Experiment   string
-	NumQueues    int
-	StartDate    time.Time // The archive date to start reprocessing.
-	DateSkip     int       // Number of dates to skip between PostDay, to allow rapid scanning in sandbox.
 }
 
 // env provides environment vars.
@@ -102,94 +90,17 @@ var env environment
 
 // Errors associated with environment.
 var (
-	ErrNoProject       = errors.New("No env var for Project")
-	ErrNoQueueBase     = errors.New("No env var for QueueBase")
-	ErrNoNumQueues     = errors.New("No env var for NumQueues")
-	ErrNoStartDate     = errors.New("No env var for StartDate")
-	ErrInvalidDateSkip = errors.New("Invalid DATE_SKIP value")
-	ErrBadStartDate    = errors.New("Bad StartDate")
-	ErrNoExperiment    = errors.New("No env var for Experiment")
-	ErrNoBucket        = errors.New("No env var for Bucket")
+	ErrNoProject = errors.New("no env var for Project")
 )
-
-func loadEnvVarsForTaskQueue() {
-	var ok bool
-	env.QueueBase, ok = os.LookupEnv("QUEUE_BASE")
-	if !ok {
-		env.Error = ErrNoQueueBase
-		log.Println(env.Error)
-	}
-	var err error
-	env.NumQueues, err = strconv.Atoi(os.Getenv("NUM_QUEUES"))
-	if err != nil {
-		env.Error = ErrNoNumQueues
-		log.Println(err)
-		log.Println(env.Error)
-	}
-	startString, ok := os.LookupEnv("START_DATE")
-	if !ok {
-		env.Error = ErrNoStartDate
-		log.Println(env.Error)
-	} else {
-		env.StartDate, err = time.Parse("20060102", startString)
-		if !ok {
-			env.Error = ErrBadStartDate
-			log.Println(env.Error)
-		}
-	}
-
-	skipCountString := os.Getenv("DATE_SKIP")
-	if skipCountString != "" {
-		env.DateSkip, err = strconv.Atoi(skipCountString)
-		if err != nil {
-			log.Println(err)
-			env.Error = ErrInvalidDateSkip
-			log.Println(env.Error)
-		}
-	}
-
-	expt := os.Getenv("EXPERIMENT")
-	if expt == "" {
-		env.Error = ErrNoExperiment
-		log.Println("Error: EXPERIMENT environment variable not set.")
-	} else {
-		env.Experiment = strings.TrimSpace(expt)
-	}
-
-	bucket := os.Getenv("TASKFILE_BUCKET")
-	if bucket == "" {
-		log.Println("Error: TASKFILE_BUCKET environment variable not set.")
-		env.Error = ErrNoBucket
-	} else {
-		env.Bucket = bucket
-	}
-}
 
 // LoadEnv loads any required environment variables.
 func LoadEnv() {
-	var ok bool
 	env.Commit = GitCommit
 	env.Version = Version
-	env.BatchDataset = os.Getenv("DATASET")
-	env.FinalDataset = os.Getenv("FINAL_DATASET")
-
-	env.Project, ok = os.LookupEnv("PROJECT")
-	if !ok {
+	env.Project = project
+	if env.Project == "" {
 		env.Error = ErrNoProject
 		log.Println(env.Error)
-	}
-
-	env.ServiceMode, ok = os.LookupEnv("SERVICE_MODE")
-	if !ok {
-		env.ServiceMode = "legacy"
-	}
-
-	switch env.ServiceMode {
-	case "manager":
-		// Nothing requred.
-	case "legacy":
-		// load variables required for task queue based operation.
-		loadEnvVarsForTaskQueue()
 	}
 }
 
@@ -200,45 +111,9 @@ func LoadEnv() {
 // NewBQConfig creates a BQConfig for use with NewDedupHandler
 func NewBQConfig(config cloud.Config) cloud.BQConfig {
 	return cloud.BQConfig{
-		Config:         config,
-		BQProject:      config.Project,
-		BQBatchDataset: env.BatchDataset,
-		BQFinalDataset: env.FinalDataset,
+		Config: config,
 	}
 }
-
-// dispatcherFromEnv creates a Dispatcher struct initialized from environment variables.
-// It uses PROJECT, QUEUE_BASE, and NUM_QUEUES.
-// NOTE: ctx should only be used within the function scope, and not reused later.
-// Not currently clear if that is true.
-func taskHandlerFromEnv(ctx context.Context, client *http.Client) (*reproc.TaskHandler, error) {
-	config := cloud.Config{
-		Project: env.Project,
-		Client:  client}
-
-	bqConfig := NewBQConfig(config)
-	exec, err := rex.NewReprocessingExecutor(ctx, bqConfig)
-	if err != nil {
-		return nil, err
-	}
-	// TODO - exec.StorageClient should be closed.
-	queues := make([]string, env.NumQueues)
-	for i := 0; i < env.NumQueues; i++ {
-		queues[i] = fmt.Sprintf("%s%d", env.QueueBase, i)
-	}
-
-	// TODO move DatastoreSaver to another package?
-	saver, err := state.NewDatastoreSaver(ctx, env.Project)
-	if err != nil {
-		return nil, err
-	}
-	return reproc.NewTaskHandler(env.Experiment, exec, queues, saver), nil
-}
-
-// StartDateRFC3339 is the date at which reprocessing will start when it catches
-// up to present.  For now, we are making this the beginning of the ETL timeframe,
-// until we get annotation fixed to use the actual data date instead of NOW.
-const StartDateRFC3339 = "2017-05-01T00:00:00Z"
 
 // Job state tracker, when operating in manager mode.
 var globalTracker *tracker.Tracker
@@ -250,8 +125,7 @@ var globalTracker *tracker.Tracker
 // Status provides basic information about the service.  For now, it is just
 // configuration and version info.  In future it will likely include more
 // dynamic information.
-// TODO(gfr) Add either a black list or a white list for the environment
-// variables, so we can hide sensitive vars. https://github.com/m-lab/etl/issues/384
+// TODO(github.com/m-lab/etl/issues/1095) Place all public accessible ports behind oauth access.
 func Status(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "<html><body>\n")
 	if len(env.Commit) >= 8 {
@@ -267,7 +141,6 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	if globalTracker != nil {
 		globalTracker.WriteHTMLStatusTo(r.Context(), w)
 	}
-	state.WriteHTMLStatusTo(r.Context(), w, env.Project, env.Experiment)
 	fmt.Fprintf(w, "</br>\n")
 
 	env := os.Environ()
@@ -313,14 +186,12 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 func mustStandardTracker() *tracker.Tracker {
-	client, err := datastore.NewClient(context.Background(), env.Project)
-	rtx.Must(err, "datastore client")
-	dsKey := datastore.NameKey("tracker", "jobs", nil)
-	dsKey.Namespace = "gardener"
-
+	// TODO(soltesz): remove remove.
+	os.Remove(path.Join(saverDir, "gardener-tracker-jobs"))
+	saverV2 := persistence.NewLocalNamedSaver(path.Join(saverDir, "gardener-tracker-state-v2.json"))
 	tk, err := tracker.InitTracker(
 		context.Background(),
-		dsiface.AdaptClient(client), dsKey,
+		saverV2,
 		time.Minute, *jobExpirationTime, *jobCleanupDelay)
 	rtx.Must(err, "tracker init")
 	if tk == nil {
@@ -330,17 +201,18 @@ func mustStandardTracker() *tracker.Tracker {
 	return tk
 }
 
-func mustCreateJobService(ctx context.Context, mux *http.ServeMux) {
+func mustCreateJobService(ctx context.Context, g *config.Gardener) *job.Service {
 	storageClient, err := storage.NewClient(ctx)
 	rtx.Must(err, "Could not create storage client for job service")
 
-	saver, err := persistence.NewDatastoreSaver(context.Background(), os.Getenv("PROJECT"))
-	rtx.Must(err, "Could not initialize datastore saver")
-	svc, err := job.NewJobService(ctx, globalTracker, config.StartDate(),
-		os.Getenv("PROJECT"), config.Sources(), saver,
-		stiface.AdaptClient(storageClient))
+	// TODO(soltesz): replace legacy filenames.
+	dailyS := persistence.NewLocalNamedSaver(path.Join(saverDir, "gardener-job.YesterdaySource-singleton"))
+	histS := persistence.NewLocalNamedSaver(path.Join(saverDir, "gardener-job.Service-singleton"))
+	svc, err := job.NewJobService(
+		g.Start(), g.Sources,
+		stiface.AdaptClient(storageClient), dailyS, histS)
 	rtx.Must(err, "Could not initialize job service")
-	mux.HandleFunc("/job", svc.JobHandler)
+	return svc
 }
 
 // ###############################################################################
@@ -374,7 +246,7 @@ func main() {
 	mux := http.NewServeMux()
 	// Start up the main job and update server.
 	server := &http.Server{
-		Addr:    ":8080",
+		Addr:    *gardenerAddr,
 		Handler: mux,
 	}
 
@@ -385,77 +257,53 @@ func main() {
 	mux.HandleFunc("/alive", healthCheck)
 	mux.HandleFunc("/ready", healthCheck)
 
-	switch env.ServiceMode {
-	case "manager":
-		// This is new new "manager" mode, in which Gardener provides /job and /update apis
-		// for parsers to get work and report progress.
-		// TODO Once the legacy deployments are turned down, this should move to head of main().
-		config.ParseConfig()
+	// This is the v2 "manager" mode, in which Gardener provides the "jobs" API
+	// for parsers to request work and report progress.
+	// TODO Once the legacy deployments are turned down, this should move to head of main().
+	gcfg, err := config.ParseConfig(*configPath)
+	rtx.Must(err, "Failed to parse config: %q", *configPath)
 
-		globalTracker = mustStandardTracker()
-
-		// TODO - refactor this block.
-		cloudCfg := cloud.Config{
-			Project: env.Project,
-			Client:  nil}
-		bqConfig := NewBQConfig(cloudCfg)
-		bqConfig.BQFinalDataset = "base_tables"
-		bqConfig.BQBatchDataset = "batch"
-		monitor, err := ops.NewStandardMonitor(mainCtx, bqConfig, globalTracker)
-		rtx.Must(err, "NewStandardMonitor failed")
-		go monitor.Watch(mainCtx, 5*time.Second)
-
-		handler := tracker.NewHandler(globalTracker)
-		handler.Register(mux)
-
-		mustCreateJobService(mainCtx, mux)
-
-		healthy = true
-		log.Println("Running as manager service")
-	case "legacy":
-		// This is the "legacy" mode, that manages work through task queues.
-		// TODO - this creates a storage client, which should be closed on termination.
-		th, err := taskHandlerFromEnv(mainCtx, http.DefaultClient)
-
-		if err != nil {
-			log.Println(err)
-			os.Exit(1)
-		}
-
-		// If RunDispatchLoop() returns an err instead of nil, healthy will be
-		// set as false and eventually it will cause kubernetes to roll back.
-		err = reproc.RunDispatchLoop(mainCtx, th, env.Project, env.Bucket, env.Experiment, env.StartDate, env.DateSkip)
-		if err != nil {
-			healthy = false
-			log.Println("Running as unhealthy service")
-		} else {
-			healthy = true
-			log.Println("Running as task-queue dispatcher service")
-		}
-	default:
-		log.Println("Unrecognized SERVICE_MODE.  Expected manager or legacy")
-		os.Exit(1)
+	for _, src := range gcfg.Sources {
+		metrics.ConfigDatatypes.WithLabelValues(src.Experiment, src.Datatype)
 	}
+
+	globalTracker = mustStandardTracker()
+
+	// TODO - refactor this block.
+	cloudCfg := cloud.Config{
+		Project: env.Project,
+		Client:  nil,
+	}
+	bqConfig := NewBQConfig(cloudCfg)
+	monitor, err := ops.NewStandardMonitor(mainCtx, project, *inputLocation, bqConfig, globalTracker)
+	rtx.Must(err, "NewStandardMonitor failed")
+	go monitor.Watch(mainCtx, 5*time.Second)
+
+	js := mustCreateJobService(mainCtx, gcfg)
+	handler := tracker.NewHandler(globalTracker, js)
+	handler.Register(mux)
+
+	healthy = true
+	log.Println("Running as manager service")
 
 	rtx.Must(httpx.ListenAndServeAsync(server), "Could not start main server")
 
-	select {
-	case <-mainCtx.Done():
-		log.Println("Shutting down servers")
-		ctx, cancel := context.WithTimeout(context.Background(), *shutdownTimeout)
-		defer cancel()
-		start := time.Now()
-		eg := errgroup.Group{}
-		eg.Go(func() error {
-			return server.Shutdown(ctx)
-		})
-		eg.Go(func() error {
-			return statusServer.Shutdown(ctx)
-		})
-		eg.Go(func() error {
-			return promServer.Shutdown(ctx)
-		})
-		eg.Wait()
-		log.Println("Shutdown took", time.Since(start))
-	}
+	// Wait and shutdown.
+	<-mainCtx.Done()
+	log.Println("Shutting down servers")
+	ctx, cancel := context.WithTimeout(context.Background(), *shutdownTimeout)
+	defer cancel()
+	start := time.Now()
+	eg := errgroup.Group{}
+	eg.Go(func() error {
+		return server.Shutdown(ctx)
+	})
+	eg.Go(func() error {
+		return statusServer.Shutdown(ctx)
+	})
+	eg.Go(func() error {
+		return promServer.Shutdown(ctx)
+	})
+	eg.Wait()
+	log.Println("Shutdown took", time.Since(start))
 }

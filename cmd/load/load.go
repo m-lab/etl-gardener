@@ -49,7 +49,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	j := tracker.NewJob("bucket", "ndt", *datatype, d)
+	j := tracker.Job{
+		Bucket: "unused-bucket", Experiment: "ndt", Datatype: *datatype, Date: d,
+	}
 	log.Println(j)
 
 	q, err := bq.NewTableOps(ctx, j, "mlab-sandbox",

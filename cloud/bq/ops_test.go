@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package bq_test
@@ -9,12 +10,14 @@ import (
 	"time"
 
 	"github.com/m-lab/etl-gardener/cloud/bq"
+	"github.com/m-lab/etl-gardener/ops"
 	"github.com/m-lab/etl-gardener/tracker"
+	"github.com/m-lab/etl-gardener/tracker/jobtest"
 	"github.com/m-lab/go/rtx"
 )
 
 func TestTemplate(t *testing.T) {
-	job := tracker.NewJob("bucket", "ndt", "annotation", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
+	job := jobtest.NewJob("bucket", "ndt", "annotation", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
 	q, err := bq.NewTableOps(context.Background(), job, "fake-project", "")
 	rtx.Must(err, "NewTableOps failed")
 	qs := bq.DedupQuery(*q)
@@ -37,16 +40,47 @@ func TestValidateQueries(t *testing.T) {
 		t.Log("Skipping test for --short")
 	}
 	ctx := context.Background()
-	dataTypes := []string{"annotation", "ndt7"}
-	// TODO Add "preserve" query
+	d := time.Date(2020, 9, 5, 0, 0, 0, 0, time.UTC).UTC().Truncate(24 * time.Hour)
+	jobs := []tracker.Job{
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "annotation",
+			Date:       d,
+		},
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "ndt7",
+			Date:       d,
+		},
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "pcap",
+			Date:       d,
+		},
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "hopannotation1",
+			Date:       d,
+		},
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "scamper1",
+			Date:       d,
+		},
+	}
+
 	// Test for each datatype
-	for _, dataType := range dataTypes {
-		job := tracker.NewJob("bucket", "ndt", dataType, time.Date(2020, 9, 5, 0, 0, 0, 0, time.UTC))
+	for _, job := range jobs {
 		qp, err := bq.NewTableOps(ctx, job, "mlab-testing", "")
 		if err != nil {
-			t.Fatal(dataType, err)
+			t.Fatal(job.Datatype, err)
 		}
-		t.Run(dataType+":dedup", func(t *testing.T) {
+		t.Run(job.Datatype+":dedup", func(t *testing.T) {
 			t.Log(t.Name())
 			j, err := qp.Dedup(ctx, true)
 			if err != nil {
@@ -57,15 +91,17 @@ func TestValidateQueries(t *testing.T) {
 				t.Fatal(t.Name(), err, bq.DedupQuery(*qp))
 			}
 
-			if qp.Job.Datatype != "annotation" {
-				j, err := qp.Join(ctx, true)
-				if err != nil {
-					t.Fatal(t.Name(), err, bq.JoinQuery(*qp))
-				}
-				status := j.LastStatus()
-				if status.Err() != nil {
-					t.Fatal(t.Name(), err, bq.JoinQuery(*qp))
-				}
+			if !ops.JoinableDatatypes[qp.Job.Datatype] {
+				return
+			}
+
+			j, err = qp.Join(ctx, true)
+			if err != nil {
+				t.Fatal(t.Name(), err, bq.JoinQuery(*qp))
+			}
+			status = j.LastStatus()
+			if status.Err() != nil {
+				t.Fatal(t.Name(), err, bq.JoinQuery(*qp))
 			}
 		})
 	}

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -18,6 +17,11 @@ import (
 	"github.com/m-lab/etl-gardener/cloud/bq"
 	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/etl-gardener/tracker"
+	"github.com/m-lab/go/timex"
+)
+
+var (
+	JoinableDatatypes = map[string]bool{"ndt7": true, "scamper1": true, "ndt5": true, "tcpinfo": true}
 )
 
 func newStateFunc(detail string) ActionFunc {
@@ -41,7 +45,7 @@ func newJoinConditionFunc(tk *tracker.Tracker, detail string) ConditionFunc {
 		// (Technically, we only need to know whether the copy has completed.)
 		ann := j
 		ann.Datatype = "annotation"
-		status, err := tk.GetStatus(ann)
+		status, err := tk.GetStatus(ann.Key())
 		if err != nil {
 			// For early dates, there is no annotation job, so if the job
 			// is absent, we proceed with the join.
@@ -53,8 +57,14 @@ func newJoinConditionFunc(tk *tracker.Tracker, detail string) ConditionFunc {
 	}
 }
 
+type actionEnv struct {
+	project     string
+	inputBucket string
+}
+
 // NewStandardMonitor creates the standard monitor that handles several state transitions.
-func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.Tracker) (*Monitor, error) {
+func NewStandardMonitor(ctx context.Context, project, inputBucket string, config cloud.BQConfig, tk *tracker.Tracker) (*Monitor, error) {
+	a := actionEnv{project: project, inputBucket: inputBucket}
 	m, err := NewMonitor(ctx, config, tk)
 	if err != nil {
 		return nil, err
@@ -65,23 +75,23 @@ func NewStandardMonitor(ctx context.Context, config cloud.BQConfig, tk *tracker.
 		tracker.Loading)
 	m.AddAction(tracker.Loading,
 		nil,
-		loadFunc,
+		a.loadFunc,
 		tracker.Deduplicating)
 	m.AddAction(tracker.Deduplicating,
 		nil,
-		dedupFunc,
+		a.dedupFunc,
 		tracker.Copying)
 	m.AddAction(tracker.Copying,
 		nil,
-		copyFunc,
+		a.copyFunc,
 		tracker.Deleting)
 	m.AddAction(tracker.Deleting,
 		nil,
-		deleteFunc,
+		a.deleteFunc,
 		tracker.Joining)
 	m.AddAction(tracker.Joining,
 		newJoinConditionFunc(tk, "Join condition"),
-		joinFunc,
+		a.joinFunc,
 		tracker.Complete)
 	return m, nil
 }
@@ -134,13 +144,11 @@ func waitAndCheck(ctx context.Context, bqJob bqiface.Job, j tracker.Job, label s
 // TODO - would be nice to persist this object, instead of creating it
 // repeatedly.  If we end up with separate state machine per job, that
 // would be a good place for the TableOps object.
-func tableOps(ctx context.Context, j tracker.Job) (*bq.TableOps, error) {
+func (a *actionEnv) tableOps(ctx context.Context, j tracker.Job) (*bq.TableOps, error) {
 	// TODO pass in the JobWithTarget, and get this info from Target.
-	project := os.Getenv("PROJECT")
-	loadSource := fmt.Sprintf("gs://etl-%s/%s/%s/%s",
-		project,
-		j.Experiment, j.Datatype, j.Date.Format("2006/01/02/*"))
-	return bq.NewTableOps(ctx, j, project, loadSource)
+	loadSource := fmt.Sprintf("gs://%s/%s/%s/%s/%s/*",
+		a.inputBucket, j.Bucket, j.Experiment, j.Datatype, j.Date.Format(timex.YYYYMMDDWithSlash))
+	return bq.NewTableOps(ctx, j, a.project, loadSource)
 }
 
 func interpretStatus(op string, j tracker.Job, status *bigquery.JobStatus, delay time.Duration) string {
@@ -166,12 +174,12 @@ func interpretStatus(op string, j tracker.Job, status *bigquery.JobStatus, delay
 }
 
 // TODO improve test coverage?
-func dedupFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
+func (a *actionEnv) dedupFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
 	// This is the delay since entering the dedup state, due to monitor delay
 	// and retries.
 	delay := time.Since(stateChangeTime).Round(time.Minute)
 
-	qp, err := tableOps(ctx, j)
+	qp, err := a.tableOps(ctx, j)
 	if err != nil {
 		log.Println(j, err)
 		// This terminates this job.
@@ -260,12 +268,12 @@ func waitForLoad(ctx context.Context, bqJob bqiface.Job, j tracker.Job, label st
 }
 
 // TODO improve test coverage?
-func loadFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
+func (a *actionEnv) loadFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
 	// This is the delay since entering the dedup state, due to monitor delay
 	// and retries.
 	delay := time.Since(stateChangeTime).Round(time.Minute)
 
-	qp, err := tableOps(ctx, j)
+	qp, err := a.tableOps(ctx, j)
 	if err != nil {
 		log.Println(j, err)
 		// This terminates this job.
@@ -308,12 +316,12 @@ func loadFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 }
 
 // TODO improve test coverage?
-func copyFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
+func (a *actionEnv) copyFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
 	// This is the delay since entering the dedup state, due to monitor delay
 	// and retries.
 	delay := time.Since(stateChangeTime).Round(time.Minute)
 
-	qp, err := tableOps(ctx, j)
+	qp, err := a.tableOps(ctx, j)
 	if err != nil {
 		log.Println(j, err)
 		// This terminates this job.
@@ -345,8 +353,8 @@ func copyFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Ou
 }
 
 // TODO improve test coverage?
-func deleteFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
-	qp, err := tableOps(ctx, j)
+func (a *actionEnv) deleteFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
+	qp, err := a.tableOps(ctx, j)
 	if err != nil {
 		log.Println(j, err)
 		// This terminates this job.
@@ -363,13 +371,13 @@ func deleteFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *
 	return Success(j, "Successfully deleted partition")
 }
 
-func joinFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
-	if j.Datatype == "annotation" {
-		// annotation should not be annotated.
-		return Success(j, "Annotation does not require join")
+func (a *actionEnv) joinFunc(ctx context.Context, j tracker.Job, stateChangeTime time.Time) *Outcome {
+	if !JoinableDatatypes[j.Datatype] {
+		// These should not be annotated.
+		return Success(j, fmt.Sprintf("%s does not require join", j.Datatype))
 	}
 	delay := time.Since(stateChangeTime).Round(time.Minute)
-	to, err := tableOps(ctx, j)
+	to, err := a.tableOps(ctx, j)
 	if err != nil {
 		log.Println(j, err)
 		// This terminates this job.

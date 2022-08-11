@@ -26,6 +26,7 @@
 timeout: 1800s
 
 options:
+  machineType: 'N1_HIGHCPU_8'
   env:
   - PROJECT_ID=$PROJECT_ID
   - GIT_COMMIT=$COMMIT_SHA
@@ -70,13 +71,14 @@ steps:
   args: [
     "build",
       "--build-arg", "VERSION=${TAG_NAME}${BRANCH_NAME}",
-      "-t", "gcr.io/$PROJECT_ID/etl-gardener:$_DOCKER_TAG", "."
+      "-t", "gcr.io/$PROJECT_ID/etl-gardener:${COMMIT_SHA}", "."
   ]
+  waitFor: ['-']
 
 - name: gcr.io/cloud-builders/docker
   id: "Push the docker container to gcr.io"
   args: [
-    "push", "gcr.io/$PROJECT_ID/etl-gardener:$_DOCKER_TAG"
+    "push", "gcr.io/$PROJECT_ID/etl-gardener:${COMMIT_SHA}"
   ]
 
 # UNIVERSAL CLUSTER: Run apply-cluster.sh
@@ -92,15 +94,15 @@ steps:
 
 # LEGACY CLUSTER: Run apply-cluster.sh
 # TODO: delete once legacy cluster services are retired.
-- name: gcr.io/cloud-builders/kubectl
-  id: "Deploy legacy gardener configurations"
-  entrypoint: /bin/bash
-  args: [
-   '-c', '/builder/kubectl.bash version && ./apply-cluster.sh'
-  ]
-  env:
-  - CLOUDSDK_COMPUTE_ZONE=$_LEGACY_CLUSTER_ZONE
-  - CLOUDSDK_CONTAINER_CLUSTER=$_LEGACY_CLUSTER
-  # Defaults to zero. Only set in sandbox.
-  - DATE_SKIP=$_DATE_SKIP
-  - TASK_FILE_SKIP=$_TASK_FILE_SKIP
+#- name: gcr.io/cloud-builders/kubectl
+#  id: "Deploy legacy gardener configurations"
+#  entrypoint: /bin/bash
+#  args: [
+#   '-c', '/builder/kubectl.bash version && ./apply-cluster.sh'
+#  ]
+#  env:
+#  - CLOUDSDK_COMPUTE_ZONE=$_LEGACY_CLUSTER_ZONE
+#  - CLOUDSDK_CONTAINER_CLUSTER=$_LEGACY_CLUSTER
+#  # Defaults to zero. Only set in sandbox.
+#  - DATE_SKIP=$_DATE_SKIP
+#  - TASK_FILE_SKIP=$_TASK_FILE_SKIP

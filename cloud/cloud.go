@@ -25,14 +25,6 @@ type Config struct {
 // BQConfig provides a generic config suitable for BigQuery clients.
 type BQConfig struct {
 	Config
-
-	// Services should run in and write to tables in the same project.
-	// TODO: deprecate BQProject in favor of Config.Project.
-	BQProject string // Project for BigQuery tables
-
-	// TODO: Consider generalizing BQConfig structure & moving to m-lab/go/cloud.
-	BQBatchDataset string // Dataset for intermediate BigQuery tables
-	BQFinalDataset string // Dataset for final BigQuery tables
 }
 
 // *******************************************************************

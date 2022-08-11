@@ -9,16 +9,18 @@ import (
 	"io"
 	"log"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"cloud.google.com/go/datastore"
+	"github.com/m-lab/go/timex"
+
+	"github.com/m-lab/go/rtx"
+
 	"cloud.google.com/go/storage"
-	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
 	"github.com/googleapis/google-cloud-go-testing/storage/stiface"
 
-	"github.com/m-lab/go/cloud/bqx"
 	"github.com/m-lab/go/cloud/gcs"
 
 	"github.com/m-lab/etl-gardener/metrics"
@@ -39,22 +41,31 @@ type Job struct {
 // JobWithTarget specifies a type/date job, and a destination
 // table or GCS prefix
 type JobWithTarget struct {
-	Job
-	// One of these two fields indicates the destination,
-	// either a BigQuery table, or a GCS bucket/prefix string.
-	TargetTable           bqx.PDT `json:",omitempty"`
-	TargetBucketAndPrefix string  `json:",omitempty"` // gs://bucket/prefix
+	ID        Key // ID used by gardener & parsers to identify a Job's status and configuration.
+	Job       Job
+	DailyOnly bool `json:"-"`
+	// TODO: enable configuration for parser to target alterate buckets.
 }
 
 func (j JobWithTarget) String() string {
-	return fmt.Sprint(j.Job.String(), j.Filter)
+	return fmt.Sprint(j.Job.String(), j.Job.Filter)
+}
+
+// Marshal marshals the JobWithTarget to json. If the JobWithTarget type ever
+// includes fields that cannot be marshalled, then Marshal will panic.
+func (j JobWithTarget) Marshal() []byte {
+	b, err := json.Marshal(j)
+	// NOTE: marshaling a struct with primitive types should never fail.
+	rtx.PanicOnError(err, "failed to marshal JobWithTarget: %s", j)
+	return b
 }
 
 // NewJob creates a new job object.
 // DEPRECATED
 // NB:  The date will be converted to UTC and truncated to day boundary!
 func NewJob(bucket, exp, typ string, date time.Time) Job {
-	return Job{Bucket: bucket,
+	return Job{
+		Bucket:     bucket,
 		Experiment: exp,
 		Datatype:   typ,
 		Date:       date.UTC().Truncate(24 * time.Hour),
@@ -74,44 +85,29 @@ func (j Job) failureMetric(state State, errString string) {
 	defer errStringLock.Unlock()
 	if _, ok := errStrings[errString]; ok {
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
+		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, j.IsDaily(), errString).Inc()
 	} else if len(errStrings) < maxUniqueErrStrings {
 		errStrings[errString] = struct{}{}
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, errString).Inc()
+		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, j.IsDaily(), errString).Inc()
 	} else {
 		metrics.FailCount.WithLabelValues(j.Experiment, j.Datatype, "generic").Inc()
+		metrics.JobsTotal.WithLabelValues(j.Experiment, j.Datatype, j.IsDaily(), "generic").Inc()
 	}
-}
-
-// Target adds a Target to the job, returning a JobWithTarget
-func (j Job) Target(target string) (JobWithTarget, error) {
-	if strings.HasPrefix(target, "gs://") {
-		return JobWithTarget{Job: j, TargetBucketAndPrefix: target}, nil
-	}
-	pdt, err := bqx.ParsePDT(target)
-	if err != nil {
-		return JobWithTarget{}, err
-	}
-	return JobWithTarget{Job: j, TargetTable: pdt}, nil
 }
 
 // Path returns the GCS path prefix to the job data.
 func (j Job) Path() string {
 	if len(j.Datatype) > 0 {
-		return fmt.Sprintf("gs://%s/%s/%s/%s",
-			j.Bucket, j.Experiment, j.Datatype, j.Date.Format("2006/01/02/"))
+		return fmt.Sprintf("gs://%s/%s/%s/%s/",
+			j.Bucket, j.Experiment, j.Datatype, j.Date.Format(timex.YYYYMMDDWithSlash))
 	}
-	return fmt.Sprintf("gs://%s/%s/%s",
-		j.Bucket, j.Experiment, j.Date.Format("2006/01/02/"))
-}
-
-// Marshal marshals the job to json.
-func (j Job) Marshal() []byte {
-	b, _ := json.Marshal(j)
-	return b
+	return fmt.Sprintf("gs://%s/%s/%s/",
+		j.Bucket, j.Experiment, j.Date.Format(timex.YYYYMMDDWithSlash))
 }
 
 func (j Job) String() string {
-	return fmt.Sprintf("%s:%s/%s", j.Date.Format("20060102"), j.Experiment, j.Datatype)
+	return fmt.Sprintf("%s:%s/%s", j.Date.Format(timex.YYYYMMDD), j.Experiment, j.Datatype)
 }
 
 // Prefix returns the path prefix for a job, not including the gs://bucket-name/.
@@ -152,13 +148,29 @@ func (j Job) HasFiles(ctx context.Context, sClient stiface.Client) (bool, error)
 	return bh.HasFiles(ctx, prefix)
 }
 
+// IsDaily returns a string representing whether the job is a Daily job (e.g., job.Date = yesterday).
+func (j Job) IsDaily() string {
+	isDaily := j.Date.Equal(YesterdayDate())
+	return strconv.FormatBool(isDaily)
+}
+
+// Key returns a Job unique identifier (within the set of all jobs), suitable for use as a map key.
+func (j Job) Key() Key {
+	// TODO(soltesz): include target dataset in key to allow different experiment/datatype combinations without conflict.
+	return Key(fmt.Sprintf("%s/%s/%s/%s", j.Bucket, j.Experiment, j.Datatype, j.Date.Format(timex.YYYYMMDD)))
+}
+
+// YesterdayDate returns the date for the daily job (e.g, yesterday UTC).
+func YesterdayDate() time.Time {
+	return time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -1)
+}
+
 /////////////////////////////////////////////////////////////
 //                      State                              //
 /////////////////////////////////////////////////////////////
 
 // Error declarations
 var (
-	ErrClientIsNil            = errors.New("nil datastore client")
 	ErrJobAlreadyExists       = errors.New("job already exists")
 	ErrJobNotFound            = errors.New("job not found")
 	ErrJobIsObsolete          = errors.New("job is obsolete")
@@ -345,14 +357,6 @@ func (s *Status) NewState(state State) StateInfo {
 	return old
 }
 
-func (s Status) String() string {
-	last := s.LastStateInfo()
-	return fmt.Sprintf("%s %s (%s)",
-		s.DetailTime().Format("01/02~15:04:05"),
-		last.State,
-		last.Detail)
-}
-
 func (s *Status) isDone() bool {
 	return s.LastStateInfo().State == Complete
 }
@@ -372,44 +376,7 @@ func NewStatus() Status {
 
 // JobMap is defined to allow custom json marshal/unmarshal.
 // It defines the map from Job to Status.
-// TODO implement datastore.PropertyLoadSaver
 type JobMap map[Job]Status
-
-// MarshalJSON implements json.Marshal
-func (jobs JobMap) MarshalJSON() ([]byte, error) {
-	type Pair struct {
-		Job   Job
-		State Status
-	}
-	pairs := make([]Pair, len(jobs))
-	i := 0
-	for k, v := range jobs {
-		pairs[i].Job = k
-		pairs[i].State = v
-		i++
-	}
-	return json.Marshal(&pairs)
-}
-
-// UnmarshalJSON implements json.UnmarshalJSON
-// jobs and data should be non-nil.
-func (jobs *JobMap) UnmarshalJSON(data []byte) error {
-	type Pair struct {
-		Job   Job
-		State Status
-	}
-	pairs := make([]Pair, 0, 100)
-	err := json.Unmarshal(data, &pairs)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("Unmarshalling %d job/status pairs.\n", len(pairs))
-	for i := range pairs {
-		(*jobs)[pairs[i].Job] = pairs[i].State
-	}
-	return nil
-}
 
 var jobsTemplate = template.Must(template.New("").Parse(
 	fmt.Sprintf(`
@@ -473,46 +440,4 @@ func (jobs JobMap) WriteHTML(w io.Writer) error {
 		log.Println(err)
 	}
 	return err
-}
-
-// saverStruct is used only for saving and loading from datastore.
-type saverStruct struct {
-	SaveTime time.Time
-	LastInit Job
-	// Jobs is encoded as json, because datastore doesn't handle maps.
-	Jobs []byte `datastore:",noindex"`
-}
-
-func loadFromDatastore(ctx context.Context, client dsiface.Client, key *datastore.Key) (saverStruct, error) {
-	state := saverStruct{Jobs: make([]byte, 0)}
-	if client == nil {
-		return state, ErrClientIsNil
-	}
-
-	err := client.Get(ctx, key, &state) // This should error?
-	return state, err
-}
-
-// loadJobMap loads the persisted map of jobs in flight.
-func loadJobMap(ctx context.Context, client dsiface.Client, key *datastore.Key) (JobMap, Job, error) {
-	state, err := loadFromDatastore(ctx, client, key)
-	if err != nil {
-		return nil, Job{}, err
-	}
-	log.Println("Last save:", state.SaveTime.Format("01/02T15:04"))
-	log.Println(string(state.Jobs))
-
-	jobMap := make(JobMap, 100)
-	log.Println("Unmarshalling", len(state.Jobs))
-	err = json.Unmarshal(state.Jobs, &jobMap)
-	if err != nil {
-		log.Fatal("loadJobMap failed", err)
-	}
-	for j, s := range jobMap {
-		if len(s.History) < 1 {
-			log.Fatalf("Empty State history %+v : %+v\n", j, s)
-		}
-	}
-	return jobMap, state.LastInit, nil
-
 }

@@ -18,27 +18,33 @@ import (
 	"sync"
 	"time"
 
-	"cloud.google.com/go/datastore"
-	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
-
 	"github.com/m-lab/etl-gardener/metrics"
 	"github.com/m-lab/go/logx"
 )
 
+// Key is a unique identifier for a single tracker Job. Key may be used as a map key.
+type Key string
+
+// jobStatusMap and jobStateMap are used by the tracker to save all Jobs and Job
+// statuses using a shared job Key.
+type jobStatusMap map[Key]Status
+type jobStateMap map[Key]Job
+
 // Tracker keeps track of all the jobs in flight.
 // Only tracker functions should access any of the fields.
 type Tracker struct {
-	client dsiface.Client
-	dsKey  *datastore.Key
-	ticker *time.Ticker
+	saver GenericSaver
 
-	// The lock should be held whenever accessing the jobs JobMap
+	// The lock should be held whenever accessing the jobs maps.
 	lock         sync.Mutex
 	lastModified time.Time
 
-	// These are the stored values.
-	lastJob Job    // The last job that was added/initialized.
-	jobs    JobMap // Map from Job to Status.
+	// These values are the complete tracker job state and statuses. They are
+	// periodically saved to external storage. On startup, these values are
+	// loaded back so the tracker may resume from last known state.
+	lastJob  Job          // The last job that was added/initialized.
+	statuses jobStatusMap // statuses contains all tracked Job statuses.
+	jobs     jobStateMap  // jobs contains all tracked Jobs.
 
 	// Time after which stale job should be ignored or replaced.
 	expirationTime time.Duration
@@ -46,32 +52,91 @@ type Tracker struct {
 	cleanupDelay time.Duration
 }
 
+type GenericSaver interface {
+	Save(src any) error
+	Load(dst any) error
+}
+
+// saverStructV2 is used to save and load all Job status and state to persistent storage.
+type saverStructV2 struct {
+	SaveTime time.Time
+	Statuses jobStatusMap
+	Jobs     jobStateMap
+}
+
+func (tr *Tracker) writeSaverStructV2(saver GenericSaver) error {
+	statuses := jobStatusMap{} // statuses contains all tracked Job statuses.
+	jobs := jobStateMap{}      // jobs contains all tracked Jobs.
+	// copy Statuses and Jobs.
+	for k, j := range tr.jobs {
+		statuses[k] = tr.statuses[k]
+		jobs[k] = j
+	}
+	s := &saverStructV2{
+		SaveTime: time.Now(),
+		Statuses: statuses,
+		Jobs:     jobs,
+	}
+	return saver.Save(s)
+}
+
+func readSaverStructV2(saver GenericSaver) (time.Time, jobStateMap, jobStatusMap, error) {
+	s := &saverStructV2{}
+	err := saver.Load(s)
+	if err != nil {
+		return time.Time{}, nil, nil, err
+	}
+	log.Println("loading jobs previously saved from:", s.SaveTime)
+	return s.SaveTime, s.Jobs, s.Statuses, nil
+}
+
+func loadJobMaps(saverV2 GenericSaver) (jobStateMap, jobStatusMap) {
+	// Attempt to read v2 saver structs.
+	_, jobs, statuses, err2 := readSaverStructV2(saverV2)
+
+	// If we failed to read the file, return empty sets; the v2 data is not yet available.
+	if err2 != nil {
+		return make(jobStateMap), make(jobStatusMap)
+	}
+
+	// v2 state was available and read successfully.
+	return jobs, statuses
+}
+
 // InitTracker recovers the Tracker state from a Client object.
 // May return error if recovery fails.
 func InitTracker(
 	ctx context.Context,
-	client dsiface.Client, key *datastore.Key,
-	saveInterval time.Duration, expirationTime time.Duration, cleanupDelay time.Duration) (*Tracker, error) {
+	saverV2 GenericSaver,
+	saveInterval time.Duration,
+	expirationTime time.Duration,
+	cleanupDelay time.Duration) (*Tracker, error) {
 
-	jobMap, lastJob, err := loadJobMap(ctx, client, key)
-	if err != nil {
-		log.Println(err, key)
-		jobMap = make(JobMap, 100)
-	}
-	for j, s := range jobMap {
-		// Update the metrics for all jobs still in flight or failed.
+	// Attempt to load from savers.
+	jobs, statuses := loadJobMaps(saverV2)
+
+	// Update the metrics for all jobs still in flight or failed.
+	for k := range jobs {
+		j := jobs[k]
+		s := statuses[k]
 		if !s.isDone() {
 			metrics.StartedCount.WithLabelValues(j.Experiment, j.Datatype).Inc()
 			metrics.TasksInFlight.WithLabelValues(j.Experiment, j.Datatype, s.Label()).Inc()
 		}
 	}
+
 	t := Tracker{
-		client: client, dsKey: key, lastModified: time.Now(),
-		lastJob: lastJob, jobs: jobMap,
+		saver:          saverV2,
+		lastModified:   time.Now(),
+		jobs:           jobs,
+		statuses:       statuses,
 		expirationTime: expirationTime, cleanupDelay: cleanupDelay}
-	if client != nil && saveInterval > 0 {
-		t.saveEvery(saveInterval)
+
+	if saverV2 != nil && saveInterval > 0 {
+		go t.saveEvery(ctx, saveInterval)
 	}
+	// Initialize the jobs total metric on startup, to allow for longer processing times and fast alerts.
+	metrics.JobsTotal.WithLabelValues("", "", "", "starting").Add(0)
 	return &t, nil
 }
 
@@ -94,56 +159,47 @@ func (tr *Tracker) NumFailed() int {
 	return counts[Failed]
 }
 
-// Sync snapshots the full job state and saves it to the datastore client IFF it has changed.
+// Sync snapshots the full job state and saves it to persistent storage IFF it has changed.
 // Returns time last saved, which may or may not be updated.
 func (tr *Tracker) Sync(ctx context.Context, lastSave time.Time) (time.Time, error) {
-	jobs, lastInit, lastMod := tr.GetState()
+	tr.lock.Lock()
+	defer tr.lock.Unlock()
+	lastMod := tr.lastModified
 	if lastMod.Before(lastSave) {
 		logx.Debug.Println("Skipping save", lastMod, lastSave)
 		return lastSave, nil
 	}
-
-	jsonJobs, err := jobs.MarshalJSON()
+	err := tr.writeSaverStructV2(tr.saver)
 	if err != nil {
-		return lastSave, err
+		return time.Time{}, err
 	}
-
-	// Save the full state.
-	lastTry := time.Now()
-	state := saverStruct{time.Now(), lastInit, jsonJobs}
-	ctx, cf := context.WithTimeout(ctx, 10*time.Second)
-	defer cf()
-	_, err = tr.client.Put(ctx, tr.dsKey, &state)
-
-	if err != nil {
-		return lastSave, err
-	}
-	return lastTry, nil
+	return lastMod, nil
 }
 
-func (tr *Tracker) saveEvery(interval time.Duration) {
-	tr.ticker = time.NewTicker(interval)
-	go func() {
-		lastSave := time.Time{}
-		// TODO - is there a better source for this context?
-		ctx := context.Background()
-		for range tr.ticker.C {
-			var err error
+func (tr *Tracker) saveEvery(ctx context.Context, interval time.Duration) {
+	var err error
+	ticker := time.NewTicker(interval)
+	lastSave := time.Time{}
+	for {
+		select {
+		case <-ticker.C:
 			lastSave, err = tr.Sync(ctx, lastSave)
 			if err != nil {
 				log.Println(err)
 			}
+		case <-ctx.Done():
+			return
 		}
-	}()
+	}
 }
 
 // GetStatus retrieves the status of an existing job.
 // Note that the returned object is a shallow copy, and the History
 // field shares the slice objects with the JobMap.
-func (tr *Tracker) GetStatus(job Job) (Status, error) {
+func (tr *Tracker) GetStatus(key Key) (Status, error) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	status, ok := tr.jobs[job]
+	status, ok := tr.statuses[key]
 	if !ok {
 		return Status{}, ErrJobNotFound
 	}
@@ -157,7 +213,7 @@ func (tr *Tracker) AddJob(job Job) error {
 
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	s, ok := tr.jobs[job]
+	s, ok := tr.statuses[job.Key()]
 	if ok {
 		if s.isDone() {
 			log.Println("Restarting completed job", job)
@@ -173,23 +229,27 @@ func (tr *Tracker) AddJob(job Job) error {
 	tr.lastJob = job
 	tr.lastModified = time.Now()
 	metrics.StartedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
-	tr.jobs[job] = status
+	tr.statuses[job.Key()] = status
+	tr.jobs[job.Key()] = job
 	status.updateMetrics(job)
 	return nil
 }
 
 // UpdateJob updates an existing job.
 // May return ErrJobNotFound if job no longer exists.
-func (tr *Tracker) UpdateJob(job Job, new Status) error {
+func (tr *Tracker) UpdateJob(key Key, new Status) error {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	old, ok := tr.jobs[job]
+	old, ok := tr.statuses[key]
+	if !ok {
+		return ErrJobNotFound
+	}
+	job, ok := tr.jobs[key]
 	if !ok {
 		return ErrJobNotFound
 	}
 
 	if old.State() != new.State() {
-		log.Println(job, old.LastStateInfo(), "->", new.State())
 		new.updateMetrics(job)
 	}
 
@@ -197,36 +257,40 @@ func (tr *Tracker) UpdateJob(job Job, new Status) error {
 	// When jobs are done, we update stats and may remove them from tracker.
 	if new.isDone() {
 		metrics.CompletedCount.WithLabelValues(job.Experiment, job.Datatype).Inc()
+		metrics.JobsTotal.WithLabelValues(job.Experiment, job.Datatype, job.IsDaily(), "success").Inc()
 
 		// This could be done by GetStatus, but would change behaviors slightly.
 		if tr.cleanupDelay == 0 {
-			delete(tr.jobs, job)
+			delete(tr.statuses, key)
+			delete(tr.jobs, key)
 			return nil
 		}
 	}
-	tr.jobs[job] = new
+	tr.statuses[key] = new
+	tr.jobs[key] = job
 	return nil
 }
 
 // SetDetail updates a job's detail message in memory.
-func (tr *Tracker) SetDetail(job Job, detail string) error {
+func (tr *Tracker) SetDetail(key Key, detail string) error {
 	// NOTE: This is not a deep copy.  Shares the History elements.
-	status, err := tr.GetStatus(job)
+	status, err := tr.GetStatus(key)
 	if err != nil {
 		return err
 	}
 	status.SetDetail(detail)
 	status.UpdateCount++
-	return tr.UpdateJob(job, status)
+	return tr.UpdateJob(key, status)
 }
 
 // SetStatus updates a job's state in memory.
 // It may or may not change the job state.  If it does change state,
 // the detail string is applied to the last state, not the new state.
-func (tr *Tracker) SetStatus(job Job, state State, detail string) error {
+func (tr *Tracker) SetStatus(key Key, state State, detail string) error {
 	// NOTE: This is not a deep copy.  Shares the History elements.
-	status, err := tr.GetStatus(job)
+	status, err := tr.GetStatus(key)
 	if err != nil {
+		job := tr.jobs[key]
 		metrics.WarningCount.WithLabelValues(job.Experiment, job.Datatype, "NoSuchJob").Inc()
 		return err
 	}
@@ -245,32 +309,33 @@ func (tr *Tracker) SetStatus(job Job, state State, detail string) error {
 		}
 	}
 	status.UpdateCount++
-	return tr.UpdateJob(job, status)
+	return tr.UpdateJob(key, status)
 }
 
 // Heartbeat updates a job's heartbeat time.
-func (tr *Tracker) Heartbeat(job Job) error {
-	status, err := tr.GetStatus(job)
+func (tr *Tracker) Heartbeat(key Key) error {
+	status, err := tr.GetStatus(key)
 	if err != nil {
 		return err
 	}
 	status.HeartbeatTime = time.Now()
-	return tr.UpdateJob(job, status)
+	return tr.UpdateJob(key, status)
 }
 
 // SetJobError updates a job's error fields, and handles persistence.
-func (tr *Tracker) SetJobError(job Job, errString string) error {
-	status, err := tr.GetStatus(job)
+func (tr *Tracker) SetJobError(key Key, errString string) error {
+	status, err := tr.GetStatus(key)
 	if err != nil {
 		return err
 	}
 	oldState := status.State()
+	job := tr.jobs[key]
 	job.failureMetric(oldState, errString)
 	status.NewState(Failed)
 	// Set the final detail to include the prior state and error message.
 	status.SetDetail(fmt.Sprintf("%s: %s", oldState, errString))
 
-	return tr.UpdateJob(job, status)
+	return tr.UpdateJob(key, status)
 }
 
 // GetState returns the full job map, last initialized Job, and last mod time.
@@ -278,8 +343,10 @@ func (tr *Tracker) SetJobError(job Job, errString string) error {
 func (tr *Tracker) GetState() (JobMap, Job, time.Time) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	m := make(JobMap, len(tr.jobs))
-	for j, s := range tr.jobs {
+	// Construct a JobMap from the jobs and statues maps.
+	m := make(JobMap)
+	for k, j := range tr.jobs {
+		s := tr.statuses[k]
 		// Remove any obsolete jobs.
 		updateTime := s.DetailTime()
 		if (tr.expirationTime > 0 && time.Since(updateTime) > tr.expirationTime) ||
@@ -290,7 +357,8 @@ func (tr *Tracker) GetState() (JobMap, Job, time.Time) {
 				log.Println("Deleting stale job", j, time.Since(updateTime), tr.cleanupDelay)
 			}
 			tr.lastModified = time.Now()
-			delete(tr.jobs, j)
+			delete(tr.jobs, k)
+			delete(tr.statuses, k)
 		} else {
 			m[j] = s
 		}
@@ -308,9 +376,4 @@ func (tr *Tracker) WriteHTMLStatusTo(ctx context.Context, w io.Writer) error {
 	fmt.Fprint(w, "<div>Tracker State</div>\n")
 
 	return jobs.WriteHTML(w)
-}
-
-// LastJob returns the last Job successfully added with AddJob
-func (tr *Tracker) LastJob() Job {
-	return tr.lastJob
 }

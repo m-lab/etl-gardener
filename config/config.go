@@ -5,13 +5,11 @@ package config
 // Modelled on https://dev.to/ilyakaznacheev/a-clean-way-to-pass-configs-in-a-go-application-1g64
 
 import (
-	"flag"
-	"fmt"
+	"errors"
 	"log"
 	"os"
 	"time"
 
-	"github.com/kelseyhightower/envconfig"
 	"gopkg.in/yaml.v2"
 )
 
@@ -32,6 +30,7 @@ type SourceConfig struct {
 	Datatype   string `yaml:"datatype"`
 	Filter     string `yaml:"filter"`
 	Target     string `yaml:"target"`
+	DailyOnly  bool   `yaml:"daily_only"`
 }
 
 // Gardener is the full config for a Gardener instance.
@@ -42,57 +41,34 @@ type Gardener struct {
 	Sources   []SourceConfig `yaml:"sources"`
 }
 
-var gardener Gardener
-
-// Sources returns the list of sources that should be processed.
-func Sources() []SourceConfig {
-	src := make([]SourceConfig, len(gardener.Sources))
-	copy(src, gardener.Sources)
-	return src
-}
-
 // StartDate returns the first date that should be processed.
-func StartDate() time.Time {
-	return gardener.StartDate.UTC().Truncate(24 * time.Hour)
+func (g *Gardener) Start() time.Time {
+	return g.StartDate.UTC().Truncate(24 * time.Hour)
 }
 
 // ParseConfig loads the full Config, or Exits on failure.
-func ParseConfig() {
-	log.Println("config init")
-	readFile(&gardener)
-	readEnv(&gardener)
-
-	log.Printf("%+v\n", gardener)
-}
-
-func processError(err error) {
-	fmt.Println(err)
-	// For now don't die...	os.Exit(2)
-}
-
-var configPath = flag.String("config_path", "config.yml", "Path to the config file.")
-
-func readFile(cfg *Gardener) {
-	log.Println("Config path:", *configPath)
-	if *configPath == "" {
-		return
-	}
-	f, err := os.Open(*configPath)
+func ParseConfig(name string) (*Gardener, error) {
+	log.Println("Config path:", name)
+	g := &Gardener{}
+	err := readFile(name, g)
 	if err != nil {
-		processError(err)
+		return nil, err
+	}
+	return g, nil
+}
+
+var ErrNoConfig = errors.New("no config file given")
+
+func readFile(name string, cfg *Gardener) error {
+	if name == "" {
+		return ErrNoConfig
+	}
+	f, err := os.Open(name)
+	if err != nil {
+		return err
 	}
 	defer f.Close()
 
 	decoder := yaml.NewDecoder(f)
-	err = decoder.Decode(cfg)
-	if err != nil {
-		processError(err)
-	}
-}
-
-func readEnv(cfg *Gardener) {
-	err := envconfig.Process("", cfg)
-	if err != nil {
-		processError(err)
-	}
+	return decoder.Decode(cfg)
 }

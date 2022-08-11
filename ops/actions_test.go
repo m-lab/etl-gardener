@@ -1,17 +1,20 @@
+//go:build integration
 // +build integration
 
 package ops_test
 
 import (
 	"context"
+	"fmt"
+	"path"
 	"testing"
 	"time"
 
 	"github.com/m-lab/etl-gardener/cloud"
 	"github.com/m-lab/etl-gardener/ops"
+	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/go/logx"
-	"github.com/m-lab/go/osx"
 	"github.com/m-lab/go/rtx"
 )
 
@@ -22,24 +25,66 @@ func TestStandardMonitor(t *testing.T) {
 		t.Skip("Skipping test that uses BQ backend")
 	}
 	logx.LogxDebug.Set("true")
-	cleanup := osx.MustSetenv("PROJECT", "mlab-testing")
-	defer cleanup()
+
+	d := time.Now()
+	// Statically define jobs with full configurations specified.
+	jobs := []tracker.Job{
+		// Not yet supported.
+		{
+			Bucket:     "bucket",
+			Experiment: "exp",
+			Datatype:   "type",
+			Date:       d,
+		},
+		// Valid experiment and datatype
+		// This does an actual dedup, so we need to allow enough time.
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "ndt7",
+			Date:       d,
+		},
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "annotation",
+			Date:       d,
+		},
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "pcap",
+			Date:       d,
+		},
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "hopannotation1",
+			Date:       d,
+		},
+		{
+			Bucket:     "bucket",
+			Experiment: "ndt",
+			Datatype:   "scamper1",
+			Date:       d,
+		},
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	tk, err := tracker.InitTracker(ctx, nil, nil, 0, 0, 0)
+	saver := persistence.NewLocalNamedSaver(path.Join(t.TempDir(), "tmp.json"))
+	tk, err := tracker.InitTracker(ctx, saver, 0, 0, 0)
 	rtx.Must(err, "tk init")
-	tk.AddJob(tracker.NewJob("bucket", "exp", "type", time.Now()))
-	// Not yet supported.
-	tk.AddJob(tracker.NewJob("bucket", "exp2", "tcpinfo", time.Now()))
-	// Valid experiment and datatype
-	// This does an actual dedup, so we need to allow enough time.
-	tk.AddJob(tracker.NewJob("bucket", "ndt", "ndt7", time.Now()))
 
-	tk.AddJob(tracker.NewJob("bucket", "ndt", "annotation", time.Now()))
+	// Add jobs to the tracker.
+	for i := 0; i < len(jobs); i++ {
+		tk.AddJob(jobs[i])
+	}
 
-	m, err := ops.NewStandardMonitor(context.Background(), cloud.BQConfig{}, tk)
+	m, err := ops.NewStandardMonitor(context.Background(), "mlab-testing", "etl-mlab-testing", cloud.BQConfig{}, tk)
 	rtx.Must(err, "NewMonitor failure")
-	// We add some new actions in place of the Parser activity.
+	// We override some actions in place of the default Parser activity.
+	// The resulting sequence should be:
+	// init -> parsing -> parse complete -> copying -> deleting -> joining -> complete
 	m.AddAction(tracker.Init,
 		nil,
 		newStateFunc("-"),
@@ -48,7 +93,7 @@ func TestStandardMonitor(t *testing.T) {
 		nil,
 		newStateFunc("-"),
 		tracker.ParseComplete)
-	// Hack for testing - deliberately skip Load and Dedup functions.
+	// Deliberately skip Load and Dedup functions.
 	m.AddAction(tracker.ParseComplete,
 		nil,
 		newStateFunc("-"),
@@ -59,16 +104,43 @@ func TestStandardMonitor(t *testing.T) {
 
 	go m.Watch(ctx, 50*time.Millisecond)
 
-	failTime := time.Now().Add(30 * time.Second)
+	// NOTE: This is an integration test that runs live BQ operations.
+	// Therefore, the conditions under which these operations run are not
+	// entirely under our control. While the operations are simple, by
+	// observation, we see that occassionally they take multiple minutes. So,
+	// rather than report these delays as test failures, (which causes the test
+	// to be flaky), we wait up to 5min and ignore states pending in the final
+	// "Joining" state.
+	failTime := time.Now().Add(300 * time.Second)
 
-	for time.Now().Before(failTime) && (tk.NumJobs() > 2 || tk.NumFailed() < 1) {
+	for time.Now().Before(failTime) && (tk.NumJobs() > 1 || tk.NumFailed() < 1) {
 		time.Sleep(time.Millisecond)
 	}
-	if tk.NumFailed() != 2 {
-		t.Error("Expected NumFailed = 2:", tk.NumFailed())
+	if tk.NumFailed() != 1 {
+		t.Error("Expected NumFailed = 1:", tk.NumFailed())
 	}
-	if tk.NumJobs() != 2 {
-		t.Error("Expected NumJobs = 2:", tk.NumJobs())
+	// We expect only the two failed jobs; ignore jobs in the final (joining) state.
+	count := tk.NumJobs()
+	if count > 1 {
+		jobs, _, _ := tk.GetState()
+		for j, s := range jobs {
+			a := m.GetAction(s.LastStateInfo().State)
+			switch tracker.State(a.Name()) {
+			case tracker.Joining:
+				// Ignore delays in state "Joining" (the final step).
+				count--
+			case tracker.Failed:
+				// Ignore -- we expect two.
+			default:
+				// Consider other states an error.
+				t.Error("Monitor.Watch() process delay:", a, j, s)
+			}
+		}
+		fmt.Println()
+	}
+	// If there are still more than two failed jobs remaining, report an error.
+	if count != 1 {
+		t.Error("Expected NumJobs = 1:", tk.NumJobs())
 	}
 	cancel()
 }

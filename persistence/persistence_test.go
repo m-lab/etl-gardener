@@ -1,19 +1,13 @@
-// +build integration
-
 package persistence_test
 
 import (
-	"context"
-	"fmt"
 	"log"
+	"os"
+	"path"
 	"reflect"
 	"testing"
-	"time"
-
-	"cloud.google.com/go/datastore"
 
 	"github.com/m-lab/etl-gardener/persistence"
-	"github.com/m-lab/go/rtx"
 )
 
 func init() {
@@ -21,98 +15,83 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
-type O1 struct {
-	persistence.Base
-
-	Integer int32
-}
-
-// Kind implements StateObject.Kind
-func (o O1) GetKind() string {
-	return reflect.TypeOf(o).Name()
-}
-
-func NewO1(name string) O1 {
-	return O1{Base: persistence.NewBase(name)}
-}
-
-func assertStateObject(so persistence.StateObject) {
-	assertStateObject(O1{})
-}
-
-func TestDatastoreSaver(t *testing.T) {
-	ctx := context.Background()
-	ds, err := persistence.NewDatastoreSaver(ctx, "mlab-testing")
-	if err != nil {
-		t.Fatal(err)
+func TestLocalNamedSaver(t *testing.T) {
+	type foo struct {
+		A int
+		B float64
+		C string
 	}
-
-	o := NewO1("foobar")
-	o.Integer = 1234
-	err = ds.Save(ctx, &o)
-	if err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name        string
+		input       any
+		output      any
+		removeDir   bool
+		wantSaveErr bool
+		removeFile  bool
+		wantLoadErr bool
+	}{
+		{
+			name:   "successful-save-and-load",
+			input:  &foo{A: 10},
+			output: &foo{},
+		},
+		{
+			name:        "save-error-unsupported-type",
+			input:       struct{ F func() }{}, // invalid field.
+			wantSaveErr: true,
+		},
+		{
+			name:        "save-error-no-write-permission",
+			input:       &foo{A: 10},
+			removeDir:   true,
+			wantSaveErr: true,
+		},
+		{
+			name:        "load-error-missing-file",
+			input:       &foo{A: 10},
+			output:      &foo{},
+			removeFile:  true,
+			wantLoadErr: true,
+		},
+		{
+			name:        "load-error-wrong-target-type",
+			input:       &foo{A: 10},
+			output:      struct{ F func() }{},
+			wantLoadErr: true,
+		},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			file := path.Join(dir, "output.json")
+			if tt.removeDir {
+				os.Remove(dir) // make directory unwritable.
+			}
+			// save to named saver.
+			ls := persistence.NewLocalNamedSaver(file)
+			err := ls.Save(tt.input)
+			if (err != nil) != tt.wantSaveErr {
+				t.Errorf("Save() got unexpected error; got %v, wantSaveErr %t", err, tt.wantSaveErr)
+			}
+			if tt.wantSaveErr {
+				return
+			}
 
-	o.Integer = 0
-	err = ds.Fetch(ctx, &o)
-	rtx.Must(err, "Fetch error")
-	t.Log(o)
-	if o.Integer != 1234 {
-		t.Error("Integer should be 1234", o)
+			if tt.removeFile {
+				os.Remove(file) // remove saved file so load fails.
+			}
+			err = ls.Load(tt.output)
+			if !tt.wantLoadErr && (err != nil) {
+				t.Errorf("Load() got unexpected error; got %v, want nil", err)
+			}
+			if tt.wantLoadErr {
+				return
+			}
+
+			// Compare intput and output structures to verify data is loaded correctly.
+			if !reflect.DeepEqual(tt.input, tt.output) {
+				t.Errorf("Load() got different values; got %v, want %v", tt.output, tt.input)
+			}
+		})
 	}
-
-	err = ds.Delete(ctx, &o)
-	rtx.Must(err, "Delete error")
-	err = ds.Fetch(ctx, &o)
-	if err != datastore.ErrNoSuchEntity {
-		t.Fatal("Should have errored")
-	}
-}
-
-func TestFetchAll(t *testing.T) {
-	o := NewO1("foo")
-	o.Integer = 1234
-
-	ctx := context.Background()
-	ds, err := persistence.NewDatastoreSaver(ctx, "mlab-testing")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = ds.Save(ctx, &o)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 20; i++ {
-		o := NewO1(fmt.Sprint("foo", i))
-		o.Integer = (int32)(i)
-		err = ds.Save(ctx, &o)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	var keys []*datastore.Key
-	var slice []O1
-
-	// datastore sometimes takes a while to become consistent.
-	for i := 0; i < 50; i++ {
-		var objs interface{}
-		keys, objs, err = ds.FetchAll(ctx, O1{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		slice = objs.([]O1)
-		if len(slice) >= 21 {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	if len(slice) != 21 {
-		t.Error("Should be 21 items, but got", len(slice))
-	}
-
-	err = ds.Client.DeleteMulti(ctx, keys)
-	rtx.Must(err, "Delete error")
 }

@@ -30,9 +30,10 @@ that States with Actions are never operated on independently by some other agent
 such as the Parser.  Should this cease to be true, then the claim mechanism
 should be moved into the tracker.
 
-Note that when Gardener restarts, it fetches the current state from datastore, and
-creates the monitor.  In the new monitor, none of the tracker items will have leases,
-so the Monitor will automatically restart the appropriate Actions.
+Note that when Gardener restarts, it fetches the current state from persistent
+storage, and creates the monitor.  In the new monitor, none of the tracker items
+will have leases, so the Monitor will automatically restart the appropriate
+Actions.
 
 TODO - Actions must all be recoverable - that is, if Gardener is terminated during
 an Action, it should recover when Gardener restarts the action on startup.
@@ -133,6 +134,10 @@ func (m *Monitor) AddAction(state tracker.State, cond ConditionFunc, op ActionFu
 	}
 }
 
+func (m *Monitor) GetAction(state tracker.State) Action {
+	return m.actions[state]
+}
+
 // UpdateJob updates the tracker state with the outcome.
 func (m *Monitor) UpdateJob(o *Outcome, state tracker.State) (string, error) {
 	// Allow error to override implicit (-) detail.
@@ -143,17 +148,17 @@ func (m *Monitor) UpdateJob(o *Outcome, state tracker.State) (string, error) {
 
 	switch {
 	case o.IsDone():
-		if err := m.tk.SetStatus(o.job, state, detail); err != nil {
+		if err := m.tk.SetStatus(o.job.Key(), state, detail); err != nil {
 			return "set status error", err
 		}
 		return "done", nil
 	case o.ShouldRetry():
-		if err := m.tk.SetDetail(o.job, detail); err != nil {
+		if err := m.tk.SetDetail(o.job.Key(), detail); err != nil {
 			return "set status error", err
 		}
 		return "retry", nil
 	default:
-		if err := m.tk.SetJobError(o.job, detail); err != nil {
+		if err := m.tk.SetJobError(o.job.Key(), detail); err != nil {
 			return "set status error", err
 		}
 		return "fail", nil

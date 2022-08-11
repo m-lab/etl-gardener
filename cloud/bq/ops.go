@@ -12,8 +12,16 @@ import (
 	"github.com/googleapis/google-cloud-go-testing/bigquery/bqiface"
 
 	"github.com/m-lab/go/dataset"
+	"github.com/m-lab/go/timex"
 
 	"github.com/m-lab/etl-gardener/tracker"
+)
+
+var (
+	// ErrTableNotFound is returned when trying to load to non-existent tmp tables.
+	ErrTableNotFound = errors.New("table not found")
+	// ErrDatatypeNotSupported is returned by Query for unsupported datatypes.
+	ErrDatatypeNotSupported = errors.New("datatype not supported")
 )
 
 // TableOps is used to construct and execute table partition operations.
@@ -27,9 +35,6 @@ type TableOps struct {
 	PartitionKeys map[string]string
 	OrderKeys     string
 }
-
-// ErrDatatypeNotSupported is returned by Query for unsupported datatypes.
-var ErrDatatypeNotSupported = errors.New("Datatype not supported")
 
 // NewTableOps creates a suitable QueryParams for a Job.
 // The context is used to create a bigquery client, and should be kept alive while
@@ -46,17 +51,20 @@ func NewTableOps(ctx context.Context, job tracker.Job, project string, loadSourc
 // NewTableOpsWithClient creates a suitable QueryParams for a Job.
 func NewTableOpsWithClient(client bqiface.Client, job tracker.Job, project string, loadSource string) (*TableOps, error) {
 	switch job.Datatype {
+	case "switch":
+		fallthrough
 	case "annotation":
-		return &TableOps{
-			client:        client,
-			LoadSource:    loadSource,
-			Project:       project,
-			Date:          "date",
-			Job:           job,
-			PartitionKeys: map[string]string{"id": "id"},
-			OrderKeys:     "",
-		}, nil
-
+		fallthrough
+	case "hopannotation1":
+		fallthrough
+	case "pcap":
+		fallthrough
+	case "scamper1":
+		fallthrough
+	case "tcpinfo":
+		fallthrough
+	case "ndt5":
+		fallthrough
 	case "ndt7":
 		return &TableOps{
 			client:        client,
@@ -148,7 +156,7 @@ func (to TableOps) CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, err
 	if to.client == nil {
 		return nil, dataset.ErrNilBqClient
 	}
-	tableName := to.Job.Datatype + "$" + to.Job.Date.Format("20060102")
+	tableName := to.Job.Datatype + "$" + to.Job.Date.Format(timex.YYYYMMDD)
 	src := to.client.Dataset("tmp_" + to.Job.Experiment).Table(tableName)
 	dest := to.client.Dataset("raw_" + to.Job.Experiment).Table(tableName)
 
@@ -209,7 +217,7 @@ func (to TableOps) DeleteTmp(ctx context.Context) error {
 	}
 	// TODO - name should be field in queryer.
 	tmp := to.client.Dataset("tmp_" + to.Job.Experiment).Table(
-		fmt.Sprintf("%s$%s", to.Job.Datatype, to.Job.Date.Format("20060102")))
+		fmt.Sprintf("%s$%s", to.Job.Datatype, to.Job.Date.Format(timex.YYYYMMDD)))
 	log.Println("Deleting", tmp.FullyQualifiedName())
 	return tmp.Delete(ctx)
 }
@@ -256,7 +264,7 @@ func (to TableOps) Join(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	// The destintation is a partition in a table based on the job
 	// type and date.  Initially, this will only be ndt7.
 	dest := to.client.Dataset(to.Job.Experiment).Table(
-		to.Job.Datatype + "$" + to.Job.Date.Format("20060102"))
+		to.Job.Datatype + "$" + to.Job.Date.Format(timex.YYYYMMDD))
 	qc := bqiface.QueryConfig{
 		QueryConfig: bigquery.QueryConfig{
 			DryRun: dryRun,
@@ -265,6 +273,9 @@ func (to TableOps) Join(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 			WriteDisposition: bigquery.WriteTruncate,
 			// Create the table if it doesn't exist
 			CreateDisposition: bigquery.CreateIfNeeded,
+			// Allow additional fields introduced by the raw tables to be automatically
+			// added to the joined, materialized output table.
+			SchemaUpdateOptions: []string{"ALLOW_FIELD_ADDITION", "ALLOW_FIELD_RELAXATION"},
 			// Partitioning spec, in event we have to create the table.
 			TimePartitioning: &bigquery.TimePartitioning{
 				Field:                  "date",

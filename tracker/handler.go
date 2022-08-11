@@ -1,65 +1,32 @@
 package tracker
 
 import (
-	"encoding/json"
-	"errors"
+	"context"
 	"log"
 	"net/http"
-	"net/url"
+	"time"
 
 	"github.com/m-lab/go/logx"
 )
 
-// UpdateURL makes an update request URL.
-func UpdateURL(base url.URL, job Job, state State, detail string) *url.URL {
-	base.Path += "update"
-	params := make(url.Values, 3)
-	params.Add("job", string(job.Marshal()))
-	params.Add("state", string(state))
-	params.Add("detail", detail)
+var (
+	MsgNoJobFound = "No job found. Try again."
+	MsgJobExists  = "Job already exists. Try again."
+)
 
-	base.RawQuery = params.Encode()
-	return &base
-}
-
-// HeartbeatURL makes an update request URL.
-func HeartbeatURL(base url.URL, job Job) *url.URL {
-	base.Path += "heartbeat"
-	params := make(url.Values, 3)
-	params.Add("job", string(job.Marshal()))
-
-	base.RawQuery = params.Encode()
-	return &base
-}
-
-// ErrorURL makes an update request URL.
-func ErrorURL(base url.URL, job Job, errString string) *url.URL {
-	base.Path += "error"
-	params := make(url.Values, 3)
-	params.Add("job", string(job.Marshal()))
-	params.Add("error", errString)
-
-	base.RawQuery = params.Encode()
-	return &base
+type JobService interface {
+	NextJob(ctx context.Context) *JobWithTarget
 }
 
 // Handler provides handlers for update, heartbeat, etc.
 type Handler struct {
-	tracker *Tracker
+	tracker    *Tracker
+	jobservice JobService
 }
 
 // NewHandler returns a Handler that sends updates to provided Tracker.
-func NewHandler(tr *Tracker) *Handler {
-	return &Handler{tr}
-}
-
-func getJob(jobString string) (Job, error) {
-	var job Job
-	if jobString == "" {
-		return job, errors.New("Empty job")
-	}
-	err := json.Unmarshal([]byte(jobString), &job)
-	return job, err
+func NewHandler(tr *Tracker, js JobService) *Handler {
+	return &Handler{tracker: tr, jobservice: js}
 }
 
 func (h *Handler) heartbeat(resp http.ResponseWriter, req *http.Request) {
@@ -71,13 +38,13 @@ func (h *Handler) heartbeat(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	job, err := getJob(req.Form.Get("job"))
-	if err != nil {
+	id := Key(req.Form.Get("id"))
+	if id == "" {
 		resp.WriteHeader(http.StatusUnprocessableEntity)
 		return
 	}
-	if err := h.tracker.Heartbeat(job); err != nil {
-		logx.Debug.Printf("%v %+v\n", err, job)
+	if err := h.tracker.Heartbeat(id); err != nil {
+		logx.Debug.Printf("Heartbeat(%q) failed: %v\n", id, err)
 		resp.WriteHeader(http.StatusGone)
 		return
 	}
@@ -93,8 +60,8 @@ func (h *Handler) update(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	job, err := getJob(req.Form.Get("job"))
-	if err != nil {
+	id := Key(req.Form.Get("id"))
+	if id == "" {
 		resp.WriteHeader(http.StatusUnprocessableEntity)
 		return
 	}
@@ -105,8 +72,8 @@ func (h *Handler) update(resp http.ResponseWriter, req *http.Request) {
 	}
 	detail := req.Form.Get("detail")
 
-	if err := h.tracker.SetStatus(job, State(state), detail); err != nil {
-		log.Printf("Not found %+v\n", job)
+	if err := h.tracker.SetStatus(id, State(state), detail); err != nil {
+		log.Printf("Not found %+v\n", id)
 		resp.WriteHeader(http.StatusGone)
 		return
 	}
@@ -122,9 +89,9 @@ func (h *Handler) errorFunc(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	id := Key(req.Form.Get("id"))
 	jobErr := req.Form.Get("error")
-	job, err := getJob(req.Form.Get("job"))
-	if err != nil {
+	if id == "" {
 		resp.WriteHeader(http.StatusUnprocessableEntity)
 		return
 	}
@@ -132,16 +99,57 @@ func (h *Handler) errorFunc(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(http.StatusFailedDependency)
 		return
 	}
-	if err := h.tracker.SetStatus(job, ParseError, jobErr); err != nil {
+	if err := h.tracker.SetStatus(id, ParseError, jobErr); err != nil {
 		resp.WriteHeader(http.StatusGone)
 		return
 	}
 	resp.WriteHeader(http.StatusOK)
 }
 
+func (h *Handler) nextJob(resp http.ResponseWriter, req *http.Request) *JobWithTarget {
+	// Must be a post because it changes state.
+	if req.Method != http.MethodPost {
+		resp.WriteHeader(http.StatusMethodNotAllowed)
+		return nil
+	}
+	jt := h.jobservice.NextJob(req.Context())
+
+	// Check for empty job (no job found with files)
+	if jt.Job.Date.Equal(time.Time{}) {
+		log.Println(MsgNoJobFound)
+		resp.WriteHeader(http.StatusInternalServerError)
+		resp.Write([]byte(MsgNoJobFound))
+		return nil
+	}
+
+	err := h.tracker.AddJob(jt.Job)
+	if err != nil {
+		log.Println(err, jt)
+		resp.WriteHeader(http.StatusInternalServerError)
+		resp.Write([]byte(MsgJobExists))
+		return nil
+	}
+	return jt
+}
+
+// nextJobV2 returns the next JobWithTarget to the requesting client.
+func (h *Handler) nextJobV2(resp http.ResponseWriter, req *http.Request) {
+	jt := h.nextJob(resp, req)
+	if jt == nil {
+		return
+	}
+	log.Printf("Dispatching %s\n", jt.Job)
+	_, err := resp.Write(jt.Marshal())
+	if err != nil {
+		log.Println(err)
+		return
+	}
+}
+
 // Register registers the handlers on the server.
 func (h *Handler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("/heartbeat", h.heartbeat)
-	mux.HandleFunc("/update", h.update)
-	mux.HandleFunc("/error", h.errorFunc)
+	mux.HandleFunc("/v2/job/heartbeat", h.heartbeat)
+	mux.HandleFunc("/v2/job/update", h.update)
+	mux.HandleFunc("/v2/job/error", h.errorFunc)
+	mux.HandleFunc("/v2/job/next", h.nextJobV2)
 }

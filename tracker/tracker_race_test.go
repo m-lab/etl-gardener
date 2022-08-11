@@ -1,3 +1,4 @@
+//go:build race
 // +build race
 
 package tracker_test
@@ -7,13 +8,14 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
+	"path"
 	"sync"
 	"testing"
 	"time"
 
-	"cloud.google.com/go/datastore"
+	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
-	"github.com/m-lab/go/cloudtest/dsfake"
 )
 
 func TestConcurrentUpdates(t *testing.T) {
@@ -27,14 +29,14 @@ func TestConcurrentUpdates(t *testing.T) {
 
 	ctx := context.Background()
 
-	client := dsfake.NewClient()
-	dsKey := datastore.NameKey("TestConcurrentUpdates", "jobs", nil)
-	dsKey.Namespace = "gardener"
-	defer must(t, cleanup(client, dsKey))
+	// NOTE: we use os.MkdirTemp instead of t.TempDir() because during -race
+	// tests the directory is removed mid test, corrupting behavior of the test.
+	dir, _ := os.MkdirTemp("tmp", "*")
+	saver := persistence.NewLocalNamedSaver(path.Join(dir, t.Name()+".json"))
 
 	// For testing, push to the saver every 5 milliseconds.
 	saverInterval := 5 * time.Millisecond
-	tk, err := tracker.InitTracker(ctx, client, dsKey, saverInterval, 0, 0)
+	tk, err := tracker.InitTracker(ctx, saver, saverInterval, 0, 0)
 	must(t, err)
 
 	jobs := 20
@@ -54,12 +56,12 @@ func TestConcurrentUpdates(t *testing.T) {
 				Date:       startDate.Add(time.Duration(24*rand.Intn(jobs)) * time.Hour),
 			}
 			if i%5 == 0 {
-				err := tk.SetStatus(k, tracker.State(fmt.Sprintf("State:%d", i)), "")
+				err := tk.SetStatus(k.Key(), tracker.State(fmt.Sprintf("State:%d", i)), "")
 				if err != nil {
 					log.Fatal(err, " ", k)
 				}
 			} else {
-				err := tk.Heartbeat(k)
+				err := tk.Heartbeat(k.Key())
 				if err != nil {
 					log.Fatal(err, " ", k)
 				}
@@ -78,7 +80,7 @@ func TestConcurrentUpdates(t *testing.T) {
 	if testing.Verbose() {
 		_, err := tk.Sync(ctx, time.Time{})
 		must(t, err)
-		restore, err := tracker.InitTracker(context.Background(), client, dsKey, 0, 0, 0)
+		restore, err := tracker.InitTracker(context.Background(), saver, 0, 0, 0)
 		must(t, err)
 
 		status, _, _ := restore.GetState()
