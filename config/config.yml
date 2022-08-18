@@ -22,9 +22,7 @@ sources:
   experiment: ndt
   datatype: pcap
   target: tmp_ndt.pcap
-  # TODO(github.com/m-lab/etl-gardener/issues/389): Enable after pcap historical
-  # reprocessing completes once.
-  # daily_only: true
+  daily_only: true
 - bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
   experiment: ndt
   datatype: hopannotation1
