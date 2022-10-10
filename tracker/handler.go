@@ -113,6 +113,10 @@ func (h *Handler) nextJob(resp http.ResponseWriter, req *http.Request) *JobWithT
 		return nil
 	}
 	jt := h.jobservice.NextJob(req.Context())
+	if jt == nil {
+		resp.WriteHeader(http.StatusInternalServerError)
+		return nil
+	}
 
 	// Check for empty job (no job found with files)
 	if jt.Job.Date.Equal(time.Time{}) {
