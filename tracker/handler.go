@@ -114,6 +114,7 @@ func (h *Handler) nextJob(resp http.ResponseWriter, req *http.Request) *JobWithT
 	}
 	jt := h.jobservice.NextJob(req.Context())
 	if jt == nil {
+		resp.WriteHeader(http.StatusInternalServerError)
 		return nil
 	}
 
