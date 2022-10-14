@@ -115,7 +115,8 @@ func (to TableOps) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) 
 	}
 	qc := bqiface.QueryConfig{
 		QueryConfig: bigquery.QueryConfig{
-			Q: qs,
+			Q:      qs,
+			DryRun: dryRun,
 			// Perform Join as a batch job to avoid quota limits for interactive jobs.
 			Priority: bigquery.BatchPriority,
 		},
