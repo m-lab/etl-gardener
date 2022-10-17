@@ -113,10 +113,15 @@ func (to TableOps) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) 
 	if q == nil {
 		return nil, dataset.ErrNilQuery
 	}
-	if dryRun {
-		qc := bqiface.QueryConfig{QueryConfig: bigquery.QueryConfig{DryRun: dryRun, Q: qs}}
-		q.SetQueryConfig(qc)
+	qc := bqiface.QueryConfig{
+		QueryConfig: bigquery.QueryConfig{
+			Q:      qs,
+			DryRun: dryRun,
+			// Schedule as batch job to avoid quota limits for interactive jobs.
+			Priority: bigquery.BatchPriority,
+		},
 	}
+	q.SetQueryConfig(qc)
 	return q.Run(ctx)
 }
 
@@ -281,6 +286,8 @@ func (to TableOps) Join(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 				Field:                  "date",
 				RequirePartitionFilter: true,
 			},
+			// Schedule as batch job to avoid quota limits for interactive jobs.
+			Priority: bigquery.BatchPriority,
 		},
 		Dst: dest,
 	}
