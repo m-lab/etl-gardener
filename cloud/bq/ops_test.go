@@ -116,7 +116,7 @@ func TestValidateQueries(t *testing.T) {
 				t.Fatalf("TestValidateQueries() Join job config failed: %v", err)
 			}
 			if cfg.(*bigquery.QueryConfig).Priority != bigquery.BatchPriority {
-				t.Errorf("TestValidateQueries() Dedup job priority is not Batch: %v", bigquery.BatchPriority)
+				t.Errorf("TestValidateQueries() Join job priority is not Batch: %v", bigquery.BatchPriority)
 			}
 		})
 	}

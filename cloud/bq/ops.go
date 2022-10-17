@@ -117,7 +117,7 @@ func (to TableOps) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) 
 		QueryConfig: bigquery.QueryConfig{
 			Q:      qs,
 			DryRun: dryRun,
-			// Perform Join as a batch job to avoid quota limits for interactive jobs.
+			// Schedule as batch job to avoid quota limits for interactive jobs.
 			Priority: bigquery.BatchPriority,
 		},
 	}
@@ -286,7 +286,7 @@ func (to TableOps) Join(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 				Field:                  "date",
 				RequirePartitionFilter: true,
 			},
-			// Perform Join as a batch job to avoid quota limits for interactive jobs.
+			// Schedule as batch job to avoid quota limits for interactive jobs.
 			Priority: bigquery.BatchPriority,
 		},
 		Dst: dest,
