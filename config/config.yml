@@ -1,5 +1,5 @@
 ---
-start_date: 2020-11-01 # Earliest date for v2 platform datatypes.
+start_date: 2022-11-01 # Earliest date for v2 platform datatypes.
 tracker:
   timeout: 5h
 monitor:
