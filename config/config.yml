@@ -10,7 +10,6 @@ sources:
   experiment: ndt
   datatype: annotation
   target: tmp_ndt.annotation
-  daily_only: true
 - bucket: archive-{{NDT_SOURCE_PROJECT}}
   experiment: ndt
   datatype: ndt5
