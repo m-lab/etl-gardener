@@ -12,6 +12,22 @@
             "Bucket":"bucket",
             "Experiment":"exp",
             "Datatype":"type",
+            "Datasets": {
+               "Tmp": "tmp_ndt",
+               "Raw": "raw_ndt",
+               "Join": ""
+            },
+            "Date":"2011-01-01T00:00:00Z"
+        },
+        "bucket/exp/type/20110102":{
+            "Bucket":"bucket",
+            "Experiment":"exp2",
+            "Datatype":"type2",
+            "Datasets": {
+               "Tmp": "",
+               "Raw": "",
+               "Join": ""
+            },
             "Date":"2011-01-01T00:00:00Z"
         }
     }
