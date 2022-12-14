@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"cloud.google.com/go/bigquery"
 	"github.com/m-lab/etl-gardener/cloud/bq"
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/etl-gardener/tracker/jobtest"
@@ -94,6 +95,13 @@ func TestValidateQueries(t *testing.T) {
 			if status.Err() != nil {
 				t.Fatal(t.Name(), err, bq.DedupQuery(*qp))
 			}
+			cfg, err := j.Config()
+			if err != nil {
+				t.Fatalf("TestValidateQueries() Dedup job Config failed: %v", err)
+			}
+			if cfg.(*bigquery.QueryConfig).Priority != bigquery.BatchPriority {
+				t.Errorf("TestValidateQueries() Dedup job priority is not Batch: %v", bigquery.BatchPriority)
+			}
 
 			if qp.Job.Datasets.Join == "" {
 				return
@@ -106,6 +114,13 @@ func TestValidateQueries(t *testing.T) {
 			status = j.LastStatus()
 			if status.Err() != nil {
 				t.Fatal(t.Name(), err, bq.JoinQuery(*qp))
+			}
+			cfg, err = j.Config()
+			if err != nil {
+				t.Fatalf("TestValidateQueries() Join job config failed: %v", err)
+			}
+			if cfg.(*bigquery.QueryConfig).Priority != bigquery.BatchPriority {
+				t.Errorf("TestValidateQueries() Join job priority is not Batch: %v", bigquery.BatchPriority)
 			}
 		})
 	}

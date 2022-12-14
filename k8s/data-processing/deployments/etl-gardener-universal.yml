@@ -44,6 +44,7 @@ spec:
           "-project={{GCLOUD_PROJECT}}",
           "-shutdown_timeout=5m",
           "-job_expiration_time=6h",
+          "-input_location=etl-{{GCLOUD_PROJECT}}", # must correspond to -output_location from etl parser.
         ]
         ports:
         - name: prometheus-port

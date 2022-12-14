@@ -31,6 +31,10 @@ type fakeJobService struct {
 }
 
 func (f *fakeJobService) NextJob(ctx context.Context) *tracker.JobWithTarget {
+	if f.calls >= len(f.jobs) {
+		// Return nil if there are no more jobs.
+		return nil
+	}
 	j := f.jobs[f.calls]
 	f.calls++
 	return &tracker.JobWithTarget{Job: j}
@@ -279,5 +283,8 @@ func TestNextJobV2Handler(t *testing.T) {
 	postAndExpect(t, &url, http.StatusInternalServerError)
 
 	// This one should fail because the fakeJobService returns a duplicate job.
+	postAndExpect(t, &url, http.StatusInternalServerError)
+
+	// Get nil result.
 	postAndExpect(t, &url, http.StatusInternalServerError)
 }

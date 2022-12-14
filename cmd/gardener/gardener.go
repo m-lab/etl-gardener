@@ -59,6 +59,7 @@ var (
 	statusPort        = flag.String("status_port", ":0", "The public interface port where status (and pprof) will be published")
 	gardenerAddr      = flag.String("gardener_addr", ":8080", "The listen address for the gardener jobs service")
 	configPath        = flag.String("config_path", "config.yml", "Path to the config file.")
+	inputLocation     = flag.String("input_location", "", "Load from this GCS bucket.")
 
 	// Context and injected variables to allow smoke testing of main()
 	mainCtx, mainCancel = context.WithCancel(context.Background())
@@ -274,7 +275,7 @@ func main() {
 		Client:  nil,
 	}
 	bqConfig := NewBQConfig(cloudCfg)
-	monitor, err := ops.NewStandardMonitor(mainCtx, project, bqConfig, globalTracker)
+	monitor, err := ops.NewStandardMonitor(mainCtx, project, *inputLocation, bqConfig, globalTracker)
 	rtx.Must(err, "NewStandardMonitor failed")
 	go monitor.Watch(mainCtx, 5*time.Second)
 
