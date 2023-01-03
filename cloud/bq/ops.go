@@ -151,7 +151,7 @@ func (to TableOps) LoadToTmp(ctx context.Context, dryRun bool) (bqiface.Job, err
 	return loader.Run(ctx)
 }
 
-// CopyToRaw copies the job "temp" table partition to the "raw" table partition.
+// CopyToRaw copies the job "tmp" table partition to the "raw" table partition.
 func (to TableOps) CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	if dryRun {
 		return nil, errors.New("dryrun not implemented")
