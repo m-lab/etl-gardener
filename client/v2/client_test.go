@@ -50,6 +50,10 @@ func TestJobClient_Next(t *testing.T) {
 					Experiment: "experiment",
 					Datatype:   "datatype",
 					Date:       start,
+					Datasets: tracker.Datasets{
+						Tmp: "tmp_experiment",
+						Raw: "raw_experiment",
+					},
 				},
 			},
 		},

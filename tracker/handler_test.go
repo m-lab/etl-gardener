@@ -274,7 +274,7 @@ func TestNextJobV2Handler(t *testing.T) {
 
 	// This should succeed, because the fakeJobService returns its job.
 	r := postAndExpect(t, &url, http.StatusOK)
-	want := `{"ID":"","Job":{"Bucket":"bucket","Experiment":"exp","Datatype":"type","Date":"2019-01-02T00:00:00Z"}}`
+	want := `{"ID":"","Job":{"Bucket":"bucket","Experiment":"exp","Datatype":"type","Date":"2019-01-02T00:00:00Z","Datasets":{"Tmp":"tmp_exp","Raw":"raw_exp","Join":""}}}`
 	if want != r {
 		t.Fatalf("/v2/job/next returned wrong result: got %q, want %q", r, want)
 	}

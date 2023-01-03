@@ -13,5 +13,9 @@ func NewJob(bucket, exp, typ string, date time.Time) tracker.Job {
 		Experiment: exp,
 		Datatype:   typ,
 		Date:       date.UTC().Truncate(24 * time.Hour),
+		Datasets: tracker.Datasets{
+			Tmp: "tmp_" + exp,
+			Raw: "raw_" + exp,
+		},
 	}
 }

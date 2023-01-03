@@ -51,6 +51,10 @@ func main() {
 	}
 	j := tracker.Job{
 		Bucket: "unused-bucket", Experiment: "ndt", Datatype: *datatype, Date: d,
+		Datasets: tracker.Datasets{
+			Tmp: "tmp_ndt",
+			Raw: "raw_ndt",
+		},
 	}
 	log.Println(j)
 

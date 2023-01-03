@@ -28,6 +28,10 @@ func TestNewJob(t *testing.T) {
 				Experiment: "exp",
 				Datatype:   "typ",
 				Date:       time.Date(2019, time.February, 03, 00, 00, 00, 00, time.UTC),
+				Datasets: tracker.Datasets{
+					Tmp: "tmp_exp",
+					Raw: "raw_exp",
+				},
 			},
 		},
 		{
@@ -41,6 +45,10 @@ func TestNewJob(t *testing.T) {
 				Experiment: "exp",
 				Datatype:   "typ",
 				Date:       time.Date(2019, time.February, 03, 00, 00, 00, 00, time.UTC),
+				Datasets: tracker.Datasets{
+					Tmp: "tmp_exp",
+					Raw: "raw_exp",
+				},
 			},
 		},
 	}

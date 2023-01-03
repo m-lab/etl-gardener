@@ -115,6 +115,16 @@ func InitTracker(
 	// Attempt to load from savers.
 	jobs, statuses := loadJobMaps(saverV2)
 
+	// Remove old jobs that do not have explicit datasets configured.
+	// TODO(soltesz): remove this logic after rollout. This is only needed to
+	// transition from configs without this setting to those with it.
+	for k := range jobs {
+		if jobs[k].Datasets.Tmp == "" {
+			delete(jobs, k)
+			delete(statuses, k)
+		}
+	}
+
 	// Update the metrics for all jobs still in flight or failed.
 	for k := range jobs {
 		j := jobs[k]

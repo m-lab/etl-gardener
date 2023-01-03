@@ -83,6 +83,10 @@ func main() {
 	}
 	j := tracker.Job{
 		Bucket: "unused-bucket", Experiment: *exp, Datatype: *dataType, Date: d,
+		Datasets: tracker.Datasets{
+			Tmp: "tmp_" + *exp,
+			Raw: "raw_" + *exp,
+		},
 	}
 	log.Println(j)
 	copyFunc(ctx, j)
