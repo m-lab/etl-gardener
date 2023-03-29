@@ -30,20 +30,20 @@ func newStateFunc(detail string) ActionFunc {
 // annotation job in the tracker.  Used to gate the join action.
 func newJoinConditionFunc(tk *tracker.Tracker, detail string) ConditionFunc {
 	return func(ctx context.Context, j tracker.Job) bool {
-		if j.Datatype == "annotation" {
+		if j.Datatype == "annotation2" {
 			// Annotation does not require joining, so the check is
 			// not needed.
 			log.Println(j, "condition met")
 			return true
 		}
-		// All other types currently depend only on the annotation table.
-		// So, we check whether the annotation table is complete.
+		// All other types currently depend only on the annotation2 table.
+		// So, we check whether the annotation2 table is complete.
 		// (Technically, we only need to know whether the copy has completed.)
 		ann := j
-		ann.Datatype = "annotation"
+		ann.Datatype = "annotation2"
 		status, err := tk.GetStatus(ann.Key())
 		if err != nil {
-			// For early dates, there is no annotation job, so if the job
+			// For early dates, there is no annotation2 job, so if the job
 			// is absent, we proceed with the join.
 			log.Println(ann, "is absent")
 			return true
