@@ -17,7 +17,7 @@ import (
 )
 
 func TestTemplate(t *testing.T) {
-	job := jobtest.NewJob("bucket", "ndt", "annotation", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
+	job := jobtest.NewJob("bucket", "ndt", "annotation2", time.Date(2019, 3, 4, 0, 0, 0, 0, time.UTC))
 	q, err := bq.NewTableOps(context.Background(), job, "fake-project", "")
 	rtx.Must(err, "NewTableOps failed")
 	qs := bq.DedupQuery(*q)
@@ -45,7 +45,7 @@ func TestValidateQueries(t *testing.T) {
 		{
 			Bucket:     "bucket",
 			Experiment: "ndt",
-			Datatype:   "annotation",
+			Datatype:   "annotation2",
 			Date:       d,
 			Datasets:   tracker.Datasets{Tmp: "tmp_ndt", Raw: "raw_ndt"},
 		},
@@ -66,7 +66,7 @@ func TestValidateQueries(t *testing.T) {
 		{
 			Bucket:     "bucket",
 			Experiment: "ndt",
-			Datatype:   "hopannotation1",
+			Datatype:   "hopannotation2",
 			Date:       d,
 			Datasets:   tracker.Datasets{Tmp: "tmp_ndt", Raw: "raw_ndt"},
 		},

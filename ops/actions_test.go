@@ -49,7 +49,7 @@ func TestStandardMonitor(t *testing.T) {
 		{
 			Bucket:     "bucket",
 			Experiment: "ndt",
-			Datatype:   "annotation",
+			Datatype:   "annotation2",
 			Date:       d,
 			Datasets:   tracker.Datasets{Tmp: "tmp_ndt", Raw: "raw_ndt"},
 		},
@@ -63,7 +63,7 @@ func TestStandardMonitor(t *testing.T) {
 		{
 			Bucket:     "bucket",
 			Experiment: "ndt",
-			Datatype:   "hopannotation1",
+			Datatype:   "hopannotation2",
 			Date:       d,
 			Datasets:   tracker.Datasets{Tmp: "tmp_ndt", Raw: "raw_ndt"},
 		},

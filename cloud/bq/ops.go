@@ -51,9 +51,9 @@ func NewTableOpsWithClient(client bqiface.Client, job tracker.Job, project strin
 	switch job.Datatype {
 	case "switch":
 		fallthrough
-	case "annotation":
+	case "annotation2":
 		fallthrough
-	case "hopannotation1":
+	case "hopannotation2":
 		fallthrough
 	case "pcap":
 		fallthrough
@@ -176,7 +176,7 @@ const tmpTable = "`{{.Project}}.{{.Job.Datasets.Tmp}}.{{.Job.Datatype}}`"
 const rawTable = "`{{.Project}}.{{.Job.Datasets.Raw}}.{{.Job.Datatype}}`"
 
 // NOTE: experiment annotations must come from the same raw experiment dataset.
-const annoTable = "`{{.Project}}.{{.Job.Datasets.Raw}}.annotation`"
+const annoTable = "`{{.Project}}.{{.Job.Datasets.Raw}}.annotation2`"
 
 var dedupTemplate = template.Must(template.New("").Parse(`
 #standardSQL
