@@ -74,14 +74,14 @@ sources:
   target_datasets:
     tmp: tmp_wehe
     raw: raw_wehe
-  daily_only: true
+#  daily_only: true
 - bucket: archive-mlab-sandbox
   experiment: wehe
   datatype: hopannotation2
   target_datasets:
     tmp: tmp_wehe
     raw: raw_wehe
-  daily_only: true
+#  daily_only: true
 - bucket: archive-mlab-sandbox
   experiment: wehe
   datatype: scamper1
@@ -89,4 +89,4 @@ sources:
     tmp: tmp_wehe
     raw: raw_wehe
     join: wehe
-  daily_only: true
+#  daily_only: true
