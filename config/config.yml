@@ -68,25 +68,25 @@ sources:
     join: ndt
   daily_only: true
 ## WEHE
-- bucket: archive-mlab-sandbox
+- bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
   experiment: wehe
   datatype: annotation2
   target_datasets:
     tmp: tmp_wehe
     raw: raw_wehe
-#  daily_only: true
-- bucket: archive-mlab-sandbox
+  daily_only: true
+- bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
   experiment: wehe
   datatype: hopannotation2
   target_datasets:
     tmp: tmp_wehe
     raw: raw_wehe
-#  daily_only: true
-- bucket: archive-mlab-sandbox
+  daily_only: true
+- bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
   experiment: wehe
   datatype: scamper1
   target_datasets:
     tmp: tmp_wehe
     raw: raw_wehe
     join: wehe
-#  daily_only: true
+  daily_only: true
