@@ -6,6 +6,7 @@ monitor:
   polling_interval: 1m
 sources:
 # NOTE: It now matters what order these are in.
+## NDT
 - bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
   experiment: ndt
   datatype: annotation2
@@ -65,4 +66,27 @@ sources:
     tmp: tmp_ndt
     raw: raw_ndt
     join: ndt
+  daily_only: true
+## WEHE
+- bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
+  experiment: wehe
+  datatype: annotation2
+  target_datasets:
+    tmp: tmp_wehe
+    raw: raw_wehe
+  daily_only: true
+- bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
+  experiment: wehe
+  datatype: hopannotation2
+  target_datasets:
+    tmp: tmp_wehe
+    raw: raw_wehe
+  daily_only: true
+- bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
+  experiment: wehe
+  datatype: scamper1
+  target_datasets:
+    tmp: tmp_wehe
+    raw: raw_wehe
+    join: wehe
   daily_only: true
