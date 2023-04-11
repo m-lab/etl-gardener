@@ -18,16 +18,14 @@ CLUSTER=${CLOUDSDK_CONTAINER_CLUSTER:?Please provide cluster name: $USAGE}
 DATE_SKIP=${DATE_SKIP:-"0"}  # Number of dates to skip between each processed date (for sandbox).
 TASK_FILE_SKIP=${TASK_FILE_SKIP:-"0"}  # Number of files to skip between each processed file (for sandbox).
 
-# Source sandbox in sandbox.
-# Source annotations from staging in staging.
-# Source ndt from measurement-lab in staging & oti.
-ANNOTATION_SOURCE_PROJECT=${PROJECT_ID/mlab-oti/measurement-lab}
-NDT_SOURCE_PROJECT=${ANNOTATION_SOURCE_PROJECT/mlab-staging/measurement-lab}
+# Use sandbox in sandbox, measurement-lab in staging & oti.
+SOURCE_PROJECT=${PROJECT_ID/mlab-oti/measurement-lab}
+SOURCE_PROJECT=${SOURCE_PROJECT/mlab-staging/measurement-lab}
 sed -i \
-    -e 's/{{ANNOTATION_SOURCE_PROJECT}}/'${ANNOTATION_SOURCE_PROJECT}'/g' \
+    -e 's/{{ANNOTATION_SOURCE_PROJECT}}/'${SOURCE_PROJECT}'/g' \
     config/config.yml
 sed -i \
-    -e 's/{{NDT_SOURCE_PROJECT}}/'${NDT_SOURCE_PROJECT}'/g' \
+    -e 's/{{NDT_SOURCE_PROJECT}}/'${SOURCE_PROJECT}'/g' \
     config/config.yml
 
 # Create the configmap
