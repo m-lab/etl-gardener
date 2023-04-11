@@ -13,7 +13,6 @@ sources:
   target_datasets:
     tmp: tmp_ndt
     raw: raw_ndt
-  daily_only: true
 - bucket: archive-{{NDT_SOURCE_PROJECT}}
   experiment: ndt
   datatype: ndt5
@@ -21,7 +20,6 @@ sources:
     tmp: tmp_ndt
     raw: raw_ndt
     join: ndt
-  daily_only: true
 - bucket: archive-{{NDT_SOURCE_PROJECT}}
   experiment: ndt
   datatype: ndt7
@@ -29,7 +27,6 @@ sources:
     tmp: tmp_ndt
     raw: raw_ndt
     join: ndt
-  daily_only: true
 - bucket: archive-{{NDT_SOURCE_PROJECT}}
   experiment: ndt
   datatype: pcap
