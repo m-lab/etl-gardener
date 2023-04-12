@@ -10,8 +10,6 @@ import (
 	"cloud.google.com/go/bigquery"
 	"github.com/googleapis/google-cloud-go-testing/bigquery/bqiface"
 
-	"github.com/m-lab/go/dataset"
-
 	"github.com/m-lab/etl-gardener/tracker"
 )
 
@@ -20,6 +18,11 @@ var (
 	ErrTableNotFound = errors.New("table not found")
 	// ErrDatatypeNotSupported is returned by Query for unsupported datatypes.
 	ErrDatatypeNotSupported = errors.New("datatype not supported")
+
+	// ErrNilBigQueryClient is returned when an invalid client is provided.
+	ErrNilBigQueryClient = errors.New("nil bigquery client")
+	// ErrNilQuery is returned when the query is empty or nil.
+	ErrNilQuery = errors.New("bigquery query is empty or nil")
 )
 
 // TableOps is used to construct and execute table partition operations.
@@ -102,14 +105,14 @@ func dedupQuery(to TableOps) string {
 func (to TableOps) Dedup(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	qs := dedupQuery(to)
 	if len(qs) == 0 {
-		return nil, dataset.ErrNilQuery
+		return nil, ErrNilQuery
 	}
 	if to.client == nil {
-		return nil, dataset.ErrNilBqClient
+		return nil, ErrNilBigQueryClient
 	}
 	q := to.client.Query(qs)
 	if q == nil {
-		return nil, dataset.ErrNilQuery
+		return nil, ErrNilQuery
 	}
 	qc := bqiface.QueryConfig{
 		QueryConfig: bigquery.QueryConfig{
@@ -129,7 +132,7 @@ func (to TableOps) LoadToTmp(ctx context.Context, dryRun bool) (bqiface.Job, err
 		return nil, errors.New("dryrun not implemented")
 	}
 	if to.client == nil {
-		return nil, dataset.ErrNilBqClient
+		return nil, ErrNilBigQueryClient
 	}
 
 	gcsRef := bigquery.NewGCSReference(to.LoadSource)
@@ -157,7 +160,7 @@ func (to TableOps) CopyToRaw(ctx context.Context, dryRun bool) (bqiface.Job, err
 		return nil, errors.New("dryrun not implemented")
 	}
 	if to.client == nil {
-		return nil, dataset.ErrNilBqClient
+		return nil, ErrNilBigQueryClient
 	}
 	tableName := to.Job.TablePartition()
 	src := to.client.Dataset(to.Job.Datasets.Tmp).Table(tableName)
@@ -217,7 +220,7 @@ AND NOT EXISTS (
 // DeleteTmp deletes the tmp table partition.
 func (to TableOps) DeleteTmp(ctx context.Context) error {
 	if to.client == nil {
-		return dataset.ErrNilBqClient
+		return ErrNilBigQueryClient
 	}
 	tmp := to.client.Dataset(to.Job.Datasets.Tmp).Table(to.Job.TablePartition())
 	log.Println("Deleting", tmp.FullyQualifiedName())
@@ -254,14 +257,14 @@ func (to TableOps) Join(ctx context.Context, dryRun bool) (bqiface.Job, error) {
 	qs := to.makeQuery(joinTemplate)
 
 	if len(qs) == 0 {
-		return nil, dataset.ErrNilQuery
+		return nil, ErrNilQuery
 	}
 	if to.client == nil {
-		return nil, dataset.ErrNilBqClient
+		return nil, ErrNilBigQueryClient
 	}
 	q := to.client.Query(qs)
 	if q == nil {
-		return nil, dataset.ErrNilQuery
+		return nil, ErrNilQuery
 	}
 	// The destintation is a partition in a table based on the job
 	// type and date.  Initially, this will only be ndt7.
