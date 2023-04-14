@@ -48,14 +48,12 @@ sources:
     tmp: tmp_ndt
     raw: raw_ndt
     join: ndt
-  daily_only: true
 - bucket: archive-measurement-lab
   experiment: utilization
   datatype: switch
   target_datasets:
     tmp: tmp_utilization
     raw: raw_utilization
-  daily_only: true
 - bucket: archive-{{NDT_SOURCE_PROJECT}}
   experiment: ndt
   datatype: tcpinfo
@@ -63,7 +61,6 @@ sources:
     tmp: tmp_ndt
     raw: raw_ndt
     join: ndt
-  daily_only: true
 ## WEHE
 - bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
   experiment: wehe
