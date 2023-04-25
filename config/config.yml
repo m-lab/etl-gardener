@@ -40,7 +40,6 @@ sources:
   target_datasets:
     tmp: tmp_ndt
     raw: raw_ndt
-  daily_only: true
 - bucket: archive-measurement-lab
   experiment: ndt
   datatype: scamper1
