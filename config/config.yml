@@ -90,4 +90,3 @@ sources:
   target_datasets:
     tmp: tmp_msak
     raw: raw_msak
-  daily_only: true
