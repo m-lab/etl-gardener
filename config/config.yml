@@ -90,3 +90,22 @@ sources:
   target_datasets:
     tmp: tmp_msak
     raw: raw_msak
+- bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
+  experiment: msak
+  datatype: scamper1
+  target_datasets:
+    tmp: tmp_msak
+    raw: raw_msak
+- bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
+  experiment: msak
+  datatype: hopannotation2
+  target_datasets:
+    tmp: tmp_msak
+    raw: raw_msak
+- bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
+  experiment: msak
+  datatype: pcap
+  target_datasets:
+    tmp: tmp_msak
+    raw: raw_msak
+  daily_only: true
