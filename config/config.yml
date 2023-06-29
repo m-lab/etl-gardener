@@ -109,3 +109,9 @@ sources:
     tmp: tmp_msak
     raw: raw_msak
   daily_only: true
+- bucket: archive-{{NDT_SOURCE_PROJECT}}
+  experiment: msak
+  datatype: tcpinfo
+  target_datasets:
+    tmp: tmp_msak
+    raw: raw_msak
