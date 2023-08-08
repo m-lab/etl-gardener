@@ -83,3 +83,37 @@ sources:
     raw: raw_wehe
     join: wehe
   daily_only: true
+## MSAK
+- bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
+  experiment: msak
+  datatype: annotation2
+  target_datasets:
+    tmp: tmp_msak
+    raw: raw_msak
+- bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
+  experiment: msak
+  datatype: scamper1
+  target_datasets:
+    tmp: tmp_msak
+    raw: raw_msak
+    join: msak
+- bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
+  experiment: msak
+  datatype: hopannotation2
+  target_datasets:
+    tmp: tmp_msak
+    raw: raw_msak
+- bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
+  experiment: msak
+  datatype: pcap
+  target_datasets:
+    tmp: tmp_msak
+    raw: raw_msak
+  daily_only: true
+- bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
+  experiment: msak
+  datatype: tcpinfo
+  target_datasets:
+    tmp: tmp_msak
+    raw: raw_msak
+    join: msak
