@@ -96,6 +96,7 @@ sources:
   target_datasets:
     tmp: tmp_msak
     raw: raw_msak
+    join: msak
 - bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
   experiment: msak
   datatype: hopannotation2
@@ -115,3 +116,4 @@ sources:
   target_datasets:
     tmp: tmp_msak
     raw: raw_msak
+    join: msak
