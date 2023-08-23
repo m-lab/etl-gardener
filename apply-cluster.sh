@@ -31,7 +31,7 @@ sed -i \
 # Create the configmap
 kubectl create configmap gardener-config --dry-run \
     --from-file config/config.yml \
-    -o yaml > k8s/data-processing/deployments/config.yml
+    -o yaml > k8s/${CLUSTER}/deployments/config.yml
 
 # Apply templates
 find k8s/${CLUSTER}/ -type f -exec \
