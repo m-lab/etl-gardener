@@ -20,7 +20,7 @@ RUN go install -v \
                 -X main.GitCommit=$(git log -1 --format=%H)" \
       ./cmd/gardener
 
-FROM alpine:3.14
+FROM alpine:3.18
 RUN apk update && \
     apk add ca-certificates && \
     rm -rf /var/cache/apk/*
