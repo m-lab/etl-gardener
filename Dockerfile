@@ -1,4 +1,4 @@
-FROM golang:1.18 as builder
+FROM golang:1.20 as builder
 
 ARG VERSION
 
@@ -20,7 +20,7 @@ RUN go install -v \
                 -X main.GitCommit=$(git log -1 --format=%H)" \
       ./cmd/gardener
 
-FROM alpine:3.12
+FROM alpine:3.18
 RUN apk update && \
     apk add ca-certificates && \
     rm -rf /var/cache/apk/*
