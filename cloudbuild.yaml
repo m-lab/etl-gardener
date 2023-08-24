@@ -90,19 +90,4 @@ steps:
   ]
   env:
   - CLOUDSDK_COMPUTE_REGION=$_CLUSTER_REGION
-  - CLOUDSDK_CONTAINER_CLUSTER=$_CLUSTER
-
-# LEGACY CLUSTER: Run apply-cluster.sh
-# TODO: delete once legacy cluster services are retired.
-#- name: gcr.io/cloud-builders/kubectl
-#  id: "Deploy legacy gardener configurations"
-#  entrypoint: /bin/bash
-#  args: [
-#   '-c', '/builder/kubectl.bash version && ./apply-cluster.sh'
-#  ]
-#  env:
-#  - CLOUDSDK_COMPUTE_ZONE=$_LEGACY_CLUSTER_ZONE
-#  - CLOUDSDK_CONTAINER_CLUSTER=$_LEGACY_CLUSTER
-#  # Defaults to zero. Only set in sandbox.
-#  - DATE_SKIP=$_DATE_SKIP
-#  - TASK_FILE_SKIP=$_TASK_FILE_SKIP
+  - CLOUDSDK_CONTAINER_CLUSTER=$_CLUSTER_NAME
