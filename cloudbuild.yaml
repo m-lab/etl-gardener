@@ -90,7 +90,7 @@ steps:
   ]
   env:
   - CLOUDSDK_COMPUTE_REGION=$_CLUSTER_REGION
-  - CLOUDSDK_CONTAINER_CLUSTER=$_CLUSTER
+  - CLOUDSDK_CONTAINER_CLUSTER=$_CLUSTER_NAME
 
 # LEGACY CLUSTER: Run apply-cluster.sh
 # TODO: delete once legacy cluster services are retired.
