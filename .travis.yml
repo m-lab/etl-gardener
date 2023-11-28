@@ -1,4 +1,5 @@
 # Travis configuration for gardener unit tests.
+dist: jammy # 22.04
 language: go
 services:
   - docker
