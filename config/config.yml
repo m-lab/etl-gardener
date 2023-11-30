@@ -1,5 +1,5 @@
 ---
-start_date: 2020-06-18 # Earliest date for ndt5
+start_date: 2015-11-19 # Earliest date for v2 platform datatypes.
 tracker:
   timeout: 5h
 monitor:
@@ -27,7 +27,6 @@ sources:
     tmp: tmp_ndt
     raw: raw_ndt
     join: ndt
-  daily_only: true
 - bucket: archive-{{NDT_SOURCE_PROJECT}}
   experiment: ndt
   datatype: pcap
@@ -41,7 +40,6 @@ sources:
   target_datasets:
     tmp: tmp_ndt
     raw: raw_ndt
-  daily_only: true
 - bucket: archive-measurement-lab
   experiment: ndt
   datatype: scamper1
@@ -49,14 +47,12 @@ sources:
     tmp: tmp_ndt
     raw: raw_ndt
     join: ndt
-  daily_only: true
 - bucket: archive-measurement-lab
   experiment: utilization
   datatype: switch
   target_datasets:
     tmp: tmp_utilization
     raw: raw_utilization
-  daily_only: true
 - bucket: archive-{{NDT_SOURCE_PROJECT}}
   experiment: ndt
   datatype: tcpinfo
@@ -64,7 +60,6 @@ sources:
     tmp: tmp_ndt
     raw: raw_ndt
     join: ndt
-  daily_only: true
 ## WEHE
 - bucket: archive-{{ANNOTATION_SOURCE_PROJECT}}
   experiment: wehe
