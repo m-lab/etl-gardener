@@ -93,6 +93,6 @@ spec:
           name: gardener-config
 
       nodeSelector:
-        gardener-node: "true"
+        processor-node: "true"
 
 
