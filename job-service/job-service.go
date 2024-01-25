@@ -56,6 +56,12 @@ func (svc *Service) NextJob(ctx context.Context) *tracker.JobWithTarget {
 			log.Println(err)
 			continue
 		}
+
+		lastYear := time.Now().UTC().AddDate(-1, 0, 0)
+		if !jt.FullHistory && jt.Job.Date.Before(lastYear) {
+			return nil
+		}
+
 		return svc.ifHasFiles(ctx, jt)
 	}
 	return nil
@@ -108,8 +114,9 @@ func NewJobService(startDate time.Time,
 		// TODO - handle gs:// targets
 		jt := tracker.JobWithTarget{
 			// NOTE: JobWithTarget.ID is assigned after Job.Date is set.
-			Job:       job,
-			DailyOnly: s.DailyOnly,
+			Job:         job,
+			DailyOnly:   s.DailyOnly,
+			FullHistory: s.FullHistory,
 		}
 		dailySpecs = append(dailySpecs, jt)
 		if !s.DailyOnly {

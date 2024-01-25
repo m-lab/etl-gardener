@@ -25,12 +25,13 @@ type MonitorConfig struct {
 
 // SourceConfig holds the config that defines all data sources to be processed.
 type SourceConfig struct {
-	Bucket     string   `yaml:"bucket"`
-	Experiment string   `yaml:"experiment"`
-	Datatype   string   `yaml:"datatype"`
-	Filter     string   `yaml:"filter"`
-	Datasets   Datasets `yaml:"target_datasets"`
-	DailyOnly  bool     `yaml:"daily_only"`
+	Bucket      string   `yaml:"bucket"`
+	Experiment  string   `yaml:"experiment"`
+	Datatype    string   `yaml:"datatype"`
+	Filter      string   `yaml:"filter"`
+	Datasets    Datasets `yaml:"target_datasets"`
+	DailyOnly   bool     `yaml:"daily_only"`
+	FullHistory bool     `yaml:"full_history"`
 }
 
 // Datasets contains the name of BigQuery datasets used for temporary, raw, or

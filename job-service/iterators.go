@@ -168,6 +168,12 @@ func (j *JobIterator) Next() (*tracker.JobWithTarget, error) {
 	// Copy the jobspec and set the date.
 	jt := &tracker.JobWithTarget{}
 	*jt = j.specs[j.nextIndex]
+
+	lastYear := time.Now().UTC().AddDate(-1, 0, 0)
+	if !jt.FullHistory && j.lastDate.Before(lastYear) {
+		return nil, nil
+	}
+
 	jt.Job.Date = j.lastDate
 	jt.ID = jt.Job.Key()
 	j.nextIndex++ // increment index for next call.
