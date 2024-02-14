@@ -58,8 +58,8 @@ func (svc *Service) NextJob(ctx context.Context) *tracker.JobWithTarget {
 		}
 
 		lastYear := time.Now().UTC().AddDate(-1, 0, 0)
-		if !jt.FullHistory && jt.Job.Date.Before(lastYear) {
-			return nil
+		if jt != nil && !jt.FullHistory && jt.Job.Date.Before(lastYear) {
+			continue
 		}
 
 		return svc.ifHasFiles(ctx, jt)

@@ -37,8 +37,8 @@ func TestNewJobService(t *testing.T) {
 			name:      "successful-init",
 			startDate: time.Date(2022, time.July, 1, 0, 0, 0, 0, time.UTC),
 			sources: []config.SourceConfig{
-				{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5"},
-				{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo"},
+				{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", FullHistory: true},
+				{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "tcpinfo", FullHistory: true},
 				{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "pcap", DailyOnly: true},
 			},
 			dailySaver: &failSaver{err: errors.New("any error")},
@@ -107,7 +107,8 @@ func TestService_NextJob(t *testing.T) {
 			name:      "success-historical",
 			startDate: time.Date(2022, time.July, 1, 0, 0, 0, 0, time.UTC),
 			sources: []config.SourceConfig{
-				{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5"},
+				{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5",
+					FullHistory: true},
 			},
 			statsClient: fakec,
 			dailySaver:  &failSaver{err: errors.New("any error")},
@@ -128,7 +129,8 @@ func TestService_NextJob(t *testing.T) {
 			name:      "error-fail-savers",
 			startDate: time.Date(2022, time.July, 1, 0, 0, 0, 0, time.UTC),
 			sources: []config.SourceConfig{
-				{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5"},
+				{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5",
+					FullHistory: true},
 			},
 			dailySaver: &failSaver{err: errors.New("fail")},
 			histSaver:  &failSaver{err: errors.New("fail")},
