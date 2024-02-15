@@ -52,9 +52,10 @@ func (j *Job) TablePartition() string {
 // JobWithTarget specifies a type/date job, and a destination
 // table or GCS prefix
 type JobWithTarget struct {
-	ID        Key // ID used by gardener & parsers to identify a Job's status and configuration.
-	Job       Job
-	DailyOnly bool `json:"-"`
+	ID          Key // ID used by gardener & parsers to identify a Job's status and configuration.
+	Job         Job
+	DailyOnly   bool `json:"-"`
+	FullHistory bool `json:"-"`
 	// TODO: enable configuration for parser to target alterate buckets.
 }
 
