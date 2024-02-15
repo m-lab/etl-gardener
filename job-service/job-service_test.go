@@ -15,6 +15,7 @@ import (
 	"github.com/m-lab/etl-gardener/persistence"
 	"github.com/m-lab/etl-gardener/tracker"
 	"github.com/m-lab/go/cloudtest/gcsfake"
+	"github.com/m-lab/go/timex"
 )
 
 type namedSaver interface {
@@ -93,7 +94,7 @@ func TestService_NextJob(t *testing.T) {
 	fakeb := gcsfake.NewBucketHandle()
 	fakeb.ObjAttrs = append(fakeb.ObjAttrs, &storage.ObjectAttrs{Name: "ndt/ndt5/2022/07/01/foo.tgz", Size: 1, Updated: time.Now()})
 	lastYear := time.Now().UTC().AddDate(-1, 0, 1)
-	fakeb.ObjAttrs = append(fakeb.ObjAttrs, &storage.ObjectAttrs{Name: "ndt/ndt5/" + lastYear.Format("2006/01/02") + "/bar.tgz", Size: 1, Updated: time.Now()})
+	fakeb.ObjAttrs = append(fakeb.ObjAttrs, &storage.ObjectAttrs{Name: "ndt/ndt5/" + lastYear.Format(timex.YYYYMMDDWithSlash) + "/bar.tgz", Size: 1, Updated: time.Now()})
 	fakec := &gcsfake.GCSClient{}
 	fakec.AddTestBucket("fake-bucket", fakeb)
 
@@ -145,7 +146,7 @@ func TestService_NextJob(t *testing.T) {
 			statsClient: fakec,
 			dailySaver:  &failSaver{err: errors.New("any error")},
 			histSaver:   &noopSaver{},
-			want:        tracker.Key("fake-bucket/ndt/ndt5/" + lastYear.Format("20060102")),
+			want:        tracker.Key("fake-bucket/ndt/ndt5/" + lastYear.Format(timex.YYYYMMDD)),
 		},
 		{
 			name:      "error-fail-savers",
