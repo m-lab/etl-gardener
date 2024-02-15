@@ -56,6 +56,14 @@ func TestNewJobService(t *testing.T) {
 			sources:   []config.SourceConfig{},
 			wantErr:   job.ErrNoConfiguredJobs,
 		},
+		{
+			name:      "error-invalid-date-config",
+			startDate: time.Date(2022, time.July, 1, 0, 0, 0, 0, time.UTC),
+			sources: []config.SourceConfig{
+				{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5", DailyOnly: true, FullHistory: true},
+			},
+			wantErr: job.ErrInvalidDateConfig,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -84,6 +92,8 @@ func TestService_NextJob(t *testing.T) {
 	// Setup fake gcs bucket access.
 	fakeb := gcsfake.NewBucketHandle()
 	fakeb.ObjAttrs = append(fakeb.ObjAttrs, &storage.ObjectAttrs{Name: "ndt/ndt5/2022/07/01/foo.tgz", Size: 1, Updated: time.Now()})
+	lastYear := time.Now().UTC().AddDate(-1, 0, 1)
+	fakeb.ObjAttrs = append(fakeb.ObjAttrs, &storage.ObjectAttrs{Name: "ndt/ndt5/" + lastYear.Format("2006/01/02") + "/foo.tgz", Size: 1, Updated: time.Now()})
 	fakec := &gcsfake.GCSClient{}
 	fakec.AddTestBucket("fake-bucket", fakeb)
 
@@ -124,6 +134,18 @@ func TestService_NextJob(t *testing.T) {
 			dailySaver: ps, // use persisted and restored date.
 			histSaver:  &noopSaver{},
 			want:       "fake-bucket/ndt/pcap/20220701",
+		},
+		{
+			name:      "success-historical-full-history-false",
+			startDate: lastYear,
+			sources: []config.SourceConfig{
+				{Bucket: "fake-bucket", Experiment: "ndt", Datatype: "ndt5",
+					FullHistory: false},
+			},
+			statsClient: fakec,
+			dailySaver:  &failSaver{err: errors.New("any error")},
+			histSaver:   &noopSaver{},
+			want:        tracker.Key("fake-bucket/ndt/ndt5/" + lastYear.Format("20060102")),
 		},
 		{
 			name:      "error-fail-savers",

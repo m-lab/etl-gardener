@@ -31,7 +31,7 @@ type SourceConfig struct {
 	Filter      string   `yaml:"filter"`
 	Datasets    Datasets `yaml:"target_datasets"`
 	DailyOnly   bool     `yaml:"daily_only"`
-	FullHistory bool     `yaml:"full_history"`
+	FullHistory bool     `yaml:"full_history"` // FullHistory = true implies DailyOnly = false.
 }
 
 // Datasets contains the name of BigQuery datasets used for temporary, raw, or

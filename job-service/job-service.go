@@ -47,6 +47,9 @@ func (svc *Service) NextJob(ctx context.Context) *tracker.JobWithTarget {
 		return svc.ifHasFiles(ctx, jt)
 	}
 
+	// Only reprocess data from 1 year ago.
+	lastYear := time.Now().UTC().AddDate(-1, 0, 0)
+
 	// Since some jobs may be configured as dailyOnly, or have no files for a
 	// given date, we check for these conditions, and skip the job if
 	// appropriate. We try up to histJobs.Len() times to find the next job.
@@ -57,7 +60,6 @@ func (svc *Service) NextJob(ctx context.Context) *tracker.JobWithTarget {
 			continue
 		}
 
-		lastYear := time.Now().UTC().AddDate(-1, 0, 0)
 		if jt != nil && !jt.FullHistory && jt.Job.Date.Before(lastYear) {
 			continue
 		}
@@ -84,6 +86,10 @@ func (svc *Service) ifHasFiles(ctx context.Context, jt *tracker.JobWithTarget) *
 // ErrInvalidStartDate is returned if startDate is time.Time{}
 var ErrInvalidStartDate = errors.New("invalid start date")
 
+// ErrInvalidDateConfig is returns if both DailyOnly and FullHistory are true for
+// a source. Only one of these options can be true.
+var ErrInvalidDateConfig = errors.New("invalid source date configuration")
+
 // NewJobService creates the default job service.
 func NewJobService(startDate time.Time,
 	sources []config.SourceConfig,
@@ -100,6 +106,11 @@ func NewJobService(startDate time.Time,
 	histSpecs := make([]tracker.JobWithTarget, 0)
 	for _, s := range sources {
 		log.Println(s)
+
+		if s.DailyOnly && s.FullHistory {
+			return nil, ErrInvalidDateConfig
+		}
+
 		job := tracker.Job{
 			Bucket:     s.Bucket,
 			Experiment: s.Experiment,
