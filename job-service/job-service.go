@@ -87,7 +87,7 @@ func (svc *Service) ifHasFiles(ctx context.Context, jt *tracker.JobWithTarget) *
 // ErrInvalidStartDate is returned if startDate is time.Time{}
 var ErrInvalidStartDate = errors.New("invalid start date")
 
-// ErrInvalidDateConfig returns if both DailyOnly and FullHistory are true for
+// ErrInvalidDateConfig is returned if both DailyOnly and FullHistory are true for
 // a source. Only one of these options can be true.
 var ErrInvalidDateConfig = errors.New("invalid source date configuration")
 
