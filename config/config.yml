@@ -27,7 +27,6 @@ sources:
     tmp: tmp_ndt
     raw: raw_ndt
     join: ndt
-  full_history: true
 - bucket: archive-{{NDT_SOURCE_PROJECT}}
   experiment: ndt
   datatype: pcap
