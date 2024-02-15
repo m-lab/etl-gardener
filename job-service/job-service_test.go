@@ -93,7 +93,7 @@ func TestService_NextJob(t *testing.T) {
 	fakeb := gcsfake.NewBucketHandle()
 	fakeb.ObjAttrs = append(fakeb.ObjAttrs, &storage.ObjectAttrs{Name: "ndt/ndt5/2022/07/01/foo.tgz", Size: 1, Updated: time.Now()})
 	lastYear := time.Now().UTC().AddDate(-1, 0, 1)
-	fakeb.ObjAttrs = append(fakeb.ObjAttrs, &storage.ObjectAttrs{Name: "ndt/ndt5/" + lastYear.Format("2006/01/02") + "/foo.tgz", Size: 1, Updated: time.Now()})
+	fakeb.ObjAttrs = append(fakeb.ObjAttrs, &storage.ObjectAttrs{Name: "ndt/ndt5/" + lastYear.Format("2006/01/02") + "/bar.tgz", Size: 1, Updated: time.Now()})
 	fakec := &gcsfake.GCSClient{}
 	fakec.AddTestBucket("fake-bucket", fakeb)
 

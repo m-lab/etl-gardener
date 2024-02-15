@@ -47,7 +47,7 @@ func (svc *Service) NextJob(ctx context.Context) *tracker.JobWithTarget {
 		return svc.ifHasFiles(ctx, jt)
 	}
 
-	// Only reprocess data from 1 year ago.
+	// Calculate date from 1 year ago.
 	lastYear := time.Now().UTC().AddDate(-1, 0, 0)
 
 	// Since some jobs may be configured as dailyOnly, or have no files for a
@@ -60,6 +60,7 @@ func (svc *Service) NextJob(ctx context.Context) *tracker.JobWithTarget {
 			continue
 		}
 
+		// Only reprocess data from the last year.
 		if jt != nil && !jt.FullHistory && jt.Job.Date.Before(lastYear) {
 			continue
 		}
@@ -86,7 +87,7 @@ func (svc *Service) ifHasFiles(ctx context.Context, jt *tracker.JobWithTarget) *
 // ErrInvalidStartDate is returned if startDate is time.Time{}
 var ErrInvalidStartDate = errors.New("invalid start date")
 
-// ErrInvalidDateConfig is returns if both DailyOnly and FullHistory are true for
+// ErrInvalidDateConfig returns if both DailyOnly and FullHistory are true for
 // a source. Only one of these options can be true.
 var ErrInvalidDateConfig = errors.New("invalid source date configuration")
 
