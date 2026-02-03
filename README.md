@@ -1,8 +1,8 @@
 # gardener
 
-| branch | travis-ci | report-card | coveralls |
-|--------|-----------|-----------|-------------|
-| master | [![Travis Build Status](https://travis-ci.org/m-lab/etl-gardener.svg?branch=master)](https://travis-ci.org/m-lab/etl-gardener) | [![Go Report Card](https://goreportcard.com/badge/github.com/m-lab/etl-gardener)](https://goreportcard.com/report/github.com/m-lab/etl-gardener) | [![Coverage Status](https://coveralls.io/repos/m-lab/etl-gardener/badge.svg?branch=master)](https://coveralls.io/github/m-lab/etl-gardener?branch=master) |
+| branch | report-card | coveralls |
+|--------|-------------|-----------|
+| main | [![Go Report Card](https://goreportcard.com/badge/github.com/m-lab/etl-gardener)](https://goreportcard.com/report/github.com/m-lab/etl-gardener) | [![Coverage Status](https://coveralls.io/repos/m-lab/etl-gardener/badge.svg?branch=main)](https://coveralls.io/github/m-lab/etl-gardener?branch=main) |
 
 Gardener provides services for maintaining and reprocessing M-Lab data.
 
@@ -62,7 +62,7 @@ configuration that includes only the datatype you are working with.
 Run the gardener v2 ("manager" mode) with local writer support:
 
 ```sh
-go get ./cmd/gardener
+go install ./cmd/gardener
 ~/bin/gardener \
     -project=mlab-sandbox \
     -status_port=:8082 \
@@ -76,7 +76,7 @@ go get ./cmd/gardener
 Run the parser to target the local gardener:
 
 ```sh
-go get ./cmd/etl_worker
+go install ./cmd/etl_worker
 gcloud auth application-default login
 ~/bin/etl_worker \
   -gardener_addr=localhost:8081 \
